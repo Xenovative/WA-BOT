@@ -1,0 +1,13 @@
+{
+  "name": "node-red-contrib-whatsapp-bot",
+  "version": "0.1.0",
+  "description": "WhatsApp Bot workflow nodes for Node-RED",
+  "node-red": {
+    "nodes": {
+      "whatsapp-event": "nodes/whatsapp-event.js",
+      "whatsapp-send": "nodes/whatsapp-send.js",
+      "whatsapp-condition": "nodes/whatsapp-condition.js",
+      "whatsapp-delay": "nodes/whatsapp-delay.js"
+    }
+  }
+}

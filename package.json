@@ -1,0 +1,37 @@
+{
+  "name": "wa-llm-bot",
+  "version": "1.0.0",
+  "description": "WhatsApp bot powered with LLM capabilities",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "dev": "nodemon index.js"
+  },
+  "dependencies": {
+    "@xenova/transformers": "^2.6.1",
+    "cheerio": "^1.0.0-rc.12",
+    "chokidar": "^3.5.3",
+    "dotenv": "^16.3.1",
+    "express": "^4.18.2",
+    "fs-extra": "^11.1.1",
+    "hnswlib-node": "^1.4.2",
+    "langchain": "^0.0.167",
+    "mammoth": "^1.6.0",
+    "node-fetch": "^2.7.0",
+    "node-red": "^4.0.9",
+    "node-red-contrib-telegrambot": "^16.3.1",
+    "node-red-dashboard": "^3.6.5",
+    "node-red-node-twilio": "^0.1.0",
+    "openai": "^4.17.0",
+    "pdf-parse": "^1.1.1",
+    "qrcode-terminal": "^0.12.0",
+    "whatsapp-web.js": "^1.23.0",
+    "xml2js": "^0.6.2"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.1"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}

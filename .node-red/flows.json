@@ -1,0 +1,33 @@
+[
+  {
+    "id": "welcome-flow",
+    "type": "tab",
+    "label": "Welcome Message",
+    "disabled": false,
+    "info": "Sends a welcome message to new contacts"
+  },
+  {
+    "id": "welcome-trigger",
+    "type": "whatsapp-event",
+    "z": "welcome-flow",
+    "name": "New Contact",
+    "event": "newContact",
+    "x": 190,
+    "y": 120,
+    "wires": [
+      [
+        "welcome-message"
+      ]
+    ]
+  },
+  {
+    "id": "welcome-message",
+    "type": "whatsapp-send",
+    "z": "welcome-flow",
+    "name": "Send Welcome",
+    "message": "Welcome! I'm an automated assistant. How can I help you today?",
+    "x": 430,
+    "y": 120,
+    "wires": []
+  }
+]
