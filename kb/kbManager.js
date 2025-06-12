@@ -31,7 +31,8 @@ class KnowledgeBaseManager {
     this.vectorStore = null;
     this.documents = new Map(); // Track documents by filename
     
-    // Create storage directory if it doesn't exist
+    // Create storage directories if they don't exist
+    fs.ensureDirSync(path.resolve(process.cwd(), this.storagePath));
     fs.ensureDirSync(this.vectorStorePath);
     console.log(`KB storage path: ${this.vectorStorePath}`);
   }
@@ -51,7 +52,14 @@ class KnowledgeBaseManager {
       const docStoreExists = await fs.pathExists(this.docStorePath);
       const mapExists = await fs.pathExists(path.join(this.vectorStorePath, 'document_map.json'));
       
-      console.log(`Vector store files check: index=${indexExists}, docstore=${docStoreExists}, map=${mapExists}`);
+      console.log(`[KB] Vector store files check: index=${indexExists}, docstore=${docStoreExists}, map=${mapExists}`);
+      
+      // Always load document map first if it exists
+      if (mapExists) {
+        console.log('[KB] Loading document map');
+        await this.loadDocumentMap();
+        console.log(`[KB] Loaded ${this.documents.size} documents from map`);
+      }
       
       if (indexExists && docStoreExists) {
         console.log('Loading existing knowledge base');
@@ -150,72 +158,109 @@ class KnowledgeBaseManager {
       const mapPath = path.join(this.vectorStorePath, 'document_map.json');
       const data = Object.fromEntries(this.documents);
       await fs.writeJson(mapPath, data, { spaces: 2 });
-      console.log(`Saved document map with ${this.documents.size} entries to ${mapPath}`);
+      console.log(`[KB] Saved document map with ${this.documents.size} entries to ${mapPath}`);
+      
+      // Also save a list of document names for easy reference
+      const docListPath = path.join(this.vectorStorePath, 'document_list.json');
+      const docList = Array.from(this.documents.entries())
+        .filter(([key]) => key !== 'init')
+        .map(([key, value]) => ({
+          name: key,
+          chunks: value.chunks || 0,
+          timestamp: value.timestamp || Date.now(),
+          filePath: value.filePath || '',
+          fileSize: value.fileSize || 0,
+          fileType: value.fileType || ''
+        }));
+      await fs.writeJson(docListPath, docList, { spaces: 2 });
+      console.log(`[KB] Saved document list with ${docList.length} entries`);
+      
+      // Also save the vector store explicitly
+      if (this.vectorStore) {
+        await this.vectorStore.save(this.vectorStorePath);
+        console.log(`[KB] Saved vector store to ${this.vectorStorePath}`);
+      }
     } catch (error) {
-      console.error('Error saving document map:', error);
+      console.error('[KB] Error saving document map:', error);
       throw error; // Propagate error to caller for better error handling
     }
   }
   
   /**
-   * Rebuild the vector store from document files
-   * This is used when the vector store is corrupted or empty but document map exists
+   * Rebuild the vector store from document map
    */
   async rebuildVectorStore() {
     try {
-      console.log('Rebuilding vector store from document files...');
+      console.log('[KB] Rebuilding vector store from document map');
       
-      // Create a new empty vector store
-      this.vectorStore = await HNSWLib.fromDocuments(
-        [new Document({ pageContent: 'Knowledge Base Initialization', metadata: { source: 'init' } })],
-        this.embeddings
-      );
+      // Create new vector store
+      await this.createNewVectorStore();
       
-      // Get list of documents from map (excluding 'init')
-      const documentNames = Array.from(this.documents.keys()).filter(name => name !== 'init');
-      console.log(`Found ${documentNames.length} documents to rebuild`);
+      // Get all documents except init
+      const documents = Array.from(this.documents.entries())
+        .filter(([key]) => key !== 'init');
+      
+      console.log(`[KB] Found ${documents.length} documents to rebuild`);
       
       // Process each document
-      for (const fileName of documentNames) {
-        // Check if file exists in uploads directory
-        const filePath = path.join(process.cwd(), 'uploads', fileName);
-        if (await fs.pathExists(filePath)) {
-          console.log(`Reprocessing document: ${fileName}`);
+      for (const [docName, metadata] of documents) {
+        try {
+          const filePath = metadata.filePath;
           
-          try {
-            // Extract text from file
-            const fileContent = await fs.readFile(filePath);
-            const mimeType = this._getMimeType(fileName);
-            let text = await this._extractText(fileContent, fileName, mimeType);
-            
-            // Split text into chunks
-            const textSplitter = new RecursiveCharacterTextSplitter({
-              chunkSize: this.chunkSize,
-              chunkOverlap: this.chunkOverlap,
-            });
-            
-            const docs = await textSplitter.createDocuments(
-              [text],
-              [{ source: fileName }]
-            );
-            
-            // Add documents to vector store
-            await this.vectorStore.addDocuments(docs);
-            console.log(`Added ${docs.length} chunks from ${fileName} to vector store`);
-          } catch (error) {
-            console.error(`Error reprocessing document ${fileName}:`, error);
+          if (!filePath || !await fs.pathExists(filePath)) {
+            console.warn(`[KB] File not found for document ${docName}, skipping`);
+            continue;
           }
-        } else {
-          console.warn(`Document file not found for ${fileName}, removing from document map`);
-          this.documents.delete(fileName);
+          
+          console.log(`[KB] Re-adding document ${docName} from ${filePath}`);
+          
+          // Extract text from the file
+          const text = await this.extractTextFromFile(filePath, docName);
+          if (!text) {
+            console.warn(`[KB] Failed to extract text from ${docName}, skipping`);
+            continue;
+          }
+          
+          // Split text into chunks
+          const textSplitter = new RecursiveCharacterTextSplitter({
+            chunkSize: this.chunkSize,
+            chunkOverlap: this.chunkOverlap
+          });
+          
+          const chunks = await textSplitter.createDocuments(
+            [text],
+            [{ source: docName, filePath: filePath }]
+          );
+          
+          console.log(`[KB] Created ${chunks.length} chunks from ${docName}`);
+          
+          // Add chunks to vector store
+          await this.vectorStore.addDocuments(chunks);
+          
+          // Save the vector store after each document
+          // Get file stats for metadata
+          const stats = await fs.stat(filePath);
+          const fileExt = path.extname(filePath).toLowerCase();
+          
+          // Update document map with rich metadata
+          this.documents.set(docName, {
+            chunks: chunks.length,
+            timestamp: new Date().toISOString(),
+            name: docName,
+            originalName: docName,
+            filePath: filePath,
+            fileSize: stats.size,
+            fileType: fileExt ? fileExt.substring(1) : 'unknown'
+          });
+          
+          console.log(`[KB] Successfully re-added document ${docName}`);
+        } catch (error) {
+          console.error(`[KB] Error re-adding document ${docName}:`, error);
         }
       }
       
-      // Save the rebuilt vector store
-      await this.vectorStore.save(this.vectorStorePath);
+      console.log('[KB] Vector store rebuild complete');
       await this.saveDocumentMap();
-      
-      console.log('Vector store rebuild completed');
     } catch (error) {
       console.error('Error rebuilding vector store:', error);
       throw error;
@@ -229,23 +274,42 @@ class KnowledgeBaseManager {
    * @returns {Promise<Object>} - Result of the operation
    */
   async addDocument(filePath, fileName) {
-    if (!this.enabled) {
-      return { success: false, message: 'Knowledge base is not enabled' };
-    }
-    
     try {
-      // Initialize if needed
-      if (!this.vectorStore) {
-        await this.initialize();
+      console.log(`[KB] Adding document: ${fileName} from ${filePath}`);
+      
+      if (!this.enabled) {
+        console.log('[KB] Knowledge base is disabled');
+        return { success: false, message: 'Knowledge base is disabled' };
       }
       
+      // Initialize if not already initialized
       if (!this.vectorStore) {
-        return { success: false, message: 'Failed to initialize knowledge base' };
+        console.log('[KB] Initializing vector store');
+        try {
+          await this.initialize();
+        } catch (initError) {
+          console.error('[KB] Failed to initialize vector store:', initError);
+          return { success: false, message: `Failed to initialize knowledge base: ${initError.message}` };
+        }
       }
       
-      // Extract content based on file type
+      // Check if file exists
+      if (!fs.existsSync(filePath)) {
+        console.error(`[KB] File not found: ${filePath}`);
+        return { success: false, message: `File not found: ${fileName}` };
+      }
+      
+      // Extract text from the document
+      console.log(`[KB] Extracting text from ${fileName}`);
+      
+      // Get file extension and original name
       const fileExt = path.extname(filePath).toLowerCase();
+      const originalName = fileName.toLowerCase();
+      console.log(`[KB] File extension detected: ${fileExt}, original filename: ${originalName}`);
       let content;
+      
+      // Check if it's a JSON file either by extension or by filename containing 'json'
+      const isJsonFile = fileExt === '.json' || originalName.includes('json');
       
       if (fileExt === '.pdf') {
         const pdfData = await fs.readFile(filePath);
@@ -260,14 +324,18 @@ class KnowledgeBaseManager {
         const htmlContent = await fs.readFile(filePath, 'utf-8');
         const $ = cheerio.load(htmlContent);
         content = $('body').text();
-      } else if (fileExt === '.json') {
+      } else if (isJsonFile) {
         // Process JSON files
-        const jsonContent = await fs.readFile(filePath, 'utf-8');
+        console.log('[KB] Processing JSON file');
         try {
+          const jsonContent = await fs.readFile(filePath, 'utf-8');
+          console.log('[KB] JSON file read successfully, size:', jsonContent.length);
           const jsonData = JSON.parse(jsonContent);
+          console.log('[KB] JSON parsed successfully');
           // Pretty print JSON for better text extraction
           content = JSON.stringify(jsonData, null, 2);
         } catch (error) {
+          console.error('[KB] Error processing JSON file:', error);
           return { success: false, message: `Invalid JSON file: ${error.message}` };
         }
       } else if (fileExt === '.xml') {
@@ -282,7 +350,15 @@ class KnowledgeBaseManager {
           return { success: false, message: `Invalid XML file: ${error.message}` };
         }
       } else {
-        return { success: false, message: `Unsupported file type: ${fileExt}` };
+        // Try to read as text for unknown file types
+        try {
+          console.log('[KB] Trying to read unknown file type as text');
+          content = await fs.readFile(filePath, 'utf-8');
+          console.log('[KB] Successfully read file as text');
+        } catch (error) {
+          console.error('[KB] Failed to read file as text:', error);
+          return { success: false, message: `Unsupported file type: ${fileExt || 'unknown'}` };
+        }
       }
       
       // Split content into chunks
@@ -293,7 +369,12 @@ class KnowledgeBaseManager {
       
       const docs = await textSplitter.createDocuments(
         [content], 
-        [{ source: fileName }]
+        [{ 
+          source: fileName,
+          filename: fileName,
+          originalName: fileName,
+          dateAdded: new Date().toISOString()
+        }]
       );
       
       // Add to vector store
@@ -302,10 +383,19 @@ class KnowledgeBaseManager {
       // Save vector store
       await this.vectorStore.save(this.vectorStorePath);
       
-      // Update document map
+      // Get actual file size from the file system
+      const stats = await fs.stat(filePath);
+      const fileSize = stats.size;
+      
+      // Update document map with rich metadata including original file path
       this.documents.set(fileName, {
         chunks: docs.length,
-        added: new Date().toISOString()
+        timestamp: new Date().toISOString(),
+        name: fileName,
+        originalName: originalName || fileName,
+        fileSize: fileSize, // Use actual file size
+        fileType: fileExt ? fileExt.substring(1) : 'unknown',
+        filePath: filePath // Store the original file path for rebuilding
       });
       await this.saveDocumentMap();
       
@@ -413,36 +503,41 @@ class KnowledgeBaseManager {
       return { success: false, message: `Error deleting document: ${error.message}` };
     }
   }
-  
+
   /**
    * List all documents in the knowledge base
-   * @returns {Promise<Array>} - Array of document names
+   * @returns {Promise<Array>} - List of document objects
    */
   async listDocuments() {
-    if (!this.enabled) {
-      return [];
-    }
-    
     try {
-      // Initialize if needed
-      if (!this.vectorStore) {
-        await this.initialize();
-      }
-      
-      if (!this.vectorStore) {
-        console.error('Knowledge base not initialized');
+      if (!this.enabled) {
+        console.log('[KB] Knowledge base is disabled');
         return [];
       }
       
-      // Filter out initialization document
-      return Array.from(this.documents.keys())
-        .filter(key => key !== 'init');
+      // Always try to load the document map from disk first
+      await this.loadDocumentMap();
+      
+      // Filter out the initialization document
+      const documents = Array.from(this.documents.entries())
+        .filter(([key]) => key !== 'init')
+        .map(([key, value]) => ({
+          name: key,
+          chunks: value.chunks || 0,
+          timestamp: value.timestamp || new Date().toISOString(),
+          filePath: value.filePath || '',
+          fileSize: value.fileSize || 0,
+          fileType: value.fileType || ''
+        }));
+      
+      console.log(`[KB] Found ${documents.length} documents in knowledge base`);
+      return documents;
     } catch (error) {
-      console.error('Error listing documents:', error);
+      console.error('[KB] Error listing documents:', error);
       return [];
     }
   }
-  
+
   /**
    * Get MIME type based on file extension
    * @private
@@ -465,6 +560,23 @@ class KnowledgeBaseManager {
         return 'application/xml';
       default:
         return 'application/octet-stream';
+    }
+  }
+  
+  /**
+   * Extract text from a file
+   * @param {string} filePath - Path to the file
+   * @param {string} fileName - Name of the file
+   * @returns {Promise<string>} - Extracted text
+   */
+  async extractTextFromFile(filePath, fileName) {
+    try {
+      const mimeType = this._getMimeType(fileName);
+      const fileContent = await fs.readFile(filePath);
+      return await this._extractText(fileContent, fileName, mimeType);
+    } catch (error) {
+      console.error(`Error extracting text from ${fileName}:`, error);
+      throw error;
     }
   }
   

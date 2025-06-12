@@ -72,8 +72,8 @@ class FileWatcher {
       
       console.log(result.message);
       
-      // Delete the file after processing
-      await fs.remove(filePath);
+      // Keep the file for future vector store rebuilds
+      console.log(`File preserved at ${filePath} for future vector store rebuilds`);
     } catch (error) {
       console.error(`Error processing ${fileName}: ${error.message}`);
     } finally {

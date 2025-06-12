@@ -1,5 +1,7 @@
 const chatHandler = require('./chatHandler');
 const kbManager = require('../kb/kbManager');
+const fs = require('fs');
+const path = require('path');
 
 class CommandHandler {
   constructor() {
@@ -10,6 +12,11 @@ class CommandHandler {
     this.adminPhoneNumbers = process.env.ADMIN_PHONE_NUMBERS 
       ? process.env.ADMIN_PHONE_NUMBERS.split(',').map(num => num.trim())
       : [];
+      
+    // Command history tracking
+    this.commandHistory = [];
+    this.commandHistoryFile = path.join(__dirname, '../data/command_history.json');
+    this.loadCommandHistory();
     this.commands = {
       help: this.handleHelp,
       clear: this.handleClear,
@@ -84,6 +91,22 @@ class CommandHandler {
     
     const args = message.slice(this.prefix.length).trim().split(/\s+/);
     const commandName = args.shift().toLowerCase();
+    
+    // Add to command history
+    this.commandHistory.push({
+      timestamp: new Date().toISOString(),
+      command: message,
+      sender: senderPhone,
+      chatId: chatId
+    });
+    
+    // Limit history to last 50 commands
+    if (this.commandHistory.length > 50) {
+      this.commandHistory.shift();
+    }
+    
+    // Save command history
+    this.saveCommandHistory();
     
     if (this.commands[commandName]) {
       return await this.commands[commandName].call(this, args, chatId);
@@ -416,8 +439,45 @@ Show Citations: ${this.showCitations ? 'Yes' : 'No'}`;
       parameters: { ...this.parameters },
       mcpResourceUri: this.mcpResourceUri,
       ragEnabled: this.ragEnabled,
-      showCitations: this.showCitations
+      showCitations: this.showCitations,
+      apiKeys: {
+        openai: process.env.OPENAI_API_KEY || '',
+        openrouter: process.env.OPENROUTER_API_KEY || ''
+      }
     };
+  }
+  
+  /**
+   * Get command history
+   * @returns {Array} Array of command history objects
+   */
+  getCommandHistory() {
+    return this.commandHistory;
+  }
+  
+  // Save command history to disk
+  saveCommandHistory() {
+    try {
+      const dataDir = path.join(__dirname, '../data');
+      if (!fs.existsSync(dataDir)) {
+        fs.mkdirSync(dataDir, { recursive: true });
+      }
+      fs.writeFileSync(this.commandHistoryFile, JSON.stringify(this.commandHistory, null, 2));
+    } catch (error) {
+      console.error('Error saving command history:', error);
+    }
+  }
+  
+  // Load command history from disk
+  loadCommandHistory() {
+    try {
+      if (fs.existsSync(this.commandHistoryFile)) {
+        const data = fs.readFileSync(this.commandHistoryFile, 'utf8');
+        this.commandHistory = JSON.parse(data);
+      }
+    } catch (error) {
+      console.error('Error loading command history:', error);
+    }
   }
 }
 

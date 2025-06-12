@@ -10,6 +10,9 @@ const fileHandler = require('./kb/fileHandler');
 const ragProcessor = require('./kb/ragProcessor');
 const fileWatcher = require('./kb/fileWatcher');
 
+// Import GUI server
+const guiServer = require('./guiServer');
+
 // Initialize WhatsApp client with error handling
 const client = new Client({
   authStrategy: new LocalAuth({

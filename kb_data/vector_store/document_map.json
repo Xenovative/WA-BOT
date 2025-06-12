@@ -1,10 +1,15 @@
 {
   "init": {
     "chunks": 1,
-    "timestamp": 1748236587695
+    "timestamp": 1749635814815
   },
   "cjdental-1.json": {
     "chunks": 113,
-    "added": "2025-05-26T05:17:23.820Z"
+    "timestamp": "2025-06-11T09:57:01.656Z",
+    "name": "cjdental-1.json",
+    "originalName": "cjdental-1.json",
+    "fileSize": 133483,
+    "fileType": "json",
+    "filePath": "C:\\AIapps\\WA-BOT\\uploads\\cjdental-1.json"
   }
 }
