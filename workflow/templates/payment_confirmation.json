@@ -1,0 +1,178 @@
+[
+    {
+        "id": "payment-confirmation-flow",
+        "type": "tab",
+        "label": "Payment Confirmation",
+        "disabled": false,
+        "info": "This flow sends a confirmation message after receiving proof of payment"
+    },
+    {
+        "id": "whatsapp-message-in",
+        "type": "mqtt in",
+        "z": "payment-confirmation-flow",
+        "name": "WhatsApp Messages",
+        "topic": "whatsapp/messages",
+        "qos": "2",
+        "datatype": "json",
+        "broker": "broker",
+        "nl": false,
+        "rap": true,
+        "rh": 0,
+        "inputs": 0,
+        "x": 150,
+        "y": 120,
+        "wires": [
+            [
+                "check-for-payment-proof"
+            ]
+        ]
+    },
+    {
+        "id": "check-for-payment-proof",
+        "type": "switch",
+        "z": "payment-confirmation-flow",
+        "name": "Is Payment Proof?",
+        "property": "payload.text",
+        "propertyType": "msg",
+        "rules": [
+            {
+                "t": "regex",
+                "v": "(?i)(payment|receipt|transaction|proof|paid|transfer)",
+                "vt": "str",
+                "case": false
+            }
+        ],
+        "checkall": "true",
+        "repair": false,
+        "outputs": 1,
+        "x": 370,
+        "y": 120,
+        "wires": [
+            [
+                "check-for-media"
+            ]
+        ]
+    },
+    {
+        "id": "check-for-media",
+        "type": "function",
+        "z": "payment-confirmation-flow",
+        "name": "Check for Media/Image",
+        "func": "// Check if message has media (image/document)\nif (msg.payload.hasMedia || msg.payload.hasImage || \n    (msg.payload.message && msg.payload.message.hasMedia)) {\n    // This is likely a payment proof\n    return [msg, null];\n} else {\n    // Check if previous message had media\n    const chatId = msg.payload.chatId;\n    const mediaHistory = context.get('mediaHistory') || {};\n    \n    if (mediaHistory[chatId] && \n        (Date.now() - mediaHistory[chatId]) < 5 * 60 * 1000) { // Within 5 minutes\n        return [msg, null];\n    } else {\n        return [null, msg];\n    }\n}\n",
+        "outputs": 2,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 580,
+        "y": 120,
+        "wires": [
+            [
+                "store-payment-info"
+            ],
+            []
+        ]
+    },
+    {
+        "id": "store-payment-info",
+        "type": "function",
+        "z": "payment-confirmation-flow",
+        "name": "Store Payment Info",
+        "func": "// Store payment information\nconst chatId = msg.payload.chatId;\nconst timestamp = Date.now();\n\n// Update media history\nconst mediaHistory = context.get('mediaHistory') || {};\nmediaHistory[chatId] = timestamp;\ncontext.set('mediaHistory', mediaHistory);\n\n// Store payment record\nconst payments = context.get('payments') || {};\npayments[chatId] = {\n    timestamp: timestamp,\n    status: 'received',\n    message: msg.payload.text\n};\ncontext.set('payments', payments);\n\nreturn msg;",
+        "outputs": 1,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 790,
+        "y": 120,
+        "wires": [
+            [
+                "prepare-confirmation-message"
+            ]
+        ]
+    },
+    {
+        "id": "prepare-confirmation-message",
+        "type": "template",
+        "z": "payment-confirmation-flow",
+        "name": "Confirmation Message",
+        "field": "payload",
+        "fieldType": "msg",
+        "format": "json",
+        "syntax": "mustache",
+        "template": "{\n    \"chatId\": \"{{payload.chatId}}\",\n    \"message\": \"Thank you for your payment! We have received your proof of payment and will process it shortly.\\n\\nYour transaction has been recorded with reference #PAY-{{$moment().format('YYYYMMDDHHmmss')}}.\\n\\nPlease allow up to 24 hours for processing. If you have any questions, feel free to contact our support team.\\n\\nThank you for your business!\",\n    \"messageType\": \"text\"\n}",
+        "output": "json",
+        "x": 1010,
+        "y": 120,
+        "wires": [
+            [
+                "send-confirmation"
+            ]
+        ]
+    },
+    {
+        "id": "send-confirmation",
+        "type": "http request",
+        "z": "payment-confirmation-flow",
+        "name": "Send WhatsApp Message",
+        "method": "POST",
+        "ret": "obj",
+        "paytoqs": "ignore",
+        "url": "http://localhost:3000/api/workflow/send-message",
+        "tls": "",
+        "persist": false,
+        "proxy": "",
+        "authType": "",
+        "x": 1230,
+        "y": 120,
+        "wires": [
+            [
+                "log-confirmation"
+            ]
+        ]
+    },
+    {
+        "id": "log-confirmation",
+        "type": "debug",
+        "z": "payment-confirmation-flow",
+        "name": "Log Confirmation",
+        "active": true,
+        "tosidebar": true,
+        "console": true,
+        "tostatus": false,
+        "complete": "true",
+        "targetType": "full",
+        "statusVal": "",
+        "statusType": "auto",
+        "x": 1430,
+        "y": 120,
+        "wires": []
+    },
+    {
+        "id": "broker",
+        "type": "mqtt-broker",
+        "name": "Local Broker",
+        "broker": "localhost",
+        "port": "1883",
+        "clientid": "",
+        "autoConnect": true,
+        "usetls": false,
+        "protocolVersion": "4",
+        "keepalive": "60",
+        "cleansession": true,
+        "birthTopic": "",
+        "birthQos": "0",
+        "birthPayload": "",
+        "birthMsg": {},
+        "closeTopic": "",
+        "closeQos": "0",
+        "closePayload": "",
+        "closeMsg": {},
+        "willTopic": "",
+        "willQos": "0",
+        "willPayload": "",
+        "willMsg": {},
+        "sessionExpiry": ""
+    }
+]

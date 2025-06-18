@@ -44,8 +44,106 @@ const memoryExternalElement = document.getElementById('memory-external');
 // Chart context
 let memoryChart;
 
+// Profile management functions
+async function saveProfile(profileName) {
+  try {
+    const response = await fetch('/api/settings', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        profileName: profileName,
+        saveAsProfile: true
+      })
+    });
+    
+    if (!response.ok) {
+      throw new Error(`Failed to save profile: ${response.statusText}`);
+    }
+    
+    const result = await response.json();
+    showToast(`Profile '${profileName}' saved successfully`, 'success');
+    loadSettings(); // Refresh settings to update profile list
+    return result;
+  } catch (error) {
+    console.error('Error saving profile:', error);
+    showToast(`Error saving profile: ${error.message}`, 'danger');
+    throw error;
+  }
+}
+
+async function loadProfile(profileName) {
+  try {
+    const response = await fetch('/api/settings', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        profileName: profileName
+      })
+    });
+    
+    if (!response.ok) {
+      throw new Error(`Failed to load profile: ${response.statusText}`);
+    }
+    
+    const result = await response.json();
+    showToast(`Profile '${profileName}' loaded successfully`, 'success');
+    loadSettings(); // Refresh settings with new profile data
+    return result;
+  } catch (error) {
+    console.error('Error loading profile:', error);
+    showToast(`Error loading profile: ${error.message}`, 'danger');
+    throw error;
+  }
+}
+
+async function deleteProfile(profileName) {
+  if (profileName === 'default') {
+    showToast('Cannot delete the default profile', 'warning');
+    return;
+  }
+  
+  try {
+    const response = await fetch('/api/profile/delete', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        profileName: profileName
+      })
+    });
+    
+    if (!response.ok) {
+      throw new Error(`Failed to delete profile: ${response.statusText}`);
+    }
+    
+    const result = await response.json();
+    showToast(`Profile '${profileName}' deleted successfully`, 'success');
+    loadSettings(); // Refresh settings to update profile list
+    return result;
+  } catch (error) {
+    console.error('Error deleting profile:', error);
+    showToast(`Error deleting profile: ${error.message}`, 'danger');
+    throw error;
+  }
+}
+
+// Global state variables
+window.chatHistoryState = { loading: false };
+window.commandHistoryState = { loading: false };
+window.currentTriggers = { groupTriggers: [], customTriggers: [] };
+
 // Initialization
 document.addEventListener('DOMContentLoaded', () => {
+  // Initialize event listeners for elements that might be accessed early
+  if (document.getElementById('refresh-kb')) {
+    document.getElementById('refresh-kb').addEventListener('click', loadKbDocuments);
+  }
+  
   // Load initial data
   loadStatus();
   loadSettings();
@@ -85,6 +183,65 @@ document.addEventListener('DOMContentLoaded', () => {
     updateApiKeyVisibility(providerSelect.value);
   });
   
+  // Profile management event listeners
+  const profileSelect = document.getElementById('profile-select');
+  const saveProfileBtn = document.getElementById('save-profile-btn');
+  const deleteProfileBtn = document.getElementById('delete-profile-btn');
+  const newProfileNameInput = document.getElementById('new-profile-name');
+  
+  if (profileSelect) {
+    profileSelect.addEventListener('change', async () => {
+      const selectedProfile = profileSelect.value;
+      if (selectedProfile) {
+        try {
+          await loadProfile(selectedProfile);
+        } catch (error) {
+          console.error('Error loading profile:', error);
+        }
+      }
+    });
+  }
+  
+  if (saveProfileBtn && newProfileNameInput) {
+    saveProfileBtn.addEventListener('click', async () => {
+      const profileName = newProfileNameInput.value.trim();
+      if (!profileName) {
+        showToast('Please enter a profile name', 'warning');
+        return;
+      }
+      
+      try {
+        await saveProfile(profileName);
+        newProfileNameInput.value = ''; // Clear input after saving
+      } catch (error) {
+        console.error('Error saving profile:', error);
+      }
+    });
+  }
+  
+  if (deleteProfileBtn && profileSelect) {
+    deleteProfileBtn.addEventListener('click', async () => {
+      const selectedProfile = profileSelect.value;
+      if (!selectedProfile) {
+        showToast('Please select a profile to delete', 'warning');
+        return;
+      }
+      
+      if (selectedProfile === 'default') {
+        showToast('Cannot delete the default profile', 'warning');
+        return;
+      }
+      
+      if (confirm(`Are you sure you want to delete the profile '${selectedProfile}'?`)) {
+        try {
+          await deleteProfile(selectedProfile);
+        } catch (error) {
+          console.error('Error deleting profile:', error);
+        }
+      }
+    });
+  }
+  
   // Event listeners
   refreshBtn.addEventListener('click', () => {
     loadStatus();
@@ -107,14 +264,19 @@ document.addEventListener('DOMContentLoaded', () => {
     saveSettings();
   });
   
-  refreshKbBtn.addEventListener('click', loadKbDocuments);
+  // Event listener already set in DOMContentLoaded
   
   // Set up knowledge base file input
   if (kbFileInput) {
     kbFileInput.addEventListener('change', uploadDocument);
-    console.log('KB file input listener initialized');
-  } else {
-    console.error('KB file input element not found');
+  }
+  
+  // Set up refresh button for KB documents
+  const refreshKbBtn = document.getElementById('refresh-kb');
+  if (refreshKbBtn) {
+    refreshKbBtn.addEventListener('click', () => {
+      loadKbDocuments();
+    });
   }
   
   // Set up polling for system stats
@@ -203,6 +365,26 @@ async function loadSettings() {
     
     // Update which API key fields are visible
     updateApiKeyVisibility(settings.provider);
+    
+    // Update profile information if available
+    const profileSelect = document.getElementById('profile-select');
+    if (profileSelect && settings.availableProfiles) {
+      // Clear existing options
+      profileSelect.innerHTML = '';
+      
+      // Add all profiles
+      settings.availableProfiles.forEach(profile => {
+        const option = document.createElement('option');
+        option.value = profile;
+        option.textContent = profile;
+        profileSelect.appendChild(option);
+      });
+      
+      // Select current profile
+      if (settings.currentProfileName) {
+        profileSelect.value = settings.currentProfileName;
+      }
+    }
   } catch (error) {
     console.error('Error loading settings:', error);
   }
@@ -505,6 +687,303 @@ if (refreshKbBtn) {
 // Load knowledge base when the page loads
 document.addEventListener('DOMContentLoaded', () => {
   loadKnowledgeBase();
+});
+
+// Triggers management
+// Load triggers from the server
+async function loadTriggers() {
+    // currentTriggers is already initialized globally
+    
+    try {
+        const response = await fetch('/api/triggers');
+        const data = await response.json();
+        
+        if (data.success) {
+            window.currentTriggers = data.triggers;
+            renderTriggers();
+        } else {
+            showToast('Error', 'Failed to load triggers');
+        }
+    } catch (error) {
+        console.error('Error loading triggers:', error);
+        showToast('Error', 'Failed to load triggers: ' + error.message);
+    }
+}
+
+// Render triggers in the UI
+function renderTriggers() {
+    // Clear existing lists
+    $('#groupTriggersList').empty();
+    $('#customTriggersList').empty();
+    
+    // Render group triggers
+    if (currentTriggers.groupTriggers && currentTriggers.groupTriggers.length > 0) {
+        currentTriggers.groupTriggers.forEach(function(trigger) {
+            addTriggerToUI('group', trigger);
+        });
+    } else {
+        $('#groupTriggersList').append('<div class="list-group-item text-muted">No group triggers defined</div>');
+    }
+    
+    // Render custom triggers
+    if (currentTriggers.customTriggers && currentTriggers.customTriggers.length > 0) {
+        currentTriggers.customTriggers.forEach(function(trigger) {
+            addTriggerToUI('custom', trigger);
+        });
+    } else {
+        $('#customTriggersList').append('<div class="list-group-item text-muted">No custom triggers defined</div>');
+    }
+}
+
+// Add a trigger to the UI
+function addTriggerToUI(type, trigger) {
+    const listId = type === 'group' ? 'groupTriggersList' : 'customTriggersList';
+    const triggerItem = $(`
+        <div class="list-group-item d-flex justify-content-between align-items-center">
+            <span class="trigger-text">${trigger}</span>
+            <div class="btn-group">
+                <button class="btn btn-sm btn-outline-primary edit-trigger" data-type="${type}" data-trigger="${trigger}">
+                    <i class="bi bi-pencil"></i>
+                </button>
+                <button class="btn btn-sm btn-danger delete-trigger" data-type="${type}" data-trigger="${trigger}">
+                    <i class="bi bi-trash"></i>
+                </button>
+            </div>
+        </div>
+    `);
+    
+    $(`#${listId}`).append(triggerItem);
+}
+
+// Save triggers to the server
+function saveTriggers() {
+    $.ajax({
+        url: '/api/triggers',
+        type: 'POST',
+        contentType: 'application/json',
+        data: JSON.stringify(currentTriggers),
+        success: function(response) {
+            if (response.success) {
+                showToast('Success', 'Triggers saved successfully');
+            } else {
+                showToast('Error', 'Failed to save triggers: ' + (response.error || 'Unknown error'));
+            }
+        },
+        error: function(xhr, status, error) {
+            showToast('Error', 'Failed to save triggers: ' + error);
+        }
+    });
+}
+
+// Document ready handler
+$(document).ready(function() {
+    // Load triggers when the tab is shown
+    $('a[href="#triggers"]').on('shown.bs.tab', function() {
+        loadTriggers();
+    });
+    
+    // Refresh triggers button
+    $('#refresh-triggers').on('click', function() {
+        loadTriggers();
+        showToast('Info', 'Refreshing triggers...');
+    });
+    
+    // Add group trigger
+    $('#addGroupTrigger').on('click', function() {
+        addGroupTrigger();
+    });
+    
+    // Handle Enter key press in group trigger input
+    $('#newGroupTrigger').on('keypress', function(e) {
+        if (e.which === 13) { // Enter key
+            e.preventDefault();
+            addGroupTrigger();
+        }
+    });
+    
+    // Function to add group trigger
+    function addGroupTrigger() {
+        const newTrigger = $('#newGroupTrigger').val().trim();
+        if (newTrigger) {
+            // Check if trigger already exists
+            if (currentTriggers.groupTriggers.includes(newTrigger)) {
+                showToast('Warning', 'This trigger already exists!');
+                return;
+            }
+            
+            // Add to current triggers
+            currentTriggers.groupTriggers.push(newTrigger);
+            
+            // Add to UI
+            addTriggerToUI('group', newTrigger);
+            
+            // Clear input
+            $('#newGroupTrigger').val('');
+            
+            // Remove empty message if it exists
+            $('#groupTriggersList .text-muted').remove();
+        }
+    }
+    
+    // Add custom trigger
+    $('#addCustomTrigger').on('click', function() {
+        addCustomTrigger();
+    });
+    
+    // Handle Enter key press in custom trigger input
+    $('#newCustomTrigger').on('keypress', function(e) {
+        if (e.which === 13) { // Enter key
+            e.preventDefault();
+            addCustomTrigger();
+        }
+    });
+    
+    // Function to add custom trigger
+    function addCustomTrigger() {
+        const newTrigger = $('#newCustomTrigger').val().trim();
+        if (newTrigger) {
+            // Check if trigger already exists
+            if (currentTriggers.customTriggers.includes(newTrigger)) {
+                showToast('Warning', 'This trigger already exists!');
+                return;
+            }
+            
+            // Add to current triggers
+            currentTriggers.customTriggers.push(newTrigger);
+            
+            // Add to UI
+            addTriggerToUI('custom', newTrigger);
+            
+            // Clear input
+            $('#newCustomTrigger').val('');
+            
+            // Remove empty message if it exists
+            $('#customTriggersList .text-muted').remove();
+        }
+    }
+    
+    // Delete trigger (use event delegation for dynamically created elements)
+    $(document).on('click', '.delete-trigger', function() {
+        const triggerType = $(this).data('type');
+        const triggerText = $(this).data('trigger');
+        
+        // Remove from current triggers
+        if (triggerType === 'group') {
+            currentTriggers.groupTriggers = currentTriggers.groupTriggers.filter(t => t !== triggerText);
+        } else {
+            currentTriggers.customTriggers = currentTriggers.customTriggers.filter(t => t !== triggerText);
+        }
+        
+        // Remove from UI
+        $(this).closest('.list-group-item').remove();
+        
+        // Show empty message if no triggers left
+        const listId = triggerType === 'group' ? 'groupTriggersList' : 'customTriggersList';
+        if ($(`#${listId}`).children().length === 0) {
+            $(`#${listId}`).append('<div class="list-group-item text-muted">No ' + triggerType + ' triggers defined</div>');
+        }
+    });
+    
+    // Edit trigger (use event delegation for dynamically created elements)
+    $(document).on('click', '.edit-trigger', function() {
+        const triggerType = $(this).data('type');
+        const triggerText = $(this).data('trigger');
+        const listItem = $(this).closest('.list-group-item');
+        const triggerTextElement = listItem.find('.trigger-text');
+        
+        // Replace text with input field
+        const inputField = $(`<input type="text" class="form-control edit-trigger-input" value="${triggerText}">`);
+        triggerTextElement.replaceWith(inputField);
+        
+        // Focus on the input field
+        inputField.focus();
+        
+        // Replace edit button with save button
+        const saveButton = $(`<button class="btn btn-sm btn-success save-trigger" data-type="${triggerType}" data-trigger="${triggerText}"><i class="bi bi-check"></i></button>`);
+        $(this).replaceWith(saveButton);
+        
+        // Handle save button click
+        saveButton.on('click', function() {
+            saveTriggerEdit($(this), inputField, triggerType, triggerText);
+        });
+        
+        // Handle Enter key press
+        inputField.on('keypress', function(e) {
+            if (e.which === 13) { // Enter key
+                e.preventDefault();
+                saveTriggerEdit(saveButton, inputField, triggerType, triggerText);
+            }
+        });
+        
+        // Handle Escape key press to cancel
+        inputField.on('keydown', function(e) {
+            if (e.which === 27) { // Escape key
+                e.preventDefault();
+                // Restore original text
+                inputField.replaceWith(`<span class="trigger-text">${triggerText}</span>`);
+                // Restore edit button
+                saveButton.replaceWith(`<button class="btn btn-sm btn-outline-primary edit-trigger" data-type="${triggerType}" data-trigger="${triggerText}"><i class="bi bi-pencil"></i></button>`);
+            }
+        });
+    });
+    
+    // Function to save trigger edit
+    function saveTriggerEdit(saveButton, inputField, triggerType, oldTriggerText) {
+        const newTriggerText = inputField.val().trim();
+        
+        if (!newTriggerText) {
+            showToast('Warning', 'Trigger text cannot be empty');
+            return;
+        }
+        
+        if (newTriggerText === oldTriggerText) {
+            // No change, just restore the UI
+            inputField.replaceWith(`<span class="trigger-text">${oldTriggerText}</span>`);
+            saveButton.replaceWith(`<button class="btn btn-sm btn-outline-primary edit-trigger" data-type="${triggerType}" data-trigger="${oldTriggerText}"><i class="bi bi-pencil"></i></button>`);
+            return;
+        }
+        
+        // Check if new trigger already exists
+        const triggerArray = triggerType === 'group' ? currentTriggers.groupTriggers : currentTriggers.customTriggers;
+        if (triggerArray.includes(newTriggerText)) {
+            showToast('Warning', 'This trigger already exists!');
+            return;
+        }
+        
+        // Update the trigger in the array
+        const index = triggerArray.indexOf(oldTriggerText);
+        if (index !== -1) {
+            triggerArray[index] = newTriggerText;
+            
+            // Update the UI
+            inputField.replaceWith(`<span class="trigger-text">${newTriggerText}</span>`);
+            
+            // Update the buttons with new data attributes
+            const listItem = saveButton.closest('.list-group-item');
+            const buttonGroup = listItem.find('.btn-group');
+            
+            buttonGroup.html(`
+                <button class="btn btn-sm btn-outline-primary edit-trigger" data-type="${triggerType}" data-trigger="${newTriggerText}">
+                    <i class="bi bi-pencil"></i>
+                </button>
+                <button class="btn btn-sm btn-danger delete-trigger" data-type="${triggerType}" data-trigger="${newTriggerText}">
+                    <i class="bi bi-trash"></i>
+                </button>
+            `);
+            
+            showToast('Success', 'Trigger updated');
+        }
+    }
+    
+    // Save triggers
+    $('#saveTriggers').on('click', function() {
+        saveTriggers();
+    });
+    
+    // Load triggers on initial page load if triggers tab is active
+    if (window.location.hash === '#triggers') {
+        loadTriggers();
+    }
 });
 
 // Load chats when document is ready
@@ -923,7 +1402,7 @@ function formatFileSize(bytes) {
 }
 
 // Chat history state
-let chatHistoryState = {
+window.chatHistoryState = {
   limit: 20,
   offset: 0,
   sort: 'desc',
@@ -998,8 +1477,10 @@ async function loadChats() {
   const chatsCountEl = document.getElementById('chats-count');
   const refreshBtn = document.getElementById('refresh-chats');
   
-  if (chatHistoryState.loading) return;
-  chatHistoryState.loading = true;
+  // chatHistoryState is already initialized globally
+  
+  if (window.chatHistoryState.loading) return;
+  window.chatHistoryState.loading = true;
   
   try {
     // Show loading state
@@ -1552,44 +2033,14 @@ async function loadKbDocuments() {
   `;
   
   try {
-    console.log('Loading KB documents...');
-    const response = await fetch('/api/kb/documents');
+    const response = await fetch('/api/kb');
     
-    // Handle non-OK responses
     if (!response.ok) {
-      const text = await response.text();
-      console.error('KB documents error response:', text);
       throw new Error(`Failed to fetch KB documents: ${response.status} ${response.statusText}`);
     }
     
-    // Check if response is empty
-    const responseText = await response.text();
-    console.log('Raw KB documents response:', responseText);
-    
-    if (!responseText || responseText.trim() === '') {
-      throw new Error('Empty response received from server');
-    }
-    
-    // Try to parse the response
-    let result;
-    try {
-      result = JSON.parse(responseText);
-    } catch (parseError) {
-      console.error('Failed to parse KB documents response:', parseError);
-      throw new Error(`Invalid JSON response: ${responseText.substring(0, 100)}...`);
-    }
-    
-    console.log('Parsed KB documents response:', result);
-    
-    // Handle the parsed response
-    if (result && result.success) {
-      renderKnowledgeBase(result.documents || []);
-    } else if (result && result.error) {
-      kbContainer.innerHTML = `<div class="alert alert-warning">${result.error}</div>`;
-      console.warn('KB documents warning:', result.error);
-    } else {
-      throw new Error('Unknown error loading documents');
-    }
+    const documents = await response.json();
+    renderKnowledgeBase(Array.isArray(documents) ? documents : []);
   } catch (error) {
     console.error('Error loading KB documents:', error);
     kbContainer.innerHTML = `<div class="alert alert-danger">Failed to load knowledge base: ${error.message}</div>`;
@@ -1615,7 +2066,9 @@ function renderKnowledgeBase(documents) {
     <tr>
       <th>Filename</th>
       <th>Size</th>
+      <th>Chunks</th>
       <th>Uploaded</th>
+      <th>Use in RAG</th>
       <th>Actions</th>
     </tr>
   `;
@@ -1623,27 +2076,15 @@ function renderKnowledgeBase(documents) {
   
   // Create table body
   const tbody = document.createElement('tbody');
-  
-  // Debug: Log the entire documents array
-  console.log('Documents to render:', JSON.stringify(documents, null, 2));
-  
-  documents.forEach(doc => {
-    // Debug: Log each document
-    console.log('Document:', doc);
     
+  documents.forEach(doc => {
     const tr = document.createElement('tr');
     
+    // Determine if document is enabled (default to true if not specified)
+    const isEnabled = doc.enabled !== false;
+    
     // Format file size
-    let sizeText = 'Unknown';
-    if (doc.fileSize) {
-      if (doc.fileSize < 1024) {
-        sizeText = `${doc.fileSize} B`;
-      } else if (doc.fileSize < 1024 * 1024) {
-        sizeText = `${(doc.fileSize / 1024).toFixed(1)} KB`;
-      } else {
-        sizeText = `${(doc.fileSize / (1024 * 1024)).toFixed(1)} MB`;
-      }
-    }
+    const sizeText = formatFileSize(doc.fileSize || 0);
     
     // Format date
     let dateText = 'Unknown';
@@ -1656,10 +2097,24 @@ function renderKnowledgeBase(documents) {
       }
     }
     
+    // Create the toggle switch for enabling/disabling the document
+    const toggleId = `doc-toggle-${doc.name.replace(/[^a-zA-Z0-9]/g, '_')}`;
+    
     tr.innerHTML = `
       <td>${doc.name || 'Unknown'}</td>
       <td>${sizeText}</td>
+      <td>${doc.chunks || 0}</td>
       <td>${dateText}</td>
+      <td>
+        <div class="form-check form-switch">
+          <input class="form-check-input" type="checkbox" id="${toggleId}" 
+                 ${isEnabled ? 'checked' : ''} 
+                 onchange="toggleKbDocument('${doc.name}', this.checked)">
+          <label class="form-check-label" for="${toggleId}">
+            ${isEnabled ? 'Enabled' : 'Disabled'}
+          </label>
+        </div>
+      </td>
       <td>
         <button class="btn btn-sm btn-danger" onclick="deleteKbDocument('${doc.name}')">
           <i class="bi bi-trash"></i> Delete
@@ -1716,12 +2171,43 @@ async function deleteKbDocument(filename) {
 
 // Format file size helper function
 function formatFileSize(size) {
-  if (size < 1024) {
-    return `${size} B`;
-  } else if (size < 1024 * 1024) {
-    return `${(size / 1024).toFixed(1)} KB`;
-  } else {
-    return `${(size / (1024 * 1024)).toFixed(1)} MB`;
+  if (size < 1024) return `${size} bytes`;
+  if (size < 1048576) return `${(size / 1024).toFixed(1)} KB`;
+  if (size < 1073741824) return `${(size / 1048576).toFixed(1)} MB`;
+  return `${(size / 1073741824).toFixed(1)} GB`;
+}
+
+// Toggle document enabled/disabled state for RAG operations
+async function toggleKbDocument(fileName, enabled) {
+  try {
+    const response = await fetch('/api/kb/document/toggle', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ fileName, enabled })
+    });
+    
+    if (!response.ok) {
+      const errorData = await response.json();
+      throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
+    }
+    
+    const result = await response.json();
+    if (result.success) {
+      showToast(`Document ${fileName} ${enabled ? 'enabled' : 'disabled'} for RAG operations`, 'success');
+    } else {
+      throw new Error(result.message || 'Failed to toggle document status');
+    }
+    
+    // Update the document list to reflect the change
+    loadKbDocuments();
+    
+    return result;
+  } catch (error) {
+    console.error('Error toggling document status:', error);
+    showToast(`Error: ${error.message}`, 'danger');
+    return { success: false, error: error.message };
   }
 }
 
@@ -1856,62 +2342,8 @@ function showConfirmDialog(title, message, confirmText = 'Confirm', cancelText =
   });
 }
 
-// Show toast notification
-function showToast(message, type = 'info', duration = 3000) {
-  // Create toast container if it doesn't exist
-  let toastContainer = document.getElementById('toast-container');
-  if (!toastContainer) {
-    toastContainer = document.createElement('div');
-    toastContainer.id = 'toast-container';
-    toastContainer.className = 'position-fixed bottom-0 end-0 p-3';
-    toastContainer.style.zIndex = '1100';
-    document.body.appendChild(toastContainer);
-  }
-  
-  // Create toast element
-  const toastId = 'toast-' + Date.now();
-  const toast = document.createElement('div');
-  toast.id = toastId;
-  toast.className = `toast align-items-center text-white bg-${type} border-0`;
-  toast.role = 'alert';
-  toast.setAttribute('aria-live', 'assertive');
-  toast.setAttribute('aria-atomic', 'true');
-  
-  // Set up auto-hide
-  const hideAfter = duration > 0;
-  if (hideAfter) {
-    toast.setAttribute('data-bs-autohide', 'true');
-    toast.setAttribute('data-bs-delay', duration);
-  } else {
-    toast.setAttribute('data-bs-autohide', 'false');
-  }
-  
-  // Set toast content
-  toast.innerHTML = `
-    <div class="d-flex">
-      <div class="toast-body">
-        ${message}
-      </div>
-      <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="Close"></button>
-    </div>`;
-  
-  // Add to container
-  toastContainer.appendChild(toast);
-  
-  // Initialize and show toast
-  const bsToast = new bootstrap.Toast(toast, { autohide: hideAfter, delay: duration });
-  bsToast.show();
-  
-  // Remove toast from DOM after it's hidden
-  toast.addEventListener('hidden.bs.toast', () => {
-    toast.remove();
-  });
-  
-  return bsToast;
-}
-
 // Command history state
-let commandHistoryState = {
+window.commandHistoryState = {
   limit: 50,
   offset: 0,
   sort: 'desc',

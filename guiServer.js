@@ -32,7 +32,396 @@ fs.mkdirSync('uploads', { recursive: true });
 app.use(express.static(path.join(__dirname, 'gui/public')));
 app.use(express.json());
 
+// Get workflow manager instance
+const WorkflowManager = require('./workflow/workflowManager');
+const workflowManager = global.workflowManager || new WorkflowManager();
+
+// Get Node-RED instance if available
+let RED = null;
+try {
+  RED = global.RED;
+} catch (err) {
+  console.log('Node-RED not available in guiServer');
+}
+
 // API endpoints for the GUI
+
+// API endpoint for workflows to send WhatsApp messages
+app.post('/api/workflow/send-message', express.json(), async (req, res) => {
+  try {
+    console.log('Received send-message request:', req.body);
+    
+    // Support both chatId and recipient parameters for compatibility
+    const chatId = req.body.chatId || req.body.recipient;
+    // Support both message and text parameters for compatibility
+    const messageContent = req.body.message || req.body.text || req.body.payload;
+    
+    if (!chatId || !messageContent) {
+      console.log('Missing parameters:', { chatId, messageContent, body: req.body });
+      return res.status(400).json({ success: false, error: 'Missing chatId/recipient or message parameter' });
+    }
+    
+    // Get the WhatsApp client from global scope
+    const whatsapp = global.whatsappClient;
+    
+    if (!whatsapp || !whatsapp.client) {
+      return res.status(500).json({ success: false, error: 'WhatsApp client not available' });
+    }
+    
+    try {
+      // Get the workflow name or ID for the chat history
+      const workflowName = req.body.workflowName || req.body.workflowId || 'workflow';
+      
+      // Add message to chat history before sending
+      if (global.chatHandler) {
+        global.chatHandler.addMessage(chatId, 'assistant', messageContent);
+        console.log(`[Workflow: ${workflowName}] Added message to chat history for ${chatId}`);
+      } else {
+        console.warn('Chat handler not available, message not saved to history');
+      }
+      
+      // Send the message
+      await whatsapp.client.sendMessage(chatId, messageContent);
+      console.log(`Message sent to ${chatId}: ${messageContent.substring(0, 50)}${messageContent.length > 50 ? '...' : ''}`);
+      res.json({ success: true, message: 'Message sent successfully' });
+    } catch (error) {
+      console.error('Error sending WhatsApp message:', error);
+      res.status(500).json({ success: false, error: error.message });
+    }
+  } catch (error) {
+    console.error('Error processing send message request:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Workflow API endpoints
+app.get('/api/workflows', (req, res) => {
+  try {
+    // Get workflows from the workflow folder
+    const fs = require('fs');
+    const path = require('path');
+    const workflowDir = path.join(__dirname, 'workflow');
+    
+    // Get list of workflow files
+    const files = fs.readdirSync(workflowDir);
+    const workflows = [];
+    
+    // Get list of enabled workflows
+    const enabledWorkflows = workflowManager.getEnabledWorkflows();
+    
+    // Get active workflows from Node-RED for additional info
+    let activeNodeREDWorkflows = [];
+    try {
+      // Use synchronous method instead of async
+      const flows = RED?.nodes?.getFlows();
+      if (flows && flows.flows) {
+        // Find all tab nodes (workflows)
+        activeNodeREDWorkflows = flows.flows
+          .filter(node => node.type === 'tab')
+          .map(tab => tab.id);
+        console.log(`[API] Found ${activeNodeREDWorkflows.length} active workflows in Node-RED`);
+      }
+    } catch (err) {
+      console.error('[API] Error getting active Node-RED workflows:', err);
+    }
+    
+    for (const file of files) {
+      // Skip directories and non-JSON files
+      if (!file.endsWith('.json')) continue;
+      
+      const id = file.replace('.json', '');
+      
+      // Read and parse the workflow file
+      const filePath = path.join(workflowDir, file);
+      const fileContent = fs.readFileSync(filePath, 'utf8');
+      let flowData;
+      
+      try {
+        flowData = JSON.parse(fileContent);
+      } catch (err) {
+        console.error(`Error processing workflow file ${file}:`, err);
+        workflows.push({
+          id,
+          name: id,
+          description: 'Error parsing workflow file',
+          enabled: enabledWorkflows.includes(id),
+          activeInNodeRED: false,
+          nodeCount: 0,
+          file,
+          error: true
+        });
+        continue;
+      }
+      
+      // Find the tab node if it exists
+      const tabNode = Array.isArray(flowData) ? 
+        flowData.find(node => node.type === 'tab') : null;
+      
+      const name = tabNode?.label || id;
+      const description = tabNode?.info || 'No description available';
+      
+      // Count nodes
+      const nodeCount = Array.isArray(flowData) ? 
+        flowData.filter(node => node.type !== 'tab').length : 1;
+      
+      // Check if this workflow is active in Node-RED
+      const isActiveInNodeRED = activeNodeREDWorkflows.includes(id);
+      
+      workflows.push({
+        id,
+        name,
+        description,
+        enabled: enabledWorkflows.includes(id),
+        activeInNodeRED: isActiveInNodeRED,
+        nodeCount,
+        file
+      });
+    }
+    
+    // Sort workflows by name for better display
+    workflows.sort((a, b) => a.name.localeCompare(b.name));
+    
+    res.json({ success: true, workflows });
+  } catch (error) {
+    console.error('Error getting workflows:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Toggle workflow enabled/disabled state
+app.post('/api/workflows/toggle', async (req, res) => {
+  try {
+    const { id, enabled } = req.body;
+    
+    if (!id) {
+      return res.status(400).json({ success: false, error: 'Missing workflow ID' });
+    }
+    
+    if (enabled === undefined) {
+      return res.status(400).json({ success: false, error: 'Missing enabled state' });
+    }
+    
+    // Enable or disable the workflow
+    if (enabled) {
+      await workflowManager.enableWorkflow(id);
+    } else {
+      workflowManager.disableWorkflow(id);
+    }
+    
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Error toggling workflow:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+app.get('/api/workflows/:id', (req, res) => {
+  try {
+    const fs = require('fs');
+    const path = require('path');
+    const id = req.params.id;
+    
+    // Try to find the workflow file with this ID
+    const workflowDir = path.join(__dirname, 'workflow');
+    const filePath = path.join(workflowDir, `${id}.json`);
+    
+    if (!fs.existsSync(filePath)) {
+      return res.status(404).json({ success: false, error: 'Workflow file not found' });
+    }
+    
+    // Read and parse the workflow file
+    const fileContent = fs.readFileSync(filePath, 'utf8');
+    let flowData;
+    
+    try {
+      flowData = JSON.parse(fileContent);
+    } catch (err) {
+      return res.status(500).json({ success: false, error: 'Invalid workflow file format' });
+    }
+    
+    // Find the tab node if it exists
+    const tabNode = Array.isArray(flowData) ? 
+      flowData.find(node => node.type === 'tab') : null;
+    
+    // Get all nodes except the tab node
+    const nodes = Array.isArray(flowData) ? 
+      flowData.filter(node => node.type !== 'tab') : [];
+    
+    // Create the workflow object
+    const workflow = {
+      id,
+      name: tabNode?.label || id,
+      description: tabNode?.info || 'Workflow file',
+      nodes: nodes,
+      nodeCount: nodes.length,
+      enabled: workflowManager.getEnabledWorkflows().includes(id),
+      file: `${id}.json`,
+      config: flowData
+    };
+    
+    res.json({ success: true, workflow });
+  } catch (error) {
+    console.error('Error getting workflow details:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+app.post('/api/workflows/toggle', async (req, res) => {
+  try {
+    const { id, enabled } = req.body;
+    
+    if (!id) {
+      return res.status(400).json({ success: false, error: 'Workflow ID is required' });
+    }
+    
+    console.log(`[API] Toggling workflow ${id} to ${enabled ? 'enabled' : 'disabled'}`);
+    
+    // Toggle workflow in the workflow manager
+    if (enabled) {
+      const success = await workflowManager.enableWorkflow(id);
+      if (!success) {
+        return res.status(500).json({ success: false, error: `Failed to enable workflow ${id}` });
+      }
+    } else {
+      await workflowManager.disableWorkflow(id);
+    }
+    
+    // Get updated status from Node-RED
+    let isActiveInNodeRED = false;
+    try {
+      if (RED && RED.nodes) {
+        const flows = RED.nodes.getFlows();
+        if (flows && flows.flows) {
+          isActiveInNodeRED = flows.flows.some(node => node.id === id && node.type === 'tab');
+        }
+      }
+    } catch (err) {
+      console.error(`[API] Error checking Node-RED status: ${err.message}`);
+    }
+    
+    res.json({ 
+      success: true, 
+      enabled: enabled,
+      activeInNodeRED: isActiveInNodeRED
+    });
+  } catch (error) {
+    console.error('Error toggling workflow:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// System stats API endpoint
+app.get('/api/stats', (req, res) => {
+  try {
+    const os = require('os');
+    const process = require('process');
+    
+    // Get CPU information
+    const cpuInfo = os.cpus();
+    const cpuModel = cpuInfo.length > 0 ? cpuInfo[0].model : 'Unknown';
+    
+    // Calculate CPU usage
+    const cpuUsage = process.cpuUsage();
+    
+    // Get memory information
+    const memInfo = process.memoryUsage();
+    
+    // Get system uptime
+    const uptime = process.uptime();
+    
+    // Get Node.js version
+    const nodeVersion = process.version;
+    
+    // Get platform information
+    const platform = `${os.type()} ${os.release()}`;
+    
+    // Get WhatsApp client status
+    const whatsappStatus = global.whatsappClient ? 
+      (global.whatsappClient.client ? 'Connected' : 'Initializing') : 
+      'Not available';
+    
+    // Get Node-RED status
+    const nodeRedStatus = RED ? 'Running' : 'Not available';
+    
+    // Get MQTT status
+    const mqttStatus = workflowManager.mqttConnected ? 'Connected' : 'Disconnected';
+    
+    // Get workflow stats
+    const enabledWorkflows = workflowManager.getEnabledWorkflows();
+    
+    // Return all stats
+    res.json({
+      uptime,
+      platform,
+      nodeVersion,
+      cpuModel,
+      cpu: cpuUsage,
+      memory: memInfo,
+      services: {
+        whatsapp: whatsappStatus,
+        nodeRed: nodeRedStatus,
+        mqtt: mqttStatus
+      },
+      workflows: {
+        enabled: enabledWorkflows.length,
+        list: enabledWorkflows
+      }
+    });
+  } catch (error) {
+    console.error('Error getting system stats:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// API endpoints for workflow state management
+app.post('/api/workflows/clear', async (req, res) => {
+  try {
+    await workflowManager.clearEnabledWorkflows();
+    res.json({ success: true, message: 'All workflows cleared successfully' });
+  } catch (error) {
+    console.error('Error clearing workflows:', error);
+    res.status(500).json({ error: `Failed to clear workflows: ${error.message}` });
+  }
+});
+
+app.get('/api/workflows/state', (req, res) => {
+  try {
+    const enabledWorkflows = workflowManager.getEnabledWorkflows();
+    res.json({
+      success: true,
+      enabledWorkflows,
+      count: enabledWorkflows.length
+    });
+  } catch (error) {
+    console.error('Error getting workflow state:', error);
+    res.status(500).json({ error: `Failed to get workflow state: ${error.message}` });
+  }
+});
+
+app.post('/api/workflows/save-state', async (req, res) => {
+  try {
+    await workflowManager.saveWorkflowState();
+    res.json({ success: true, message: 'Workflow state saved successfully' });
+  } catch (error) {
+    console.error('Error saving workflow state:', error);
+    res.status(500).json({ error: `Failed to save workflow state: ${error.message}` });
+  }
+});
+
+app.post('/api/workflows/load-state', async (req, res) => {
+  try {
+    const success = await workflowManager.loadWorkflowState();
+    if (success) {
+      res.json({ success: true, message: 'Workflow state loaded successfully' });
+    } else {
+      res.json({ success: false, message: 'No workflow state found or failed to load' });
+    }
+  } catch (error) {
+    console.error('Error loading workflow state:', error);
+    res.status(500).json({ error: `Failed to load workflow state: ${error.message}` });
+  }
+});
+
 app.get('/api/status', (req, res) => {
   try {
     const commandHandler = require('./handlers/commandHandler');
@@ -82,6 +471,46 @@ app.post('/api/settings', (req, res) => {
   } catch (error) {
     console.error('Error updating settings:', error);
     res.status(500).json({ error: error.message });
+  }
+});
+
+// API endpoint for deleting profiles
+app.post('/api/profile/delete', (req, res) => {
+  try {
+    const commandHandler = require('./handlers/commandHandler');
+    const { profileName } = req.body;
+    
+    if (!profileName) {
+      return res.status(400).json({ success: false, error: 'Profile name is required' });
+    }
+    
+    // Prevent deletion of default profile
+    if (profileName === 'default') {
+      return res.status(400).json({ success: false, error: 'Cannot delete the default profile' });
+    }
+    
+    // Delete the profile
+    const result = commandHandler.deleteProfile(profileName);
+    
+    // Return updated settings
+    const settings = commandHandler.getCurrentSettings();
+    
+    // Mask API keys for security
+    if (settings.apiKeys && settings.apiKeys.openai) {
+      settings.apiKeys.openai = '********';
+    }
+    if (settings.apiKeys && settings.apiKeys.openrouter) {
+      settings.apiKeys.openrouter = '********';
+    }
+    
+    res.json({
+      success: true,
+      message: result,
+      settings: settings
+    });
+  } catch (error) {
+    console.error('Error deleting profile:', error);
+    res.status(500).json({ success: false, error: error.message });
   }
 });
 
@@ -236,6 +665,42 @@ app.delete('/api/kb/:filename', async (req, res) => {
   } catch (error) {
     console.error('Error deleting KB document:', error);
     res.status(500).json({ error: error.message });
+  }
+});
+
+// Endpoint to toggle document enabled state for RAG
+app.post('/api/kb/document/toggle', async (req, res) => {
+  try {
+    const { fileName, enabled } = req.body;
+    
+    if (!fileName) {
+      return res.status(400).json({ success: false, error: 'Document name is required' });
+    }
+    
+    const kbManager = require('./kb/kbManager');
+    const result = await kbManager.toggleDocumentEnabled(fileName, enabled);
+    res.json(result);
+  } catch (error) {
+    console.error('Error toggling document status:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Endpoint to toggle document enabled state for RAG
+app.post('/api/kb/document/toggle', async (req, res) => {
+  try {
+    const { fileName, enabled } = req.body;
+    
+    if (!fileName) {
+      return res.status(400).json({ success: false, error: 'Document name is required' });
+    }
+    
+    const kbManager = require('./kb/kbManager');
+    const result = await kbManager.toggleDocumentEnabled(fileName, enabled);
+    res.json(result);
+  } catch (error) {
+    console.error('Error toggling document status:', error);
+    res.status(500).json({ success: false, error: error.message });
   }
 });
 
@@ -500,10 +965,76 @@ app.get('/api/stats', (req, res) => {
     let gpuInfo = null;
     
     try {
+      const { execSync } = require('child_process');
+      
+      // First try nvidia-smi for NVIDIA GPUs
+      try {
+        const nvidiaSmiOutput = execSync('nvidia-smi --query-gpu=name,memory.total,driver_version,utilization.gpu --format=csv,noheader,nounits', { encoding: 'utf8' });
+        if (nvidiaSmiOutput && nvidiaSmiOutput.trim()) {
+          // Parse nvidia-smi output
+          const [name, memoryMB, driverVersion, usage] = nvidiaSmiOutput.trim().split(', ');
+          
+          gpuInfo = {
+            model: name.trim(),
+            vendor: 'NVIDIA',
+            vram: parseInt(memoryMB.trim(), 10),
+            driver: driverVersion.trim(),
+            usage: parseInt(usage.trim(), 10)
+          };
+          
+          // Successfully got GPU info from nvidia-smi
+          return;
+        }
+      } catch (nvidiaSmiError) {
+        // nvidia-smi not available or failed, try AMD next
+      }
+      
+      // Try for AMD GPUs
+      try {
+        // Check if rocm-smi is available (AMD ROCm)
+        const rocmSmiOutput = execSync('rocm-smi --showmeminfo vram --csv', { encoding: 'utf8' });
+        if (rocmSmiOutput && rocmSmiOutput.trim()) {
+          // Parse rocm-smi output - this is simplified and may need adjustment
+          const lines = rocmSmiOutput.trim().split('\n');
+          if (lines.length > 1) {
+            const gpuLine = lines[1]; // Skip header
+            const parts = gpuLine.split(',');
+            
+            // Try to get GPU name separately
+            let gpuName = 'AMD GPU';
+            try {
+              const nameOutput = execSync('rocm-smi --showproductname', { encoding: 'utf8' });
+              if (nameOutput) {
+                const nameLine = nameOutput.trim().split('\n')[1]; // Skip header
+                if (nameLine) gpuName = nameLine.trim();
+              }
+            } catch (e) {}
+            
+            // Get memory info - format varies, this is approximate
+            let vramMB = 0;
+            if (parts.length > 1) {
+              const memoryPart = parts[1].trim();
+              const memoryMatch = memoryPart.match(/(\d+)/);
+              if (memoryMatch) vramMB = parseInt(memoryMatch[1], 10);
+            }
+            
+            gpuInfo = {
+              model: gpuName,
+              vendor: 'AMD',
+              vram: vramMB,
+              driver: 'ROCm',
+              usage: null // Would need additional parsing
+            };
+            
+            return;
+          }
+        }
+      } catch (amdError) {
+        // AMD tools not available, continue with WMI
+      }
+      
       // On Windows, we can try to get GPU info from Windows Management Instrumentation
       if (os.platform() === 'win32') {
-        const { execSync } = require('child_process');
-        
         // First try to get the GPU name
         try {
           const gpuNameData = execSync('wmic path win32_VideoController get name /value', { encoding: 'utf8' });
@@ -626,13 +1157,77 @@ app.post('/api/restart', (req, res) => {
   }, 1000);
 });
 
+// Triggers API endpoints
+app.get('/api/triggers', (req, res) => {
+  try {
+    const fs = require('fs');
+    const path = require('path');
+    const triggersPath = path.join(__dirname, 'config/triggers.json');
+    
+    // Check if file exists, create it if it doesn't
+    if (!fs.existsSync(triggersPath)) {
+      const defaultTriggers = {
+        groupTriggers: ['bot', 'xeno', 'whatsxeno'],
+        customTriggers: []
+      };
+      fs.writeFileSync(triggersPath, JSON.stringify(defaultTriggers, null, 2));
+    }
+    
+    // Read triggers file
+    const triggersData = fs.readFileSync(triggersPath, 'utf8');
+    const triggers = JSON.parse(triggersData);
+    
+    res.json({ success: true, triggers });
+  } catch (error) {
+    console.error('Error getting triggers:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+app.post('/api/triggers', express.json(), (req, res) => {
+  try {
+    const { groupTriggers, customTriggers } = req.body;
+    
+    if (!Array.isArray(groupTriggers) || !Array.isArray(customTriggers)) {
+      return res.status(400).json({ 
+        success: false, 
+        error: 'Invalid format. Both groupTriggers and customTriggers must be arrays.' 
+      });
+    }
+    
+    const fs = require('fs');
+    const path = require('path');
+    const triggersPath = path.join(__dirname, 'config/triggers.json');
+    
+    // Ensure config directory exists
+    const configDir = path.join(__dirname, 'config');
+    if (!fs.existsSync(configDir)) {
+      fs.mkdirSync(configDir, { recursive: true });
+    }
+    
+    // Write triggers to file
+    fs.writeFileSync(triggersPath, JSON.stringify({ groupTriggers, customTriggers }, null, 2));
+    
+    res.json({ success: true, message: 'Triggers updated successfully' });
+  } catch (error) {
+    console.error('Error updating triggers:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
 // For any non-API routes, serve the index.html file
-app.get('*', (req, res) => {
+app.get('*', (req, res, next) => {
+  // Skip workflow paths - let Node-RED handle them
+  if (req.path.startsWith('/workflow') || req.path.startsWith('/api/workflow')) {
+    return next();
+  }
+  
   // Don't intercept API requests
   if (req.path.startsWith('/api/')) {
     return res.status(404).json({ success: false, error: 'API endpoint not found' });
   }
   
+  // Serve the main app for all other routes
   res.sendFile(path.join(__dirname, 'gui/public/index.html'));
 });
 
@@ -641,13 +1236,21 @@ const server = http.createServer(app);
 
 // Start server
 server.listen(port, () => {
-  console.log(`GUI server running on port ${port}`);
+console.log(`GUI server running on port ${port}`);
 });
 
 // Handle errors
 server.on('error', (error) => {
-  console.error('Server error:', error);
+console.error('Server error:', error);
 });
 
-// Export server for potential use in other modules
-module.exports = server;
+// Add error handling for unexpected errors
+process.on('uncaughtException', (err) => {
+console.error('Uncaught Exception in GUI server:', err);
+});
+
+// Export server and app for potential use in other modules
+module.exports = {
+server: server,
+app: app
+};

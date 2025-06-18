@@ -1,7 +1,7 @@
 {
     "node-red": {
         "name": "node-red",
-        "version": "3.1.15",
+        "version": "4.0.9-git",
         "local": false,
         "user": false,
         "nodes": {
@@ -424,50 +424,6 @@
                 "user": false,
                 "module": "node-red",
                 "file": "C:\\AIapps\\WA-BOT\\node_modules\\@node-red\\nodes\\core\\storage\\23-watch.js"
-            },
-            "whatsapp-condition": {
-                "name": "whatsapp-condition",
-                "types": [
-                    "whatsapp-condition"
-                ],
-                "enabled": true,
-                "local": false,
-                "user": false,
-                "module": "node-red",
-                "file": "C:\\AIapps\\WA-BOT\\workflow\\nodes\\whatsapp-condition.js"
-            },
-            "whatsapp-delay": {
-                "name": "whatsapp-delay",
-                "types": [
-                    "whatsapp-delay"
-                ],
-                "enabled": true,
-                "local": false,
-                "user": false,
-                "module": "node-red",
-                "file": "C:\\AIapps\\WA-BOT\\workflow\\nodes\\whatsapp-delay.js"
-            },
-            "whatsapp-event": {
-                "name": "whatsapp-event",
-                "types": [
-                    "whatsapp-event"
-                ],
-                "enabled": true,
-                "local": false,
-                "user": false,
-                "module": "node-red",
-                "file": "C:\\AIapps\\WA-BOT\\workflow\\nodes\\whatsapp-event.js"
-            },
-            "whatsapp-send": {
-                "name": "whatsapp-send",
-                "types": [
-                    "whatsapp-send"
-                ],
-                "enabled": true,
-                "local": false,
-                "user": false,
-                "module": "node-red",
-                "file": "C:\\AIapps\\WA-BOT\\workflow\\nodes\\whatsapp-send.js"
             }
         }
     },
@@ -482,7 +438,7 @@
                 "types": [
                     "ui_base"
                 ],
-                "enabled": true,
+                "enabled": false,
                 "local": false,
                 "user": false,
                 "module": "node-red-dashboard",
@@ -493,7 +449,7 @@
                 "types": [
                     "ui_button"
                 ],
-                "enabled": true,
+                "enabled": false,
                 "local": false,
                 "user": false,
                 "module": "node-red-dashboard",
@@ -504,7 +460,7 @@
                 "types": [
                     "ui_dropdown"
                 ],
-                "enabled": true,
+                "enabled": false,
                 "local": false,
                 "user": false,
                 "module": "node-red-dashboard",
@@ -515,7 +471,7 @@
                 "types": [
                     "ui_switch"
                 ],
-                "enabled": true,
+                "enabled": false,
                 "local": false,
                 "user": false,
                 "module": "node-red-dashboard",
@@ -526,7 +482,7 @@
                 "types": [
                     "ui_slider"
                 ],
-                "enabled": true,
+                "enabled": false,
                 "local": false,
                 "user": false,
                 "module": "node-red-dashboard",
@@ -537,7 +493,7 @@
                 "types": [
                     "ui_numeric"
                 ],
-                "enabled": true,
+                "enabled": false,
                 "local": false,
                 "user": false,
                 "module": "node-red-dashboard",
@@ -548,7 +504,7 @@
                 "types": [
                     "ui_text_input"
                 ],
-                "enabled": true,
+                "enabled": false,
                 "local": false,
                 "user": false,
                 "module": "node-red-dashboard",
@@ -559,7 +515,7 @@
                 "types": [
                     "ui_date_picker"
                 ],
-                "enabled": true,
+                "enabled": false,
                 "local": false,
                 "user": false,
                 "module": "node-red-dashboard",
@@ -570,7 +526,7 @@
                 "types": [
                     "ui_colour_picker"
                 ],
-                "enabled": true,
+                "enabled": false,
                 "local": false,
                 "user": false,
                 "module": "node-red-dashboard",
@@ -581,7 +537,7 @@
                 "types": [
                     "ui_form"
                 ],
-                "enabled": true,
+                "enabled": false,
                 "local": false,
                 "user": false,
                 "module": "node-red-dashboard",
@@ -592,7 +548,7 @@
                 "types": [
                     "ui_text"
                 ],
-                "enabled": true,
+                "enabled": false,
                 "local": false,
                 "user": false,
                 "module": "node-red-dashboard",
@@ -603,7 +559,7 @@
                 "types": [
                     "ui_gauge"
                 ],
-                "enabled": true,
+                "enabled": false,
                 "local": false,
                 "user": false,
                 "module": "node-red-dashboard",
@@ -614,7 +570,7 @@
                 "types": [
                     "ui_chart"
                 ],
-                "enabled": true,
+                "enabled": false,
                 "local": false,
                 "user": false,
                 "module": "node-red-dashboard",
@@ -625,7 +581,7 @@
                 "types": [
                     "ui_audio"
                 ],
-                "enabled": true,
+                "enabled": false,
                 "local": false,
                 "user": false,
                 "module": "node-red-dashboard",
@@ -636,7 +592,7 @@
                 "types": [
                     "ui_toast"
                 ],
-                "enabled": true,
+                "enabled": false,
                 "local": false,
                 "user": false,
                 "module": "node-red-dashboard",
@@ -647,7 +603,7 @@
                 "types": [
                     "ui_ui_control"
                 ],
-                "enabled": true,
+                "enabled": false,
                 "local": false,
                 "user": false,
                 "module": "node-red-dashboard",
@@ -658,7 +614,7 @@
                 "types": [
                     "ui_template"
                 ],
-                "enabled": true,
+                "enabled": false,
                 "local": false,
                 "user": false,
                 "module": "node-red-dashboard",
@@ -669,7 +625,7 @@
                 "types": [
                     "ui_link"
                 ],
-                "enabled": true,
+                "enabled": false,
                 "local": false,
                 "user": false,
                 "module": "node-red-dashboard",
@@ -680,7 +636,7 @@
                 "types": [
                     "ui_tab"
                 ],
-                "enabled": true,
+                "enabled": false,
                 "local": false,
                 "user": false,
                 "module": "node-red-dashboard",
@@ -691,7 +647,7 @@
                 "types": [
                     "ui_group"
                 ],
-                "enabled": true,
+                "enabled": false,
                 "local": false,
                 "user": false,
                 "module": "node-red-dashboard",
@@ -702,7 +658,7 @@
                 "types": [
                     "ui_spacer"
                 ],
-                "enabled": true,
+                "enabled": false,
                 "local": false,
                 "user": false,
                 "module": "node-red-dashboard",
@@ -710,55 +666,48 @@
             }
         }
     },
-    "node-red-contrib-whatsapp-bot": {
-        "name": "node-red-contrib-whatsapp-bot",
-        "version": "0.1.0",
-        "local": true,
+    "node-red-contrib-telegrambot": {
+        "name": "node-red-contrib-telegrambot",
+        "version": "16.3.1",
+        "local": false,
         "user": false,
         "nodes": {
-            "whatsapp-event": {
-                "name": "whatsapp-event",
+            "telegrambot": {
+                "name": "telegrambot",
                 "types": [
-                    "whatsapp-event"
+                    "telegram bot",
+                    "telegram receiver",
+                    "telegram command",
+                    "telegram event",
+                    "telegram sender",
+                    "telegram reply",
+                    "telegram control"
                 ],
-                "enabled": true,
-                "local": true,
+                "enabled": false,
+                "local": false,
                 "user": false,
-                "module": "node-red-contrib-whatsapp-bot",
-                "file": "C:\\AIapps\\WA-BOT\\.node-red\\node_modules\\node-red-contrib-whatsapp-bot\\nodes\\whatsapp-event.js"
-            },
-            "whatsapp-send": {
-                "name": "whatsapp-send",
+                "module": "node-red-contrib-telegrambot",
+                "file": "C:\\AIapps\\WA-BOT\\node_modules\\node-red-contrib-telegrambot\\telegrambot\\99-telegrambot.js"
+            }
+        }
+    },
+    "node-red-node-twilio": {
+        "name": "node-red-node-twilio",
+        "version": "0.1.0",
+        "local": false,
+        "user": false,
+        "nodes": {
+            "twilio": {
+                "name": "twilio",
                 "types": [
-                    "whatsapp-send"
+                    "twilio out",
+                    "twilio-api"
                 ],
-                "enabled": true,
-                "local": true,
+                "enabled": false,
+                "local": false,
                 "user": false,
-                "module": "node-red-contrib-whatsapp-bot",
-                "file": "C:\\AIapps\\WA-BOT\\.node-red\\node_modules\\node-red-contrib-whatsapp-bot\\nodes\\whatsapp-send.js"
-            },
-            "whatsapp-condition": {
-                "name": "whatsapp-condition",
-                "types": [
-                    "whatsapp-condition"
-                ],
-                "enabled": true,
-                "local": true,
-                "user": false,
-                "module": "node-red-contrib-whatsapp-bot",
-                "file": "C:\\AIapps\\WA-BOT\\.node-red\\node_modules\\node-red-contrib-whatsapp-bot\\nodes\\whatsapp-condition.js"
-            },
-            "whatsapp-delay": {
-                "name": "whatsapp-delay",
-                "types": [
-                    "whatsapp-delay"
-                ],
-                "enabled": true,
-                "local": true,
-                "user": false,
-                "module": "node-red-contrib-whatsapp-bot",
-                "file": "C:\\AIapps\\WA-BOT\\.node-red\\node_modules\\node-red-contrib-whatsapp-bot\\nodes\\whatsapp-delay.js"
+                "module": "node-red-node-twilio",
+                "file": "C:\\AIapps\\WA-BOT\\node_modules\\node-red-node-twilio\\56-twilio.js"
             }
         }
     }

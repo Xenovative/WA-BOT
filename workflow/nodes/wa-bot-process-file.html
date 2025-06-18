@@ -1,0 +1,64 @@
+<script type="text/javascript">
+    RED.nodes.registerType('wa-bot-process-file', 'wa-bot-nodes', {
+        category: 'WhatsApp Bot',
+        color: '#3FADB5',
+        defaults: {
+            name: { value: "" },
+            action: { value: "add_to_kb" },
+            filename: { value: "" }
+        },
+        inputs: 1,
+        outputs: 1,
+        icon: "file.png",
+        label: function() {
+            return this.name || "Process File";
+        },
+        paletteLabel: "Process File"
+    });
+</script>
+
+<script type="text/html" data-template-name="wa-bot-process-file">
+    <div class="form-row">
+        <label for="node-input-name"><i class="fa fa-tag"></i> Name</label>
+        <input type="text" id="node-input-name" placeholder="Name">
+    </div>
+    <div class="form-row">
+        <label for="node-input-action"><i class="fa fa-tasks"></i> Action</label>
+        <select id="node-input-action">
+            <option value="add_to_kb">Add to Knowledge Base</option>
+            <option value="delete_from_kb">Delete from Knowledge Base</option>
+            <option value="move">Move File</option>
+            <option value="copy">Copy File</option>
+            <option value="delete">Delete File</option>
+        </select>
+    </div>
+    <div class="form-row">
+        <label for="node-input-filename"><i class="fa fa-file"></i> Filename</label>
+        <input type="text" id="node-input-filename" placeholder="Filename (optional)">
+    </div>
+</script>
+
+<script type="text/html" data-help-name="wa-bot-process-file">
+    <p>Processes files in the WhatsApp Bot system.</p>
+    
+    <h3>Inputs</h3>
+    <dl class="message-properties">
+        <dt>filename <span class="property-type">string</span></dt>
+        <dd>The name of the file to process. If not provided, uses the configured filename.</dd>
+        <dt>action <span class="property-type">string</span></dt>
+        <dd>The action to perform. If not provided, uses the configured action.</dd>
+        <dt>destination <span class="property-type">string</span></dt>
+        <dd>For move/copy actions, the destination path.</dd>
+    </dl>
+    
+    <h3>Outputs</h3>
+    <dl class="message-properties">
+        <dt>payload <span class="property-type">object</span></dt>
+        <dd>The result of the file processing operation.</dd>
+        <dt>success <span class="property-type">boolean</span></dt>
+        <dd>Whether the operation was successful.</dd>
+    </dl>
+    
+    <h3>Details</h3>
+    <p>This node performs various file operations in the WhatsApp Bot system, such as adding files to the knowledge base, moving files, or deleting files.</p>
+</script>

@@ -29,4 +29,5 @@ uploads/
 kb_data/
 vector_store/
 
-
+#configs
+config/

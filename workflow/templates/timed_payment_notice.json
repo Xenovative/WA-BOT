@@ -1,0 +1,194 @@
+[
+    {
+        "id": "tpn-payment-notice-flow",
+        "type": "tab",
+        "label": "Timed Payment Notice",
+        "disabled": false,
+        "info": "This flow sends a payment reminder at a scheduled time"
+    },
+    {
+        "id": "tpn-payment-config",
+        "type": "function",
+        "z": "tpn-payment-notice-flow",
+        "name": "Payment Notice Config",
+        "func": "// Configure your payment notice here\nreturn {\n    payload: {\n        // Schedule (cron format: minute hour day month dayOfWeek)\n        // This example runs at 9:00 AM on the 1st day of each month\n        schedule: \"00 09 1 * *\"\n    }\n};",
+        "outputs": 1,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 190,
+        "y": 80,
+        "wires": [
+            [
+                "tpn-store-config"
+            ]
+        ]
+    },
+    {
+        "id": "tpn-store-config",
+        "type": "function",
+        "z": "tpn-payment-notice-flow",
+        "name": "Store Config",
+        "func": "// Store configuration in flow context with namespace\nflow.set('timed-payment-notice.config', msg.payload);\nreturn null;",
+        "outputs": 1,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 380,
+        "y": 80,
+        "wires": [
+            []
+        ]
+    },
+    {
+        "id": "scheduler",
+        "type": "inject",
+        "z": "tpn-payment-notice-flow",
+        "name": "Schedule Check",
+        "props": [
+            {
+                "p": "payload"
+            },
+            {
+                "p": "topic",
+                "vt": "str"
+            }
+        ],
+        "repeat": "",
+        "crontab": "",
+        "once": true,
+        "onceDelay": "",
+        "topic": "schedule_check",
+        "payload": "",
+        "payloadType": "date",
+        "x": 170,
+        "y": 120,
+        "wires": [
+            [
+                "tpn-check-schedule"
+            ]
+        ]
+    },
+    {
+        "id": "tpn-check-schedule",
+        "type": "function",
+        "z": "tpn-payment-notice-flow",
+        "name": "Check Schedule",
+        "func": "// cron is already injected via libs array\nconst config = flow.get('timed-payment-notice.config') || {};\n\n// Debug: Log that we're checking the schedule\nnode.log('Payment Notice Check Schedule running...');\n\n// Get the payment notice config from flow context with namespace\nconst paymentConfig = flow.get('timed-payment-notice.config') || {};\nconst schedule = paymentConfig.schedule;\n\n// Debug: Log what we found in the context\nnode.log('Current paymentConfig: ' + JSON.stringify(paymentConfig));\nnode.log('Schedule found: ' + schedule);\n\n// Convert cron schedule to natural language\nfunction cronToNaturalLanguage(cronExpression) {\n    if (!cronExpression) return 'No schedule defined';\n    \n    const parts = cronExpression.split(' ');\n    if (parts.length !== 5) return 'Invalid cron format';\n    \n    const [minute, hour, dayOfMonth, month, dayOfWeek] = parts;\n    \n    // Day of week mapping\n    const daysOfWeek = {\n        '0': 'Sunday', '1': 'Monday', '2': 'Tuesday', '3': 'Wednesday',\n        '4': 'Thursday', '5': 'Friday', '6': 'Saturday'\n    };\n    \n    // Month mapping\n    const months = {\n        '1': 'January', '2': 'February', '3': 'March', '4': 'April',\n        '5': 'May', '6': 'June', '7': 'July', '8': 'August',\n        '9': 'September', '10': 'October', '11': 'November', '12': 'December'\n    };\n    \n    let description = '';\n    \n    // Time (hour:minute)\n    if (hour !== '*' && minute !== '*') {\n        const formattedHour = parseInt(hour) > 12 ? \n            (parseInt(hour) - 12) + ' PM' : \n            (parseInt(hour) === 0 ? '12 AM' : parseInt(hour) + ' AM');\n        description += `at ${minute} minutes past ${formattedHour}`;\n    }\n    \n    // Day of week\n    if (dayOfWeek !== '*') {\n        if (description) description += ' ';\n        if (dayOfWeek in daysOfWeek) {\n            description += `every ${daysOfWeek[dayOfWeek]}`;\n        } else {\n            description += `every ${dayOfWeek}`;\n        }\n    }\n    \n    // Day of month\n    if (dayOfMonth !== '*') {\n        if (description) description += ' ';\n        description += `on the ${dayOfMonth}${getDaySuffix(dayOfMonth)} day`;\n    }\n    \n    // Month\n    if (month !== '*') {\n        if (description) description += ' ';\n        if (month in months) {\n            description += `of ${months[month]}`;\n        } else {\n            description += `of month ${month}`;\n        }\n    }\n    \n    return description || 'Every minute';\n}\n\n// Helper function to get day suffix (1st, 2nd, 3rd, etc.)\nfunction getDaySuffix(day) {\n    if (day >= 11 && day <= 13) return 'th';\n    switch (day % 10) {\n        case 1: return 'st';\n        case 2: return 'nd';\n        case 3: return 'rd';\n        default: return 'th';\n    }\n}\n\n// First run - initialize from the payment-config function\nif (!paymentConfig.schedule) {\n    // Try to get initial config from the payment-config node output\n    node.log('No schedule in context, trying to initialize from default');\n    \n    // Default schedule - 9:00 AM on the 1st day of each month\n    const defaultSchedule = '00 09 1 * *';\n    \n    // Store it in flow context\n    flow.set('timed-payment-notice.config', {\n        schedule: defaultSchedule,\n        lastChecked: new Date().toISOString()\n    });\n    \n    node.log('Initialized schedule: ' + defaultSchedule);\n    \n    // Log the schedule in natural language after initialization\n    node.log('Schedule in natural language: ' + cronToNaturalLanguage(defaultSchedule));\n    \n    return null; // Skip this run, we'll check on the next cycle\n}\n\n// Log the schedule in natural language for existing schedules\nnode.log('Schedule in natural language: ' + cronToNaturalLanguage(schedule));\n\n// Validate the schedule\nif (schedule && cron.validate(schedule)) {\n    // Get the current time and the last run time\n    const now = new Date();\n    const lastRun = new Date(paymentConfig.lastRun || 0);\n    \n    node.log('Current time: ' + now.toISOString());\n    node.log('Last run time: ' + lastRun.toISOString());\n    \n    // Calculate next scheduled time manually\n    // For simplicity, we'll just check if it's time to run based on the current time\n    \n    // Extract schedule parts\n    const [minute, hour, dayOfMonth, month, dayOfWeek] = schedule.split(' ');\n    \n    const currentDate = new Date();\n    const currentMinute = currentDate.getMinutes();\n    const currentHour = currentDate.getHours();\n    const currentDayOfMonth = currentDate.getDate();\n    const currentMonth = currentDate.getMonth() + 1; // JavaScript months are 0-indexed\n    const currentDayOfWeek = currentDate.getDay(); // 0 = Sunday, 1 = Monday, etc.\n    \n    // For simplicity, we'll just log the current time components\n    node.log(`Current time components: ${currentHour}:${currentMinute} on day ${currentDayOfMonth}, month ${currentMonth}, weekday ${currentDayOfWeek}`);\n    node.log(`Schedule components: minute=${minute}, hour=${hour}, day=${dayOfMonth}, month=${month}, weekday=${dayOfWeek}`);\n    \n    // Check if it's time to trigger the payment notice\n    if (currentMinute == minute && currentHour == hour && \n        (dayOfMonth == '*' || currentDayOfMonth == dayOfMonth) && \n        (month == '*' || currentMonth == month) && \n        (dayOfWeek == '*' || currentDayOfWeek == dayOfWeek)) {\n        node.log('Time to trigger the payment notice!');\n        \n        // Update the last run time\n        flow.set('timed-payment-notice.config', {\n            ...paymentConfig,\n            lastRun: now.toISOString(),\n            lastChecked: now.toISOString()\n        });\n        \n        // Trigger the payment notice\n        return { payload: 'trigger' };\n    } else {\n        node.log('Not time to trigger payment notice yet.');\n    }\n} else {\n    node.warn('Invalid schedule format: ' + schedule);\n}\n\n// Store the last check time\nflow.set('timed-payment-notice.config', {\n    ...paymentConfig,\n    lastChecked: new Date().toISOString()\n});\n\nnode.log('Check complete, no payment notice needed');\nreturn null;",
+        "outputs": 1,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [{"var":"cron","module":"node-cron"}],
+        "x": 380,
+        "y": 120,
+        "wires": [
+            [
+                "get-customer-list"
+            ]
+        ]
+    },
+    {
+        "id": "get-customer-list",
+        "type": "function",
+        "z": "tpn-payment-notice-flow",
+        "name": "Get Customer List",
+        "func": "// In a real scenario, this would fetch from a database\n// For this template, we'll use a hardcoded list\nreturn [\n    { payload: { customerId: \"customer1\", chatId: \"1234567890\", name: \"John Doe\", amount: 99.99 } },\n    { payload: { customerId: \"customer2\", chatId: \"2345678901\", name: \"Jane Smith\", amount: 149.99 } },\n    { payload: { customerId: \"customer3\", chatId: \"3456789012\", name: \"Bob Johnson\", amount: 199.99 } }\n];",
+        "outputs": 1,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 400,
+        "y": 120,
+        "wires": [
+            [
+                "prepare-payment-message"
+            ]
+        ]
+    },
+    {
+        "id": "prepare-payment-message",
+        "type": "template",
+        "z": "tpn-payment-notice-flow",
+        "name": "Payment Notice Template",
+        "field": "payload",
+        "fieldType": "msg",
+        "format": "json",
+        "syntax": "mustache",
+        "template": "{\n    \"chatId\": \"{{payload.chatId}}\",\n    \"message\": \"Dear {{payload.name}},\\n\\nThis is a friendly reminder that your payment of ${{payload.amount}} is due today. Please make your payment to continue enjoying our services.\\n\\nPayment methods:\\n- Bank transfer to: ACC# 123-456-789\\n- Online payment: www.example.com/pay\\n\\nThank you for your business!\\n\\nRegards,\\nThe Team\",\n    \"messageType\": \"text\"\n}",
+        "output": "json",
+        "x": 630,
+        "y": 120,
+        "wires": [
+            [
+                "tpn-send-payment-notice"
+            ]
+        ]
+    },
+    {
+        "id": "tpn-send-payment-notice",
+        "type": "http request",
+        "z": "tpn-payment-notice-flow",
+        "name": "Send WhatsApp Message",
+        "method": "POST",
+        "ret": "obj",
+        "paytoqs": "ignore",
+        "url": "http://localhost:3000/api/workflow/send-message",
+        "tls": "",
+        "persist": false,
+        "proxy": "",
+        "authType": "",
+        "x": 870,
+        "y": 120,
+        "wires": [
+            [
+                "tpn-log-payment-notice"
+            ]
+        ]
+    },
+    {
+        "id": "tpn-log-payment-notice",
+        "type": "debug",
+        "z": "tpn-payment-notice-flow",
+        "name": "Log Payment Notice",
+        "active": true,
+        "tosidebar": true,
+        "console": true,
+        "tostatus": false,
+        "complete": "true",
+        "targetType": "full",
+        "statusVal": "",
+        "statusType": "auto",
+        "x": 1090,
+        "y": 120,
+        "wires": []
+    },
+    {
+        "id": "manual-trigger",
+        "type": "inject",
+        "z": "tpn-payment-notice-flow",
+        "name": "Manual Trigger",
+        "props": [
+            {
+                "p": "payload"
+            }
+        ],
+        "repeat": "",
+        "crontab": "",
+        "once": false,
+        "onceDelay": 0.1,
+        "topic": "",
+        "payload": "",
+        "payloadType": "date",
+        "x": 150,
+        "y": 180,
+        "wires": [
+            [
+                "get-customer-list"
+            ]
+        ]
+    }
+]

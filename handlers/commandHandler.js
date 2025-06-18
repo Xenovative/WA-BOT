@@ -17,6 +17,12 @@ class CommandHandler {
     this.commandHistory = [];
     this.commandHistoryFile = path.join(__dirname, '../data/command_history.json');
     this.loadCommandHistory();
+    
+    // Configuration profiles
+    this.configProfiles = {};
+    this.currentProfileName = 'default';
+    this.configProfilesFile = path.join(__dirname, '../data/config_profiles.json');
+    
     this.commands = {
       help: this.handleHelp,
       clear: this.handleClear,
@@ -30,8 +36,12 @@ class CommandHandler {
       rag: this.handleRAGToggle,
       kblist: this.handleKBList,
       kbdelete: this.handleKBDelete,
-      citations: this.handleCitationsToggle
+      citations: this.handleCitationsToggle,
+      profile: this.handleProfile
     };
+    
+    // Load configuration profiles
+    this.loadConfigProfiles();
     
     // Store current provider and model settings
     this.currentProvider = process.env.LLM_PROVIDER || 'openai';
@@ -343,26 +353,26 @@ Show Citations: ${this.showCitations ? 'Yes' : 'No'}`;
         return 'gpt-3.5-turbo';
     }
   }
-
+  
   /**
-   * Handle enabling/disabling RAG
-   * @param {Array} args - Command arguments [on|off]
+   * Handle the RAG toggle command
+   * @param {Array} args - Command arguments
    * @returns {string} Response message
    */
   async handleRAGToggle(args) {
     if (args.length === 0) {
-      return `RAG is currently ${this.ragEnabled ? 'enabled' : 'disabled'}`;
+      return `RAG functionality is currently ${this.ragEnabled ? 'enabled' : 'disabled'}`;
     }
     
     const action = args[0].toLowerCase();
-    if (action === 'on' || action === 'true' || action === 'enable') {
+    if (action === 'on' || action === 'true') {
       this.ragEnabled = true;
       return 'RAG functionality enabled';
-    } else if (action === 'off' || action === 'false' || action === 'disable') {
+    } else if (action === 'off' || action === 'false') {
       this.ragEnabled = false;
       return 'RAG functionality disabled';
     } else {
-      return `Invalid option. Use 'on' or 'off'.`;
+      return 'Invalid option. Use !rag on or !rag off';
     }
   }
   
@@ -428,6 +438,53 @@ Show Citations: ${this.showCitations ? 'Yes' : 'No'}`;
   }
   
   /**
+   * Handle profile command to manage configuration profiles
+   * @param {Array} args - Command arguments
+   * @returns {string} Response message
+   */
+  async handleProfile(args) {
+    if (args.length === 0) {
+      // List available profiles
+      const profiles = Object.keys(this.configProfiles);
+      return `Current profile: ${this.currentProfileName}\nAvailable profiles: ${profiles.join(', ') || 'None'}`;
+    }
+    
+    const action = args[0].toLowerCase();
+    
+    if (action === 'save' || action === 'create') {
+      // Save current settings as a profile
+      if (args.length < 2) {
+        return 'Usage: !profile save [name]';
+      }
+      
+      const profileName = args[1];
+      return this.saveProfile(profileName);
+    } 
+    else if (action === 'load' || action === 'switch') {
+      // Load a profile
+      if (args.length < 2) {
+        return 'Usage: !profile load [name]';
+      }
+      
+      const profileName = args[1];
+      return this.loadProfile(profileName);
+    }
+    else if (action === 'delete' || action === 'remove') {
+      // Delete a profile
+      if (args.length < 2) {
+        return 'Usage: !profile delete [name]';
+      }
+      
+      const profileName = args[1];
+      return this.deleteProfile(profileName);
+    }
+    else {
+      // Assume it's a profile name to load
+      return this.loadProfile(action);
+    }
+  }
+  
+  /**
    * Get current provider and model
    * @returns {Object} Current settings
    */
@@ -443,8 +500,57 @@ Show Citations: ${this.showCitations ? 'Yes' : 'No'}`;
       apiKeys: {
         openai: process.env.OPENAI_API_KEY || '',
         openrouter: process.env.OPENROUTER_API_KEY || ''
-      }
+      },
+      currentProfileName: this.currentProfileName,
+      availableProfiles: Object.keys(this.configProfiles)
     };
+  }
+  
+  /**
+   * Update settings from API request
+   * @param {Object} newSettings - New settings to apply
+   */
+  updateSettings(newSettings) {
+    if (newSettings.provider) {
+      this.currentProvider = newSettings.provider;
+    }
+    
+    if (newSettings.model) {
+      this.currentModel = newSettings.model;
+    }
+    
+    if (newSettings.systemPrompt) {
+      this.systemPrompt = newSettings.systemPrompt;
+    }
+    
+    if (newSettings.parameters) {
+      this.parameters = { ...this.parameters, ...newSettings.parameters };
+    }
+    
+    if (newSettings.mcpResourceUri !== undefined) {
+      this.mcpResourceUri = newSettings.mcpResourceUri;
+    }
+    
+    if (newSettings.ragEnabled !== undefined) {
+      this.ragEnabled = newSettings.ragEnabled;
+    }
+    
+    if (newSettings.showCitations !== undefined) {
+      this.showCitations = newSettings.showCitations;
+    }
+    
+    if (newSettings.profileName) {
+      if (this.configProfiles[newSettings.profileName]) {
+        this.loadProfile(newSettings.profileName);
+      } else if (newSettings.saveAsProfile) {
+        this.saveProfile(newSettings.profileName);
+      }
+    }
+    
+    // Save current settings as the active profile
+    if (this.currentProfileName) {
+      this.saveProfile(this.currentProfileName, false);
+    }
   }
   
   /**
@@ -455,13 +561,17 @@ Show Citations: ${this.showCitations ? 'Yes' : 'No'}`;
     return this.commandHistory;
   }
   
-  // Save command history to disk
+  /**
+   * Save command history to disk
+   */
   saveCommandHistory() {
     try {
-      const dataDir = path.join(__dirname, '../data');
-      if (!fs.existsSync(dataDir)) {
-        fs.mkdirSync(dataDir, { recursive: true });
+      // Ensure directory exists
+      const dir = path.dirname(this.commandHistoryFile);
+      if (!fs.existsSync(dir)) {
+        fs.mkdirSync(dir, { recursive: true });
       }
+      
       fs.writeFileSync(this.commandHistoryFile, JSON.stringify(this.commandHistory, null, 2));
     } catch (error) {
       console.error('Error saving command history:', error);
@@ -477,6 +587,151 @@ Show Citations: ${this.showCitations ? 'Yes' : 'No'}`;
       }
     } catch (error) {
       console.error('Error loading command history:', error);
+      this.commandHistory = [];
+    }
+  }
+  
+  /**
+   * Load configuration profiles from file
+   */
+  loadConfigProfiles() {
+    try {
+      // Ensure directory exists
+      const dir = path.dirname(this.configProfilesFile);
+      if (!fs.existsSync(dir)) {
+        fs.mkdirSync(dir, { recursive: true });
+      }
+      
+      if (fs.existsSync(this.configProfilesFile)) {
+        const data = fs.readFileSync(this.configProfilesFile, 'utf8');
+        this.configProfiles = JSON.parse(data);
+        
+        // Load the default profile if it exists and we don't have a current profile
+        if (this.configProfiles.default && !this.configProfiles[this.currentProfileName]) {
+          this.loadProfile('default', false);
+        }
+      } else {
+        // Create a default profile with current settings
+        this.saveProfile('default', false);
+      }
+    } catch (error) {
+      console.error('Error loading configuration profiles:', error);
+      this.configProfiles = {};
+      // Create a default profile with current settings
+      this.saveProfile('default', false);
+    }
+  }
+  
+  /**
+   * Save configuration profiles to file
+   */
+  saveConfigProfiles() {
+    try {
+      fs.writeFileSync(this.configProfilesFile, JSON.stringify(this.configProfiles, null, 2));
+    } catch (error) {
+      console.error('Error saving configuration profiles:', error);
+    }
+  }
+  
+  /**
+   * Save current settings as a profile
+   * @param {string} profileName - Name of the profile to save
+   * @param {boolean} updateCurrent - Whether to update current profile name
+   * @returns {string} Response message
+   */
+  saveProfile(profileName, updateCurrent = true) {
+    try {
+      // Get current settings
+      const settings = {
+        provider: this.currentProvider,
+        model: this.currentModel,
+        systemPrompt: this.systemPrompt,
+        parameters: { ...this.parameters },
+        mcpServerName: this.mcpServerName,
+        mcpResourceUri: this.mcpResourceUri,
+        ragEnabled: this.ragEnabled,
+        showCitations: this.showCitations
+      };
+      
+      // Save to profiles
+      this.configProfiles[profileName] = settings;
+      this.saveConfigProfiles();
+      
+      if (updateCurrent) {
+        this.currentProfileName = profileName;
+      }
+      
+      return `Settings saved as profile '${profileName}'`;
+    } catch (error) {
+      console.error('Error saving profile:', error);
+      return `Error saving profile: ${error.message}`;
+    }
+  }
+  
+  /**
+   * Load a profile
+   * @param {string} profileName - Name of the profile to load
+   * @returns {string} Response message
+   */
+  loadProfile(profileName) {
+    try {
+      if (!this.configProfiles[profileName]) {
+        return `Profile '${profileName}' not found`;
+      }
+      
+      const profile = this.configProfiles[profileName];
+      
+      // Apply settings
+      this.currentProvider = profile.provider || this.currentProvider;
+      this.currentModel = profile.model || this.currentModel;
+      this.systemPrompt = profile.systemPrompt || this.systemPrompt;
+      this.parameters = { ...this.parameters, ...profile.parameters };
+      this.mcpServerName = profile.mcpServerName || this.mcpServerName;
+      this.mcpResourceUri = profile.mcpResourceUri || this.mcpResourceUri;
+      this.ragEnabled = profile.ragEnabled !== undefined ? profile.ragEnabled : this.ragEnabled;
+      this.showCitations = profile.showCitations !== undefined ? profile.showCitations : this.showCitations;
+      
+      // Update current profile name
+      this.currentProfileName = profileName;
+      
+      return `Loaded profile '${profileName}'`;
+    } catch (error) {
+      console.error('Error loading profile:', error);
+      return `Error loading profile: ${error.message}`;
+    }
+  }
+  
+  /**
+   * Delete a profile
+   * @param {string} profileName - Name of the profile to delete
+   * @returns {string} Response message
+   */
+  deleteProfile(profileName) {
+    try {
+      if (profileName === 'default') {
+        return `Cannot delete the default profile`;
+      }
+      
+      if (!this.configProfiles[profileName]) {
+        return `Profile '${profileName}' not found`;
+      }
+      
+      // Delete the profile
+      delete this.configProfiles[profileName];
+      this.saveConfigProfiles();
+      
+      // If current profile was deleted, switch to default
+      if (this.currentProfileName === profileName) {
+        this.currentProfileName = 'default';
+        if (this.configProfiles.default) {
+          this.loadProfile('default');
+        }
+      }
+      
+      return `Deleted profile '${profileName}'`;
+    } catch (error) {
+      console.error('Error deleting profile:', error);
+      return `Error deleting profile: ${error.message}`;
     }
   }
 }

@@ -9,5 +9,8 @@
       "whatsapp-condition": "nodes/whatsapp-condition.js",
       "whatsapp-delay": "nodes/whatsapp-delay.js"
     }
+  },
+  "dependencies": {
+    "node-cron": "^4.1.0"
   }
 }

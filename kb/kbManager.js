@@ -436,8 +436,20 @@ class KnowledgeBaseManager {
         return [];
       }
 
-      const results = await this.vectorStore.similaritySearch(query, this.topK);
-      return results;
+      // Retrieve more documents than we need so we can filter out disabled ones
+      const allResults = await this.vectorStore.similaritySearch(query, this.topK * 2);
+      
+      // Filter out documents that have been disabled
+      const filteredResults = allResults.filter(doc => {
+        const fileName = doc.metadata?.fileName;
+        if (!fileName) return true; // Keep documents without filename metadata
+        
+        const docInfo = this.documents.get(fileName);
+        return docInfo ? docInfo.enabled !== false : true; // Default to enabled if not found
+      }).slice(0, this.topK); // Limit to the requested number of results
+      
+      console.log(`[KB] Found ${filteredResults.length} relevant enabled documents out of ${allResults.length} matches`);
+      return filteredResults;
     } catch (error) {
       console.error('Error querying knowledge base:', error);
       return [];
@@ -527,7 +539,8 @@ class KnowledgeBaseManager {
           timestamp: value.timestamp || new Date().toISOString(),
           filePath: value.filePath || '',
           fileSize: value.fileSize || 0,
-          fileType: value.fileType || ''
+          fileType: value.fileType || '',
+          enabled: value.enabled !== false // Default to enabled if property doesn't exist
         }));
       
       console.log(`[KB] Found ${documents.length} documents in knowledge base`);
@@ -618,6 +631,49 @@ class KnowledgeBaseManager {
     } catch (error) {
       console.error(`Error extracting text from ${fileName}:`, error);
       return `Error extracting text from ${fileName}: ${error.message}`;
+    }
+  }
+  
+  /**
+   * Toggle a document's enabled status for RAG operations
+   * @param {string} fileName - Name of the document to toggle
+   * @param {boolean} enabled - Whether the document should be enabled
+   * @returns {Promise<Object>} - Result of the operation
+   */
+  async toggleDocumentEnabled(fileName, enabled) {
+    try {
+      if (!this.enabled) {
+        return { success: false, message: 'Knowledge base is disabled' };
+      }
+      
+      if (!fileName) {
+        return { success: false, message: 'No document name provided' };
+      }
+      
+      // Check if document exists
+      if (!this.documents.has(fileName)) {
+        return { success: false, message: `Document '${fileName}' not found` };
+      }
+      
+      // Update the document's enabled status
+      const docInfo = this.documents.get(fileName);
+      docInfo.enabled = enabled;
+      this.documents.set(fileName, docInfo);
+      
+      // Save the document map
+      await this.saveDocumentMap();
+      
+      return { 
+        success: true, 
+        message: `Document '${fileName}' ${enabled ? 'enabled' : 'disabled'} for RAG operations`,
+        document: {
+          name: fileName,
+          enabled: enabled
+        }
+      };
+    } catch (error) {
+      console.error(`Error toggling document '${fileName}' enabled status:`, error);
+      return { success: false, message: `Error toggling document status: ${error.message}` };
     }
   }
 }

@@ -43,6 +43,11 @@
                             </a>
                         </li>
                         <li class="nav-item">
+                            <a class="nav-link" href="#triggers" data-bs-toggle="tab">
+                                <i class="bi bi-lightning me-2"></i>Triggers
+                            </a>
+                        </li>
+                        <li class="nav-item">
                             <a class="nav-link" href="#chats" data-bs-toggle="tab">
                                 <i class="bi bi-chat-dots me-2"></i>Chats
                             </a>
@@ -60,6 +65,11 @@
                         <li class="nav-item">
                             <a class="nav-link" href="#system" data-bs-toggle="tab">
                                 <i class="bi bi-cpu me-2"></i>System
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" href="#workflows" data-bs-toggle="tab">
+                                <i class="bi bi-diagram-3 me-2"></i>Workflows
                             </a>
                         </li>
                     </ul>
@@ -243,6 +253,32 @@
                             <i class="bi bi-info-circle"></i> Changes will be applied immediately.
                         </div>
                         <form id="settings-form">
+                            <div class="mb-4 border p-3 rounded">
+                                <h5 class="mb-3">Configuration Profiles</h5>
+                                <div class="row mb-3">
+                                    <div class="col-md-6">
+                                        <label for="profile-select" class="form-label">Current Profile</label>
+                                        <select id="profile-select" class="form-select">
+                                            <!-- Profiles will be loaded here -->
+                                        </select>
+                                        <div class="form-text">Select a profile to load its settings</div>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <label for="new-profile-name" class="form-label">New Profile Name</label>
+                                        <div class="input-group">
+                                            <input type="text" class="form-control" id="new-profile-name" placeholder="Enter profile name">
+                                            <button class="btn btn-outline-primary" type="button" id="save-profile-btn">Save As</button>
+                                        </div>
+                                        <div class="form-text">Save current settings as a new profile</div>
+                                    </div>
+                                </div>
+                                <div class="d-flex justify-content-end">
+                                    <button type="button" class="btn btn-outline-danger btn-sm" id="delete-profile-btn">
+                                        <i class="bi bi-trash"></i> Delete Profile
+                                    </button>
+                                </div>
+                            </div>
+                            
                             <div class="mb-3">
                                 <label for="provider" class="form-label">LLM Provider</label>
                                 <select id="provider-select" class="form-select">
@@ -294,6 +330,7 @@
                                 <label for="system-prompt" class="form-label">System Prompt</label>
                                 <textarea class="form-control" id="system-prompt" rows="5"></textarea>
                             </div>
+                            
                             <button type="submit" class="btn btn-primary">Save Settings</button>
                         </form>
                     </div>
@@ -410,6 +447,59 @@
                         </div>
                     </div>
 
+                    <!-- Triggers Tab -->
+                    <div class="tab-pane fade" id="triggers">
+                        <h4 class="mb-3">Bot Triggers</h4>
+                        <p>Configure words or phrases that will trigger the bot to respond in group chats.</p>
+                        
+                        <div class="card shadow mb-4">
+                            <div class="card-header py-3">
+                                <h6 class="m-0 font-weight-bold">Group Chat Triggers</h6>
+                            </div>
+                            <div class="card-body">
+                                <p>These words will activate the bot in group chats when mentioned anywhere in a message.</p>
+                                
+                                <div class="mb-3">
+                                    <div class="d-flex align-items-center mb-2">
+                                        <input type="text" class="form-control" id="newGroupTrigger" placeholder="Add new trigger word...">
+                                        <button class="btn btn-primary ms-2" id="addGroupTrigger">Add</button>
+                                    </div>
+                                    <div class="alert alert-info" role="alert">
+                                        <i class="bi bi-info-circle me-2"></i> Triggers are case-insensitive. The bot will respond if any of these words appear in a message.
+                                    </div>
+                                </div>
+                                
+                                <div class="list-group" id="groupTriggersList">
+                                    <!-- Triggers will be populated here by JavaScript -->
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="card shadow mb-4">
+                            <div class="card-header py-3">
+                                <h6 class="m-0 font-weight-bold">Custom Triggers</h6>
+                            </div>
+                            <div class="card-body">
+                                <p>Add custom triggers for specific use cases.</p>
+                                
+                                <div class="mb-3">
+                                    <div class="d-flex align-items-center mb-2">
+                                        <input type="text" class="form-control" id="newCustomTrigger" placeholder="Add new custom trigger...">
+                                        <button class="btn btn-primary ms-2" id="addCustomTrigger">Add</button>
+                                    </div>
+                                </div>
+                                
+                                <div class="list-group" id="customTriggersList">
+                                    <!-- Custom triggers will be populated here by JavaScript -->
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="d-flex justify-content-end">
+                            <button class="btn btn-success" id="saveTriggers">Save Triggers</button>
+                        </div>
+                    </div>
+                    
                     <!-- System Tab -->
                     <div class="tab-pane fade" id="system">
                         <div class="d-flex justify-content-between align-items-center mb-3">
@@ -538,6 +628,52 @@
                             </div>
                         </div>
                     </div>
+
+                    <!-- Workflows Tab -->
+                    <div class="tab-pane fade" id="workflows">
+                        <div class="d-flex justify-content-between align-items-center mb-3">
+                            <h4 class="mb-0">Workflow Management</h4>
+                            <a href="http://localhost:1880" target="_blank" class="btn btn-primary">
+                                <i class="bi bi-pencil-square me-1"></i> Open Workflow Editor
+                            </a>
+                        </div>
+                        
+                        <div class="row">
+                            <div class="col-md-12 mb-4">
+                                <div class="card shadow">
+                                    <div class="card-header py-3 d-flex flex-row align-items-center justify-content-between">
+                                        <h6 class="m-0 font-weight-bold">Available Workflows</h6>
+                                        <button id="refresh-workflows" class="btn btn-sm btn-outline-primary">
+                                            <i class="bi bi-arrow-clockwise"></i> Refresh
+                                        </button>
+                                    </div>
+                                    <div class="card-body">
+                                        <div class="table-responsive">
+                                            <table class="table table-hover">
+                                                <thead>
+                                                    <tr>
+                                                        <th>Name</th>
+                                                        <th>Description</th>
+                                                        <th>Status</th>
+                                                        <th>Actions</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody id="workflows-table-body">
+                                                    <!-- Workflow items will be populated here -->
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                        <div id="no-workflows" class="text-center p-4" style="display: none;">
+                                            <i class="bi bi-exclamation-circle text-muted mb-3" style="font-size: 2rem;"></i>
+                                            <p class="text-muted">No workflows available. Create workflows in the Node-RED editor.</p>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Workflows will be displayed in the table above -->
+                    </div>
                 </div>
             </main>
         </div>
@@ -574,8 +710,10 @@
     </div>
 
     <!-- JS Dependencies -->
+    <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@3.7.0/dist/chart.min.js"></script>
     <script src="/js/script.js"></script>
+    <script src="/js/workflows.js"></script>
 </body>
 </html>

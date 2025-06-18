@@ -12,6 +12,7 @@ A WhatsApp chatbot powered by various LLM providers (OpenAI, OpenRouter, Ollama)
 - Conversation history for contextual responses
 - Command system to control the bot
 - Easy switching between different providers and models
+- Configurable trigger words for group chat activation
 
 ## Prerequisites
 
@@ -74,6 +75,25 @@ Send these commands in a WhatsApp chat to control the bot:
 - `!clear` - Clear conversation history
 - `!provider [name]` - Get or set LLM provider (openai, openrouter, ollama)
 - `!model [name]` - Get or set model for current provider
+
+### Web Management Console
+
+The bot includes a web-based management console that can be accessed at `http://localhost:3000` (or the port specified in your .env file). The console includes the following features:
+
+#### Triggers Tab
+
+The Triggers tab allows you to configure words or phrases that will activate the bot in group chats. When any of these trigger words appear in a message, the bot will respond.
+
+- **Group Chat Triggers**: These are the primary words that activate the bot in group chats.
+- **Custom Triggers**: Additional trigger words for specific use cases.
+
+For each type of trigger, you can:
+- Add new triggers
+- Edit existing triggers (click the pencil icon)
+- Delete triggers (click the trash icon)
+- Save changes to persist them
+
+All triggers are case-insensitive. The bot will respond if any configured trigger word appears anywhere in a message.
 
 ## Development
 

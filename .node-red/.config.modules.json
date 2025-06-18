@@ -1,0 +1,9 @@
+{
+    "node-cron": {
+        "spec": "node-cron",
+        "module": "node-cron",
+        "subpath": "",
+        "builtin": false,
+        "known": false
+    }
+}

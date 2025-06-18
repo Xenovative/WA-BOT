@@ -1,15 +1,15 @@
 {
   "init": {
     "chunks": 1,
-    "timestamp": 1749635814815
+    "timestamp": 1750227815240
   },
-  "cjdental-1.json": {
-    "chunks": 113,
-    "timestamp": "2025-06-11T09:57:01.656Z",
-    "name": "cjdental-1.json",
-    "originalName": "cjdental-1.json",
-    "fileSize": 133483,
-    "fileType": "json",
-    "filePath": "C:\\AIapps\\WA-BOT\\uploads\\cjdental-1.json"
+  "MIDAS______.pdf": {
+    "chunks": 2,
+    "timestamp": "2025-06-18T06:23:35.901Z",
+    "name": "MIDAS______.pdf",
+    "originalName": "midas______.pdf",
+    "fileSize": 170031,
+    "fileType": "pdf",
+    "filePath": "C:\\AIapps\\WA-BOT\\uploads\\MIDAS______.pdf"
   }
 }

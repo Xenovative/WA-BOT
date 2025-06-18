@@ -59,20 +59,11 @@ class ChatHandler {
       return [];
     }
     
-    // If we don't have the chat loaded, try to load it
-    if (!this.conversations.has(chatId) || this.conversations.get(chatId).length === 0) {
-      console.log(`[ChatHandler] Chat ${chatId} not in memory or empty, loading from disk`);
-      const messages = this.loadChat(chatId);
-      console.log(`[ChatHandler] Loaded ${messages.length} messages for chat ${chatId} from disk`);
-      if (messages.length > 0) {
-        return messages;
-      }
-    } else {
-      console.log(`[ChatHandler] Found chat ${chatId} in memory with ${this.conversations.get(chatId).length} messages`);
-    }
+    // Always load from disk to ensure we have the most up-to-date messages
+    const messages = this.loadChat(chatId);
+    console.log(`[ChatHandler] Loaded ${messages.length} messages for chat ${chatId} from disk`);
     
-    const messages = this.conversations.get(chatId) || [];
-    console.log(`[ChatHandler] Returning ${messages.length} messages for chat ${chatId}`);
+    // Return the loaded messages (or empty array if none found)
     return messages;
   }
 
@@ -220,26 +211,38 @@ class ChatHandler {
         file => file.endsWith('.json') && file !== 'chats.json'
       );
       
+      console.log(`[ChatHandler] Found ${files.length} chat files to index`);
+      
       files.forEach(file => {
         try {
           const filePath = path.join(this.chatHistoryDir, file);
-          const messages = JSON.parse(fs.readFileSync(filePath, 'utf8'));
+          const fileContent = fs.readFileSync(filePath, 'utf8');
           
-          if (Array.isArray(messages) && messages.length > 0) {
-            const lastMessage = messages[messages.length - 1];
-            const chatId = path.basename(file, '.json');
+          try {
+            const messages = JSON.parse(fileContent);
             
-            chats.push({
-              id: chatId,
-              preview: lastMessage.content?.substring(0, 100) || '',
-              timestamp: lastMessage.timestamp || new Date().toISOString(),
-              messageCount: messages.length
-            });
+            if (Array.isArray(messages)) {
+              const chatId = path.basename(file, '.json');
+              
+              // Even if there are no messages, we still want to track the chat
+              const lastMessage = messages.length > 0 ? messages[messages.length - 1] : { content: '', timestamp: new Date().toISOString() };
+              
+              chats.push({
+                id: chatId,
+                preview: lastMessage.content?.substring(0, 100) || '',
+                timestamp: lastMessage.timestamp || new Date().toISOString(),
+                messageCount: messages.length
+              });
+            }
+          } catch (parseError) {
+            console.error(`Error parsing JSON for chat file ${file}:`, parseError);
           }
         } catch (error) {
-          console.error(`Error processing chat file ${file}:`, error);
+          console.error(`Error reading chat file ${file}:`, error);
         }
       });
+      
+      console.log(`[ChatHandler] Successfully indexed ${chats.length} chats`);
       
       // Sort by timestamp, newest first
       chats.sort((a, b) => {
@@ -250,6 +253,7 @@ class ChatHandler {
       
       // Save the index
       fs.writeFileSync(this.storageFile, JSON.stringify(chats, null, 2));
+      console.log(`[ChatHandler] Saved chat index with ${chats.length} entries`);
     }
   }
   
@@ -280,6 +284,7 @@ class ChatHandler {
                 : msg.timestamp
             }));
             
+            // Store the complete message history in memory
             this.conversations.set(chatId, processedMessages);
             return processedMessages;
           } else {
@@ -290,13 +295,20 @@ class ChatHandler {
           console.error(`[ChatHandler] File content sample: ${fileContent.substring(0, 100)}...`);
         }
       } else {
-        console.log(`[ChatHandler] Chat file does not exist for ${chatId}`);
+        console.log(`[ChatHandler] Chat file does not exist for ${chatId}, creating new chat`);
+        this.conversations.set(chatId, []);
+        return [];
       }
     } catch (error) {
       console.error(`[ChatHandler] Error loading chat ${chatId}:`, error);
     }
-    console.log(`[ChatHandler] Returning empty array for chat ${chatId}`);
-    return [];
+    
+    // If we get here, ensure we have at least an empty array for this chat
+    if (!this.conversations.has(chatId)) {
+      this.conversations.set(chatId, []);
+    }
+    
+    return this.conversations.get(chatId);
   }
   
   // Load conversations from disk
@@ -317,13 +329,23 @@ class ChatHandler {
       if (fs.existsSync(this.storageFile)) {
         const data = JSON.parse(fs.readFileSync(this.storageFile, 'utf8'));
         if (Array.isArray(data)) {
-          // We don't load all messages into memory, just the metadata
-          data.forEach(chat => {
-            if (chat.id) {
-              this.conversations.set(chat.id, []); // Messages will be loaded on demand
+          // Load all chat files
+          const chatFiles = fs.readdirSync(this.chatHistoryDir).filter(
+            file => file.endsWith('.json') && file !== 'chats.json'
+          );
+          
+          // Process each chat file
+          chatFiles.forEach(file => {
+            try {
+              const chatId = path.basename(file, '.json');
+              // Initialize empty array for each chat
+              this.conversations.set(chatId, []);
+            } catch (err) {
+              console.error(`Error processing chat file ${file}:`, err);
             }
           });
-          console.log(`Loaded ${data.length} chat references from index`);
+          
+          console.log(`Loaded ${chatFiles.length} chat references from disk`);
         }
       } else {
         console.log('No chat index file found after generation attempt');

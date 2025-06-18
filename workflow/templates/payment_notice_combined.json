@@ -1,0 +1,465 @@
+[
+    {
+        "id": "pnc-payment-notice-combined-flow",
+        "type": "tab",
+        "label": "Payment Notice + Confirmation",
+        "disabled": false,
+        "info": "Combined payment notice with reminders and confirmation tracking"
+    },
+    {
+        "id": "pnc-payment-config",
+        "type": "function",
+        "z": "pnc-payment-notice-combined-flow",
+        "name": "Payment Config",
+        "func": "// Configure payment notice settings\nreturn {\n    payload: {\n        // Schedule (cron format: minute hour day month dayOfWeek)\n        // This example runs at 9:00 AM on the 1st day of each month\n        schedule: \"00 09 1 * *\",\n        \n        // Reminder schedule in days before/after due date\n        reminderSchedule: [\n            { days: 1, message: \"Friendly reminder: Your payment is due tomorrow. Please submit your payment proof.\" },\n            { days: 0, message: \"Reminder: Today is the payment due date. Kindly submit your payment proof.\" },\n            { days: -1, message: \"Urgent: Your payment is now overdue. Please submit your payment proof immediately.\" }\n        ],\n        \n        // Payment confirmation settings\n        confirmation: {\n            thanksMessage: \"Thank you for your payment! We have received your proof of payment and will process it shortly.\",\n            forwardTo: \"landlord@example.com\", // Email or ID to forward payment proof\n            processingTime: 24 // Hours to process payment\n        },\n        \n        // Database configuration\n        database: {\n            // Type of database to use (options: 'memory', 'file', 'mongodb', 'mysql', 'postgres')\n            type: 'memory',\n            \n            // Connection details (used for external databases)\n            connection: {\n                host: 'localhost',\n                port: 27017,\n                dbName: 'payments',\n                username: '',\n                password: '',\n                ssl: false\n            }\n        }\n    }\n};",
+        "outputs": 1,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 190,
+        "y": 80,
+        "wires": [
+            [
+                "pnc-store-config"
+            ]
+        ]
+    },
+    {
+        "id": "pnc-store-config",
+        "type": "function",
+        "z": "pnc-payment-notice-combined-flow",
+        "name": "Store Config",
+        "func": "// Store configuration in flow context with namespace\nflow.set('payment-notice-combined.config', msg.payload);\n\n// Pass config to database adapter\nreturn {\n    payload: msg.payload,\n    topic: 'init_database'\n};",
+        "outputs": 1,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 380,
+        "y": 80,
+        "wires": [
+            ["pnc-db-adapter-switch"]
+        ]
+    },
+    {
+        "id": "pnc-scheduler",
+        "type": "inject",
+        "z": "pnc-payment-notice-combined-flow",
+        "name": "Schedule Check",
+        "props": [
+            { "p": "payload" },
+            { "p": "topic", "vt": "str" }
+        ],
+        "repeat": "",
+        "crontab": "",
+        "once": true,
+        "onceDelay": "",
+        "topic": "schedule_check",
+        "x": 170,
+        "y": 120,
+        "wires": [
+            ["pnc-check-schedule"]
+        ]
+    },
+    {
+        "id": "pnc-check-schedule",
+        "type": "function",
+        "z": "pnc-payment-notice-combined-flow",
+        "name": "Check Schedule",
+        "func": "// cron is already injected via libs array\nconst config = flow.get('payment-notice-combined.config') || {};\n\n// Debug: Log that we're checking the schedule\nnode.log('Payment Notice Check Schedule running...');\n\n// Get the payment config from flow context with namespace\nconst paymentConfig = flow.get('payment-notice-combined.config') || {};\nconst schedule = paymentConfig.schedule;\n\n// Debug: Log what we found in the context\nnode.log('Current paymentConfig: ' + JSON.stringify(paymentConfig));\nnode.log('Schedule found: ' + schedule);\n\n// Convert cron schedule to natural language\nfunction cronToNaturalLanguage(cronExpression) {\n    if (!cronExpression) return 'No schedule defined';\n    const parts = cronExpression.split(' ');\n    if (parts.length !== 5) return 'Invalid cron format';\n    \n    const [minute, hour, dayOfMonth, month, dayOfWeek] = parts;\n    const daysOfWeek = { '0':'Sunday', '1':'Monday', '2':'Tuesday', '3':'Wednesday', '4':'Thursday', '5':'Friday', '6':'Saturday' };\n    const months = { '1':'January', '2':'February', '3':'March', '4':'April', '5':'May', '6':'June', '7':'July', '8':'August', '9':'September', '10':'October', '11':'November', '12':'December' };\n    \n    let description = '';\n    \n    // Time (hour:minute)\n    if (hour !== '*' && minute !== '*') {\n        const formattedHour = parseInt(hour) > 12 ? (parseInt(hour) - 12) + ' PM' : (parseInt(hour) === 0 ? '12 AM' : parseInt(hour) + ' AM');\n        description += `at ${minute} minutes past ${formattedHour}`;\n    }\n    \n    // Day of week\n    if (dayOfWeek !== '*') {\n        if (description) description += ' ';\n        description += `every ${daysOfWeek[dayOfWeek] || dayOfWeek}`;\n    }\n    \n    // Day of month\n    if (dayOfMonth !== '*') {\n        if (description) description += ' ';\n        description += `on the ${dayOfMonth}${getDaySuffix(dayOfMonth)} day`;\n    }\n    \n    // Month\n    if (month !== '*') {\n        if (description) description += ' ';\n        description += `of ${months[month] || `month ${month}`}`;\n    }\n    \n    return description || 'Every minute';\n}\n\n// Helper function to get day suffix (1st, 2nd, 3rd, etc.)\nfunction getDaySuffix(day) {\n    if (day >= 11 && day <= 13) return 'th';\n    switch (day % 10) {\n        case 1: return 'st';\n        case 2: return 'nd';\n        case 3: return 'rd';\n        default: return 'th';\n    }\n}\n\n// First run - initialize from the payment-config function\nif (!paymentConfig.schedule || !paymentConfig.reminderSchedule) {\n    node.log('No schedule in context, trying to initialize from default');\n    return null; // Will be handled by the config node\n}\n\n// Log the schedule in natural language\nnode.log('Payment schedule: ' + cronToNaturalLanguage(schedule));\n\n// Check if it's time to send payment notice\nconst now = new Date();\nconst lastNotice = new Date(paymentConfig.lastNoticeSent || 0);\nconst dueDate = new Date(now);\ndueDate.setDate(now.getDate() + 1); // Example: Due in 1 day\n\n// If we haven't sent a notice for this period\nif (!paymentConfig.lastNoticeSent || now.getDate() !== lastNotice.getDate()) {\n    node.log('Sending initial payment notice');\n    \n    // Store the due date and reset reminder tracking\n    flow.set('payment-notice-combined.config', {\n        ...paymentConfig,\n        dueDate: dueDate.toISOString(),\n        lastNoticeSent: now.toISOString(),\n        remindersSent: [],\n        paymentReceived: false\n    });\n    \n    // Send initial notice\n    return {\n        payload: {\n            type: 'initial_notice',\n            dueDate: dueDate.toISOString(),\n            message: `🔔 Payment Notice: Your payment is due on ${dueDate.toLocaleDateString()}. ` +\n                     `Please submit your payment proof to this chat.`\n        }\n    };\n}\n\nreturn null;",
+        "outputs": 1,
+        "libs": [{"var":"cron","module":"node-cron"}],
+        "x": 380,
+        "y": 120,
+        "wires": [["pnc-handle-notice"]]
+    },
+    {
+        "id": "pnc-handle-notice",
+        "type": "switch",
+        "z": "pnc-payment-notice-combined-flow",
+        "name": "Notice Type",
+        "property": "payload.type",
+        "propertyType": "msg",
+        "rules": [
+            { "t": "eq", "v": "initial_notice", "vt": "str" },
+            { "t": "eq", "v": "reminder", "vt": "str" },
+            { "t": "eq", "v": "payment_received", "vt": "str" }
+        ],
+        "checkall": "true",
+        "repair": false,
+        "outputs": 3,
+        "x": 590,
+        "y": 120,
+        "wires": [
+            ["pnc-send-initial-notice"],
+            ["pnc-send-reminder"],
+            ["pnc-confirm-payment"]
+        ]
+    },
+    {
+        "id": "pnc-send-initial-notice",
+        "type": "function",
+        "z": "pnc-payment-notice-combined-flow",
+        "name": "Send Initial Notice",
+        "func": "// Send the initial payment notice\nconst notice = msg.payload;\n\n// In a real implementation, this would send a WhatsApp message\nnode.log('Sending initial payment notice: ' + notice.message);\n\n// Schedule the first reminder\nconst paymentConfig = flow.get('payment-notice-combined.config') || {};\nif (paymentConfig.reminderSchedule && paymentConfig.reminderSchedule.length > 0) {\n    const firstReminder = paymentConfig.reminderSchedule[0];\n    const reminderTime = new Date(paymentConfig.dueDate);\n    reminderTime.setDate(reminderTime.getDate() - firstReminder.days);\n    \n    // Schedule the reminder\n    node.send({\n        payload: {\n            type: 'schedule_reminder',\n            reminder: firstReminder,\n            dueDate: paymentConfig.dueDate\n        }\n    });\n}\n\nreturn null;",
+        "outputs": 1,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 790,
+        "y": 80,
+        "wires": [[]]
+    },
+    
+    {
+        "id": "pnc-schedule-reminder",
+        "type": "function",
+        "z": "pnc-payment-notice-combined-flow",
+        "name": "Schedule Reminder",
+        "func": "// Schedule a reminder for a specific time\nconst reminder = msg.payload.reminder;\nconst dueDate = new Date(msg.payload.dueDate);\n\n// Calculate when to send the reminder\nconst reminderTime = new Date(dueDate);\nreminderTime.setDate(dueDate.getDate() - reminder.days);\n\n// If the reminder time is in the future, schedule it\nconst now = new Date();\nif (reminderTime > now) {\n    const delay = reminderTime - now;\n    node.log(`Scheduling reminder for ${reminderTime}: ${reminder.message}`);\n    \n    // In a real implementation, you would use a proper scheduler\n    setTimeout(() => {\n        node.send({\n            payload: {\n                type: 'reminder',\n                message: reminder.message,\n                reminderIndex: msg.payload.reminderIndex\n            }\n        });\n    }, delay);\n} else {\n    node.log(`Reminder time ${reminderTime} is in the past, not scheduling`);\n}\n\nreturn null;",
+        "outputs": 1,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 790,
+        "y": 160,
+        "wires": [[]]
+    },
+    
+    {
+        "id": "pnc-send-reminder",
+        "type": "function",
+        "z": "pnc-payment-notice-combined-flow",
+        "name": "Send Reminder",
+        "func": "// Send a payment reminder\nconst reminder = msg.payload;\nconst paymentConfig = flow.get('payment-notice-combined.config') || {};\n\n// Check if payment was already received\nif (paymentConfig.paymentReceived) {\n    node.log('Payment already received, not sending reminder');\n    return null;\n}\n\n// Mark this reminder as sent\nconst remindersSent = paymentConfig.remindersSent || [];\nif (!remindersSent.includes(reminder.reminderIndex)) {\n    remindersSent.push(reminder.reminderIndex);\n    flow.set('payment-notice-combined.config', {\n        ...paymentConfig,\n        remindersSent\n    });\n    \n    // In a real implementation, this would send a WhatsApp message\n    node.log('Sending reminder: ' + reminder.message);\n    \n    // Schedule the next reminder if there is one\n    const nextReminderIndex = (reminder.reminderIndex || 0) + 1;\n    if (paymentConfig.reminderSchedule && paymentConfig.reminderSchedule[nextReminderIndex]) {\n        const nextReminder = paymentConfig.reminderSchedule[nextReminderIndex];\n        node.send({\n            payload: {\n                type: 'schedule_reminder',\n                reminder: nextReminder,\n                reminderIndex: nextReminderIndex,\n                dueDate: paymentConfig.dueDate\n            }\n        });\n    }\n}\n\nreturn null;",
+        "outputs": 1,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 790,
+        "y": 200,
+        "wires": [[]]
+    },
+    {
+        "id": "pnc-whatsapp-message-in",
+        "type": "mqtt in",
+        "z": "pnc-payment-notice-combined-flow",
+        "name": "WhatsApp Messages",
+        "topic": "whatsapp/messages",
+        "qos": "2",
+        "datatype": "json",
+        "broker": "broker",
+        "nl": false,
+        "rap": true,
+        "rh": 0,
+        "inputs": 0,
+        "x": 170,
+        "y": 240,
+        "wires": [
+            ["pnc-check-for-payment-proof"]
+        ]
+    },
+    
+    {
+        "id": "pnc-check-for-payment-proof",
+        "type": "switch",
+        "z": "pnc-payment-notice-combined-flow",
+        "name": "Is Payment Proof?",
+        "property": "payload.text",
+        "propertyType": "msg",
+        "rules": [
+            {
+                "t": "regex",
+                "v": "(?i)(payment|receipt|transaction|proof|paid|transfer)",
+                "vt": "str",
+                "case": false
+            }
+        ],
+        "checkall": "true",
+        "repair": false,
+        "outputs": 1,
+        "x": 370,
+        "y": 240,
+        "wires": [
+            ["pnc-check-for-media"]
+        ]
+    },
+    
+    {
+        "id": "pnc-check-for-media",
+        "type": "function",
+        "z": "pnc-payment-notice-combined-flow",
+        "name": "Check for Media/Image",
+        "func": "// Check if message has media (image/document)\nconst hasMedia = msg.payload.hasMedia || msg.payload.hasImage || \n    (msg.payload.message && msg.payload.message.hasMedia);\n\nif (hasMedia) {\n    // This is likely a payment proof\n    return [msg, null];\n} else {\n    // Check if previous message had media\n    const chatId = msg.payload.chatId;\n    const mediaHistory = context.get('payment-notice-combined.mediaHistory') || {};\n    \n    if (mediaHistory[chatId] && \n        (Date.now() - mediaHistory[chatId]) < 5 * 60 * 1000) { // Within 5 minutes\n        return [msg, null];\n    } else {\n        return [null, msg];\n    }\n}",
+        "outputs": 2,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 580,
+        "y": 240,
+        "wires": [
+            ["pnc-process-payment-proof"],
+            []
+        ]
+    },
+    
+    {
+        "id": "pnc-process-payment-proof",
+        "type": "function",
+        "z": "pnc-payment-notice-combined-flow",
+        "name": "Process Payment Proof",
+        "func": "// Process the payment proof\nconst msg = {...msg};\nconst chatId = msg.payload.chatId;\nconst timestamp = Date.now();\n\n// Update media history in context for quick reference\nconst mediaHistory = context.get('payment-notice-combined.mediaHistory') || {};\nmediaHistory[chatId] = timestamp;\ncontext.set('payment-notice-combined.mediaHistory', mediaHistory);\n\n// Get payment config\nconst paymentConfig = flow.get('payment-notice-combined.config') || {};\n\n// Get current database type\nconst dbType = flow.get('payment-notice-combined.dbType') || 'memory';\n\n// Create payment record\nconst paymentRecord = {\n    chatId: chatId,\n    timestamp: timestamp,\n    message: msg.payload.text || '',\n    mediaType: msg.payload.mediaType || 'unknown',\n    status: 'received',\n    processedAt: Date.now()\n};\n\n// Store payment in database\nconst dbMsg = {\n    topic: 'insert',\n    collection: 'payments',\n    data: paymentRecord,\n    payload: paymentConfig\n};\n\n// Send to database adapter based on configured type\nnode.send([null, dbMsg]);\n\n// Trigger payment confirmation\nreturn [\n    {\n        payload: {\n            type: 'payment_received',\n            chatId: chatId,\n            timestamp: timestamp,\n            message: msg.payload.text,\n            paymentRecord: paymentRecord\n        }\n    },\n    null\n];",
+        "outputs": 2,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 790,
+        "y": 240,
+        "wires": [
+            ["pnc-confirm-payment"],
+            ["pnc-db-operation-router"]
+        ]
+    },
+    
+
+    {
+        "id": "pnc-confirm-payment",
+        "type": "function",
+        "z": "pnc-payment-notice-combined-flow",
+        "name": "Confirm Payment",
+        "func": "// Send payment confirmation and forward proof\nconst payment = msg.payload;\nconst paymentConfig = flow.get('payment-notice-combined.config') || {};\n\n// 1. Send thanks message to tenant\nconst thanksMessage = {\n    chatId: payment.chatId,\n    message: (paymentConfig.confirmation && paymentConfig.confirmation.thanksMessage) || \"Thank you for your payment! We have received your proof of payment.\",\n    messageType: \"text\"\n};\n\n// 2. Forward payment proof to landlord (in a real implementation)\nconst forwardMessage = {\n    to: (paymentConfig.confirmation && paymentConfig.confirmation.forwardTo) || \"landlord@example.com\",\n    subject: \"Payment Proof Received\",\n    text: 'Payment proof received from chat ' + payment.chatId + ' at ' + new Date(payment.timestamp).toLocaleString()\n};\n\nnode.log('Sending thanks message: ' + JSON.stringify(thanksMessage));\nnode.log('Forwarding payment proof: ' + JSON.stringify(forwardMessage));\n\n// In a real implementation, you would send the WhatsApp message and email here\n// For example:\n// node.send([{payload: thanksMessage}, {payload: forwardMessage}]);\n\nreturn null;",
+        "outputs": 1,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 1000,
+        "y": 240,
+        "wires": [
+            ["pnc-log-payment"]
+        ]
+    },
+    
+
+    {
+        "id": "pnc-log-payment",
+        "type": "debug",
+        "z": "pnc-payment-notice-combined-flow",
+        "name": "Log Payment",
+        "active": true,
+        "tosidebar": true,
+        "console": true,
+        "tostatus": false,
+        "complete": "payload",
+        "targetType": "msg",
+        "statusVal": "",
+        "statusType": "auto",
+        "x": 1210,
+        "y": 240,
+        "wires": []
+    },
+    
+
+    {
+        "id": "pnc-db-adapter-switch",
+        "type": "switch",
+        "z": "pnc-payment-notice-combined-flow",
+        "name": "Database Type",
+        "property": "payload.database.type",
+        "propertyType": "msg",
+        "rules": [
+            {
+                "t": "eq",
+                "v": "memory",
+                "vt": "str"
+            },
+            {
+                "t": "eq",
+                "v": "file",
+                "vt": "str"
+            },
+            {
+                "t": "eq",
+                "v": "mongodb",
+                "vt": "str"
+            },
+            {
+                "t": "eq",
+                "v": "mysql",
+                "vt": "str"
+            },
+            {
+                "t": "eq",
+                "v": "postgres",
+                "vt": "str"
+            }
+        ],
+        "checkall": "true",
+        "repair": false,
+        "outputs": 5,
+        "x": 580,
+        "y": 80,
+        "wires": [
+            ["pnc-memory-db-adapter"],
+            ["pnc-file-db-adapter"],
+            ["pnc-mongodb-adapter"],
+            ["pnc-mysql-adapter"],
+            ["pnc-postgres-adapter"]
+        ]
+    },
+    {
+        "id": "pnc-memory-db-adapter",
+        "type": "function",
+        "z": "pnc-payment-notice-combined-flow",
+        "name": "Memory DB Adapter",
+        "func": "// In-memory database adapter\nconst msg = {...msg};\nconst config = msg.payload;\nconst topic = msg.topic || '';\n\n// Initialize the database in flow context if it doesn't exist\nif (topic === 'init_database') {\n    // Create in-memory database structure in flow context\n    const dbName = 'payment-notice-combined.db';\n    \n    // Initialize database if it doesn't exist\n    if (!flow.get(dbName)) {\n        flow.set(dbName, {\n            payments: [],\n            notices: [],\n            reminders: [],\n            config: config\n        });\n        node.log('Memory database initialized');\n    } else {\n        // Update config only\n        const db = flow.get(dbName);\n        db.config = config;\n        flow.set(dbName, db);\n        node.log('Memory database config updated');\n    }\n    \n    // Return success message\n    return {\n        payload: {\n            success: true,\n            message: 'Memory database initialized',\n            dbType: 'memory'\n        }\n    };\n}\n\n// Handle database operations\nif (topic === 'query') {\n    const dbName = 'payment-notice-combined.db';\n    const db = flow.get(dbName) || { payments: [], notices: [], reminders: [] };\n    const collection = msg.collection || 'payments';\n    const query = msg.query || {};\n    \n    // Simple in-memory filtering (very basic implementation)\n    let results = db[collection] || [];\n    \n    // Filter based on query parameters (simple equality only)\n    if (Object.keys(query).length > 0) {\n        results = results.filter(item => {\n            return Object.keys(query).every(key => item[key] === query[key]);\n        });\n    }\n    \n    return { payload: results };\n}\n\nif (topic === 'insert') {\n    const dbName = 'payment-notice-combined.db';\n    const db = flow.get(dbName) || { payments: [], notices: [], reminders: [] };\n    const collection = msg.collection || 'payments';\n    const data = msg.data || {};\n    \n    // Add timestamp if not present\n    if (!data.timestamp) {\n        data.timestamp = Date.now();\n    }\n    \n    // Add id if not present\n    if (!data.id) {\n        data.id = Date.now().toString(36) + Math.random().toString(36).substr(2);\n    }\n    \n    // Insert data\n    if (!db[collection]) {\n        db[collection] = [];\n    }\n    \n    db[collection].push(data);\n    flow.set(dbName, db);\n    \n    return {\n        payload: {\n            success: true,\n            id: data.id,\n            message: 'Data inserted successfully'\n        }\n    };\n}\n\nif (topic === 'update') {\n    const dbName = 'payment-notice-combined.db';\n    const db = flow.get(dbName) || { payments: [], notices: [], reminders: [] };\n    const collection = msg.collection || 'payments';\n    const query = msg.query || {};\n    const data = msg.data || {};\n    \n    if (!db[collection]) {\n        db[collection] = [];\n    }\n    \n    // Update matching records\n    let updateCount = 0;\n    db[collection] = db[collection].map(item => {\n        let matches = true;\n        \n        // Check if item matches query\n        if (Object.keys(query).length > 0) {\n            matches = Object.keys(query).every(key => item[key] === query[key]);\n        }\n        \n        // Update if matches\n        if (matches) {\n            updateCount++;\n            return { ...item, ...data, updated: Date.now() };\n        }\n        \n        return item;\n    });\n    \n    flow.set(dbName, db);\n    \n    return {\n        payload: {\n            success: true,\n            count: updateCount,\n            message: `${updateCount} records updated`\n        }\n    };\n}\n\nif (topic === 'delete') {\n    const dbName = 'payment-notice-combined.db';\n    const db = flow.get(dbName) || { payments: [], notices: [], reminders: [] };\n    const collection = msg.collection || 'payments';\n    const query = msg.query || {};\n    \n    if (!db[collection]) {\n        db[collection] = [];\n    }\n    \n    // Count initial records\n    const initialCount = db[collection].length;\n    \n    // Filter out matching records\n    if (Object.keys(query).length > 0) {\n        db[collection] = db[collection].filter(item => {\n            return !Object.keys(query).every(key => item[key] === query[key]);\n        });\n    } else {\n        // Clear all if no query specified\n        db[collection] = [];\n    }\n    \n    const deletedCount = initialCount - db[collection].length;\n    flow.set(dbName, db);\n    \n    return {\n        payload: {\n            success: true,\n            count: deletedCount,\n            message: `${deletedCount} records deleted`\n        }\n    };\n}\n\n// Default response\nreturn {\n    payload: {\n        success: false,\n        message: 'Unknown database operation',\n        topic: topic\n    }\n};\n",
+        "outputs": 1,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 800,
+        "y": 40,
+        "wires": [
+            ["pnc-db-response-handler"]
+        ]
+    },
+    {
+        "id": "pnc-file-db-adapter",
+        "type": "function",
+        "z": "pnc-payment-notice-combined-flow",
+        "name": "File DB Adapter",
+        "func": "// File-based database adapter (JSON)\nconst msg = {...msg};\nconst config = msg.payload;\nconst topic = msg.topic || '';\n\n// This is a placeholder for file-based database operations\n// In a real implementation, you would use the fs module to read/write JSON files\n\nnode.log('File database operation: ' + topic);\nnode.log('This is a placeholder for file-based database operations');\n\n// Return success message\nreturn {\n    payload: {\n        success: true,\n        message: 'File database operation: ' + topic + ' (placeholder)',\n        dbType: 'file'\n    }\n};\n",
+        "outputs": 1,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 790,
+        "y": 80,
+        "wires": [
+            ["pnc-db-response-handler"]
+        ]
+    },
+    {
+        "id": "pnc-mongodb-adapter",
+        "type": "function",
+        "z": "pnc-payment-notice-combined-flow",
+        "name": "MongoDB Adapter",
+        "func": "// MongoDB database adapter\nconst msg = {...msg};\nconst config = msg.payload;\nconst topic = msg.topic || '';\n\n// This is a placeholder for MongoDB operations\n// In a real implementation, you would use the mongodb module to connect to MongoDB\n\nnode.log('MongoDB operation: ' + topic);\nnode.log('This is a placeholder for MongoDB operations');\n\n// Return success message\nreturn {\n    payload: {\n        success: true,\n        message: 'MongoDB operation: ' + topic + ' (placeholder)',\n        dbType: 'mongodb',\n        connection: config.database.connection\n    }\n};\n",
+        "outputs": 1,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 800,
+        "y": 120,
+        "wires": [
+            ["pnc-db-response-handler"]
+        ]
+    },
+    {
+        "id": "pnc-mysql-adapter",
+        "type": "function",
+        "z": "pnc-payment-notice-combined-flow",
+        "name": "MySQL Adapter",
+        "func": "// MySQL database adapter\nconst msg = {...msg};\nconst config = msg.payload;\nconst topic = msg.topic || '';\n\n// This is a placeholder for MySQL operations\n// In a real implementation, you would use the mysql module to connect to MySQL\n\nnode.log('MySQL operation: ' + topic);\nnode.log('This is a placeholder for MySQL operations');\n\n// Return success message\nreturn {\n    payload: {\n        success: true,\n        message: 'MySQL operation: ' + topic + ' (placeholder)',\n        dbType: 'mysql'\n    }\n};\n",
+        "outputs": 1,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 790,
+        "y": 160,
+        "wires": [
+            ["pnc-db-response-handler"]
+        ]
+    },
+    {
+        "id": "pnc-postgres-adapter",
+        "type": "function",
+        "z": "pnc-payment-notice-combined-flow",
+        "name": "PostgreSQL Adapter",
+        "func": "// PostgreSQL database adapter\nconst msg = {...msg};\nconst config = msg.payload;\nconst topic = msg.topic || '';\n\n// This is a placeholder for PostgreSQL operations\n// In a real implementation, you would use the pg module to connect to PostgreSQL\n\nnode.log('PostgreSQL operation: ' + topic);\nnode.log('This is a placeholder for PostgreSQL operations');\n\n// Return success message\nreturn {\n    payload: {\n        success: true,\n        message: 'PostgreSQL operation: ' + topic + ' (placeholder)',\n        dbType: 'postgres'\n    }\n};\n",
+        "outputs": 1,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 800,
+        "y": 200,
+        "wires": [
+            ["pnc-db-response-handler"]
+        ]
+    },
+    {
+        "id": "pnc-db-response-handler",
+        "type": "function",
+        "z": "pnc-payment-notice-combined-flow",
+        "name": "DB Response Handler",
+        "func": "// Handle database responses\nconst response = msg.payload;\n\n// Log the database response\nnode.log('Database response: ' + JSON.stringify(response));\n\n// Store database type in flow context for future operations\nif (response.dbType) {\n    flow.set('payment-notice-combined.dbType', response.dbType);\n}\n\n// No need to pass this message further in the flow during initialization\nreturn null;\n",
+        "outputs": 1,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 1020,
+        "y": 120,
+        "wires": [
+            []
+        ]
+    },
+    {
+        "id": "pnc-db-operation-router",
+        "type": "function",
+        "z": "pnc-payment-notice-combined-flow",
+        "name": "DB Operation Router",
+        "func": "// Route database operations to the appropriate adapter\nconst msg = {...msg};\n\n// Get the database type from flow context\nconst dbType = flow.get('payment-notice-combined.dbType') || 'memory';\n\n// Add database type to message for debugging\nmsg.dbType = dbType;\n\n// Return message to the appropriate output based on database type\nswitch(dbType) {\n    case 'memory':\n        return [msg, null, null, null, null];\n    case 'file':\n        return [null, msg, null, null, null];\n    case 'mongodb':\n        return [null, null, msg, null, null];\n    case 'mysql':\n        return [null, null, null, msg, null];\n    case 'postgres':\n        return [null, null, null, null, msg];\n    default:\n        // Default to memory if unknown\n        return [msg, null, null, null, null];\n}\n",
+        "outputs": 5,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 1000,
+        "y": 240,
+        "wires": [
+            ["pnc-memory-db-adapter"],
+            ["pnc-file-db-adapter"],
+            ["pnc-mongodb-adapter"],
+            ["pnc-mysql-adapter"],
+            ["pnc-postgres-adapter"]
+        ]
+    },
+    {
+        "id": "broker",
+        "type": "mqtt-broker",
+        "name": "Local Broker",
+        "broker": "localhost",
+        "port": "1883",
+        "clientid": "",
+        "autoConnect": true,
+        "usetls": false,
+        "protocolVersion": "4",
+        "keepalive": "60",
+        "cleansession": true,
+        "birthTopic": "",
+        "birthQos": "0",
+        "birthPayload": "",
+        "birthMsg": {},
+        "closeTopic": "",
+        "closeQos": "0",
+        "closePayload": "",
+        "closeMsg": {},
+        "willTopic": "",
+        "willQos": "0",
+        "willPayload": "",
+        "willMsg": {},
+        "sessionExpiry": ""
+    }
+]

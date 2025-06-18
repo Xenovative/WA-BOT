@@ -1,0 +1,209 @@
+[
+  {
+    "id": "keyword-response-flow",
+    "type": "tab",
+    "label": "Keyword Response",
+    "disabled": false,
+    "info": "Responds to specific keywords with automated messages"
+  },
+  {
+    "id": "keyword-trigger",
+    "type": "wa-bot-keyword-trigger",
+    "z": "keyword-response-flow",
+    "name": "Hello Trigger",
+    "keywords": ["hello", "hi", "hey"],
+    "matchType": "contains",
+    "caseSensitive": false,
+    "x": 190,
+    "y": 120,
+    "wires": [
+      [
+        "prepare-response"
+      ]
+    ]
+  },
+  {
+    "id": "prepare-response",
+    "type": "function",
+    "z": "keyword-response-flow",
+    "name": "Prepare Response",
+    "func": "// Get the chat ID from the incoming message\nconst chatId = msg.chatId;\n\n// Get the current time\nconst now = new Date();\nconst hours = now.getHours();\n\n// Prepare greeting based on time of day\nlet greeting = \"Hello\";\nif (hours < 12) {\n    greeting = \"Good morning\";\n} else if (hours < 18) {\n    greeting = \"Good afternoon\";\n} else {\n    greeting = \"Good evening\";\n}\n\n// Set the message payload\nmsg.payload = `${greeting}! I'm your automated assistant. How can I help you today?`;\n\nreturn msg;",
+    "outputs": 1,
+    "noerr": 0,
+    "initialize": "",
+    "finalize": "",
+    "libs": [],
+    "x": 400,
+    "y": 120,
+    "wires": [
+      [
+        "send-response"
+      ]
+    ]
+  },
+  {
+    "id": "send-response",
+    "type": "wa-bot-send-message",
+    "z": "keyword-response-flow",
+    "name": "Send Response",
+    "message": "",
+    "chatId": "",
+    "x": 610,
+    "y": 120,
+    "wires": [
+      []
+    ]
+  },
+  {
+    "id": "time-trigger-flow",
+    "type": "tab",
+    "label": "Scheduled Message",
+    "disabled": false,
+    "info": "Sends a scheduled message at specific times"
+  },
+  {
+    "id": "daily-reminder",
+    "type": "inject",
+    "z": "time-trigger-flow",
+    "name": "Daily 9:00 AM",
+    "props": [
+      {
+        "p": "payload"
+      }
+    ],
+    "repeat": "",
+    "crontab": "00 09 * * *",
+    "once": false,
+    "onceDelay": 0.1,
+    "topic": "",
+    "payload": "",
+    "payloadType": "date",
+    "x": 190,
+    "y": 120,
+    "wires": [
+      [
+        "get-active-chats"
+      ]
+    ]
+  },
+  {
+    "id": "get-active-chats",
+    "type": "function",
+    "z": "time-trigger-flow",
+    "name": "Get Active Chats",
+    "func": "// Get chat handler from global context\nconst chatHandler = global.get('chatHandler');\n\nif (!chatHandler) {\n    node.error('Chat handler not available');\n    return null;\n}\n\n// Get all chats\nconst chats = chatHandler.getAllChats();\n\n// Filter to active chats (had activity in the last 7 days)\nconst sevenDaysAgo = new Date();\nsevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);\n\nconst activeChats = chats.filter(chat => {\n    const lastActivity = new Date(chat.timestamp);\n    return lastActivity > sevenDaysAgo;\n});\n\n// Create a message for each active chat\nconst messages = activeChats.map(chat => {\n    return {\n        chatId: chat.id,\n        payload: \"Good morning! Here's your daily reminder. How can I assist you today?\"\n    };\n});\n\n// Return array of messages to be sent\nreturn [messages];",
+    "outputs": 1,
+    "noerr": 0,
+    "initialize": "",
+    "finalize": "",
+    "libs": [],
+    "x": 400,
+    "y": 120,
+    "wires": [
+      [
+        "split-messages"
+      ]
+    ]
+  },
+  {
+    "id": "split-messages",
+    "type": "split",
+    "z": "time-trigger-flow",
+    "name": "Split Messages",
+    "splt": "\\n",
+    "spltType": "str",
+    "arraySplt": 1,
+    "arraySpltType": "len",
+    "stream": false,
+    "addname": "",
+    "x": 610,
+    "y": 120,
+    "wires": [
+      [
+        "send-scheduled-message"
+      ]
+    ]
+  },
+  {
+    "id": "send-scheduled-message",
+    "type": "wa-bot-send-message",
+    "z": "time-trigger-flow",
+    "name": "Send Scheduled Message",
+    "message": "",
+    "chatId": "",
+    "x": 830,
+    "y": 120,
+    "wires": [
+      []
+    ]
+  },
+  {
+    "id": "file-upload-flow",
+    "type": "tab",
+    "label": "File Processing",
+    "disabled": false,
+    "info": "Automatically processes uploaded files"
+  },
+  {
+    "id": "file-trigger",
+    "type": "wa-bot-file-trigger",
+    "z": "file-upload-flow",
+    "name": "PDF Upload Trigger",
+    "eventType": "upload",
+    "filePattern": "*.pdf",
+    "x": 190,
+    "y": 120,
+    "wires": [
+      [
+        "add-to-kb"
+      ]
+    ]
+  },
+  {
+    "id": "add-to-kb",
+    "type": "wa-bot-process-file",
+    "z": "file-upload-flow",
+    "name": "Add to Knowledge Base",
+    "action": "add_to_kb",
+    "filename": "",
+    "x": 420,
+    "y": 120,
+    "wires": [
+      [
+        "notify-user"
+      ]
+    ]
+  },
+  {
+    "id": "notify-user",
+    "type": "function",
+    "z": "file-upload-flow",
+    "name": "Prepare Notification",
+    "func": "// Get result from file processing\nconst result = msg.result;\n\n// Prepare notification message\nmsg.payload = `File ${result.filename} has been automatically added to the knowledge base.`;\n\n// Use the chat ID from the original message\n// This assumes the file was uploaded in a chat\nreturn msg;",
+    "outputs": 1,
+    "noerr": 0,
+    "initialize": "",
+    "finalize": "",
+    "libs": [],
+    "x": 650,
+    "y": 120,
+    "wires": [
+      [
+        "send-notification"
+      ]
+    ]
+  },
+  {
+    "id": "send-notification",
+    "type": "wa-bot-send-message",
+    "z": "file-upload-flow",
+    "name": "Send Notification",
+    "message": "",
+    "chatId": "",
+    "x": 870,
+    "y": 120,
+    "wires": [
+      []
+    ]
+  }
+]

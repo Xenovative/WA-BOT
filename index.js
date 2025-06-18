@@ -2,6 +2,7 @@ require('dotenv').config();
 const { Client, LocalAuth, MessageMedia } = require('whatsapp-web.js');
 const qrcode = require('qrcode-terminal');
 const path = require('path');
+const fs = require('fs');
 const LLMFactory = require('./llm/llmFactory');
 const chatHandler = require('./handlers/chatHandler');
 const commandHandler = require('./handlers/commandHandler');
@@ -9,9 +10,54 @@ const kbManager = require('./kb/kbManager');
 const fileHandler = require('./kb/fileHandler');
 const ragProcessor = require('./kb/ragProcessor');
 const fileWatcher = require('./kb/fileWatcher');
+const { handleTimeDateQuery } = require('./utils/timeUtils');
 
 // Import GUI server
 const guiServer = require('./guiServer');
+
+// Import workflow manager
+const WorkflowManager = require('./workflow/workflowManager');
+const workflowManager = new WorkflowManager();
+
+// Make chatHandler globally available for workflow messages
+global.chatHandler = chatHandler;
+
+// Flag to track if shutdown is in progress
+let isShuttingDown = false;
+
+/**
+ * Handle graceful shutdown of the application
+ */
+async function handleGracefulShutdown() {
+  if (isShuttingDown) {
+    console.log('Shutdown already in progress...');
+    return;
+  }
+  
+  isShuttingDown = true;
+  console.log('\nGraceful shutdown initiated...');
+  
+  try {
+    // Shutdown workflow system
+    if (workflowManager) {
+      console.log('Shutting down workflow system...');
+      await workflowManager.shutdown();
+    }
+    
+    // Close WhatsApp client
+    if (client) {
+      console.log('Closing WhatsApp client...');
+      await client.destroy();
+      console.log('WhatsApp client closed');
+    }
+    
+    console.log('Shutdown complete. Exiting...');
+    process.exit(0);
+  } catch (error) {
+    console.error('Error during shutdown:', error);
+    process.exit(1);
+  }
+}
 
 // Initialize WhatsApp client with error handling
 const client = new Client({
@@ -33,6 +79,11 @@ const client = new Client({
   },
   restartOnAuthFail: process.env.WA_RESTART_ON_AUTH_FAILURE === 'true',
 });
+
+// Environment variables
+const WA_RESTART_ON_AUTH_FAILURE = process.env.WA_RESTART_ON_AUTH_FAILURE === 'true';
+const GUI_PORT = process.env.GUI_PORT || 3000;
+const CLEAR_WORKFLOWS_ON_STARTUP = process.env.CLEAR_WORKFLOWS_ON_STARTUP === 'true';
 
 // Track active LLM client
 let currentLLMClient = null;
@@ -77,6 +128,12 @@ client.on('ready', async () => {
   console.log('WhatsApp client is ready!');
   updateLLMClient();
   
+  // Make WhatsApp client globally available
+  global.whatsappClient = {
+    client: client
+  };
+  console.log('WhatsApp client made globally available');
+  
   // Initialize knowledge base
   try {
     await kbManager.initialize();
@@ -84,6 +141,44 @@ client.on('ready', async () => {
     
     // Start file watcher for the uploads directory
     fileWatcher.startWatching();
+    
+    // Initialize workflow system
+    try {
+      // Make bot components available to workflows
+      const botComponents = {
+        whatsappClient: client,
+        chatHandler: chatHandler,
+        commandHandler: commandHandler,
+        kbManager: kbManager,
+        fileHandler: fileHandler,
+        ragProcessor: ragProcessor
+      };
+      
+      // Initialize the workflow manager with bot components
+      await workflowManager.initialize(botComponents);
+      console.log('Workflow system initialized with MQTT broker');
+      
+      // Clear workflows on startup if configured
+      if (CLEAR_WORKFLOWS_ON_STARTUP) {
+        console.log('CLEAR_WORKFLOWS_ON_STARTUP is enabled, clearing all workflows...');
+        await workflowManager.clearEnabledWorkflows();
+      } else {
+        console.log('CLEAR_WORKFLOWS_ON_STARTUP is disabled, workflows will maintain their previous state');
+      }
+
+      // Wait a moment for MQTT to fully initialize
+      await new Promise(resolve => setTimeout(resolve, 1000));
+
+      // Register shutdown handlers
+      process.on('SIGINT', handleGracefulShutdown);
+      process.on('SIGTERM', handleGracefulShutdown);
+      process.on('uncaughtException', (err) => {
+        console.error('Uncaught exception:', err);
+        handleGracefulShutdown();
+      });
+    } catch (workflowError) {
+      console.error('Error initializing workflow system:', workflowError);
+    }
   } catch (error) {
     console.error('Error initializing knowledge base:', error);
   }
@@ -129,13 +224,507 @@ client.on('message_create', async (message) => {
 
 // Message processing
 client.on('message', async (message) => {
-  if (message.isGroupMsg) return; // Ignore group messages
-  if (message.hasMedia && message.body.startsWith('kb:')) return; // Skip media uploads handled by other handler
+  // Skip media uploads handled by other handler
+  if (message.hasMedia && message.body && message.body.startsWith('kb:')) return;
   
   const chatId = message.from;
-  const messageText = message.body.trim();
+  const messageText = (message.body || '').trim();
   
-  console.log(`Message from ${chatId}: ${messageText}`);
+  // Skip empty messages
+  if (!messageText) return;
+  
+  // Debug message properties to understand what we're receiving
+  console.log('Message object keys:', Object.keys(message));
+  console.log('Is group?', message.isGroupMsg, message.fromMe);
+  console.log('Chat type:', message._data?.chat?.isGroup);
+  
+  // Log detailed message data to help debug mentions
+  console.log('Message data:', {
+    mentionedIds: message.mentionedIds,
+    _data: message._data ? {
+      mentionedJidList: message._data.mentionedJidList,
+      id: message._data.id,
+      from: message._data.from,
+      to: message._data.to,
+      self: message._data.self,
+      participant: message._data.participant
+    } : 'No _data'
+  });
+  
+  // SIMPLE GROUP DETECTION: Standard WhatsApp group IDs end with @g.us
+  const isGroup = chatId.endsWith('@g.us');
+  
+  // Handle group messages differently
+  if (isGroup) {
+    // FORCE ENABLE GROUP REQUIREMENT - Group messages must explicitly enable the bot
+    const GROUP_CHAT_REQUIRE_MENTION = true;  // Hard-coded safety switch
+    
+    console.log(`[Group Chat] Message received in group: ${chatId}`);
+    console.log(`[Group Chat] From: ${message.author || 'unknown'}`);
+    console.log(`[Group Chat] Message: ${messageText}`);
+    
+    // Initialize BotIdManager if not already done
+    if (!global.botIdManager) {
+      const BotIdManager = require('./utils/botIdManager');
+      global.botIdManager = BotIdManager;
+      await global.botIdManager.initialize();
+    }
+    
+    // Get the bot's number from client.info
+    const botNumber = client.info ? client.info.wid._serialized : '';
+    console.log(`[Group Chat] Bot number: ${botNumber}`);
+    
+    // Get the bot's phone number (without the @c.us part)
+    const botPhoneNumber = botNumber ? botNumber.split('@')[0] : null;
+    
+    // Check if message specifically mentions the bot
+    let isBotMentioned = false;
+    
+    // 1. Check if the message has mentions
+    if (message.mentionedIds && message.mentionedIds.length > 0) {
+      console.log(`[Group] Message has ${message.mentionedIds.length} mentions:`, message.mentionedIds);
+      
+      // 2. Add any new mentioned IDs to our known bot IDs
+      const newIds = await global.botIdManager.addMentionedIds(message.mentionedIds);
+      if (newIds.length > 0) {
+        console.log(`[Group] Learned ${newIds.length} new bot IDs:`, newIds);
+      }
+      
+      // 3. Check if any of the mentioned IDs match our known bot IDs
+      for (const mentionedId of message.mentionedIds) {
+        if (global.botIdManager.hasBotId(mentionedId)) {
+          isBotMentioned = true;
+          console.log(`[Group] Bot mentioned via ID match: ${mentionedId}`);
+          break;
+        }
+        
+        // Also check if the ID contains the bot's phone number
+        if (botPhoneNumber && mentionedId.includes(botPhoneNumber)) {
+          await global.botIdManager.addBotId(mentionedId);
+          isBotMentioned = true;
+          console.log(`[Group] Bot mentioned via phone number match: ${mentionedId}`);
+          break;
+        }
+      }
+      
+      // 4. If no match found, log for debugging
+      if (!isBotMentioned) {
+        console.log(`[Group] No mention match found. Known bot IDs:`, global.botIdManager.getKnownBotIds());
+      }
+    }
+    
+    // Method 2: Fallback to text-based mention detection
+    if (!isBotMentioned && botPhoneNumber) {
+      // Extract all @mentions from the message text
+      const mentionRegex = /@([0-9]+)/g;
+      const mentions = [];
+      let match;
+      
+      while ((match = mentionRegex.exec(messageText)) !== null) {
+        mentions.push(match[1]);
+      }
+      
+      console.log(`[Group] Detected text mentions in message:`, mentions);
+      
+      // Check if any text mention matches the bot's number
+      if (mentions.length > 0) {
+        for (const mention of mentions) {
+          // Try exact match first
+          if (mention === botPhoneNumber) {
+            isBotMentioned = true;
+            console.log(`[Group] Bot explicitly mentioned by exact number in text: @${mention}`);
+            break;
+          }
+          
+          // If direct match fails, try matching the last 8+ digits
+          const minLength = Math.min(mention.length, botPhoneNumber.length);
+          if (minLength >= 8) {
+            const mentionSuffix = mention.slice(-minLength);
+            const botSuffix = botPhoneNumber.slice(-minLength);
+            
+            if (mentionSuffix === botSuffix) {
+              isBotMentioned = true;
+              console.log(`[Group] Bot mentioned by partial number match in text: @${mention} matches suffix of ${botPhoneNumber}`);
+              break;
+            }
+          }
+        }
+      }
+    }
+    
+    // Check for standard trigger words from config file
+    let botTriggers = ['bot', 'xeno', 'whatsxeno']; // Default fallback
+    
+    try {
+      // Try to load triggers from config file
+      const triggersPath = path.join(__dirname, 'config/triggers.json');
+      if (fs.existsSync(triggersPath)) {
+        const triggersData = JSON.parse(fs.readFileSync(triggersPath, 'utf8'));
+        if (triggersData && Array.isArray(triggersData.groupTriggers)) {
+          botTriggers = triggersData.groupTriggers;
+          console.log(`[Group] Loaded ${botTriggers.length} triggers from config`);
+        }
+      }
+    } catch (error) {
+      console.error('[Group] Error loading triggers from config:', error.message);
+      // Fall back to default triggers + env var if available
+      if (process.env.GROUP_CHAT_TRIGGER) {
+        botTriggers.push(process.env.GROUP_CHAT_TRIGGER);
+      }
+    }
+    
+    // Convert all triggers to lowercase
+    botTriggers = botTriggers.map(t => t.toLowerCase());
+    
+    // Normalize message text for comparison
+    // 1. Convert to lowercase
+    // 2. Remove any special formatting that might be applied to mentions
+    let lowerMessage = messageText.toLowerCase();
+    
+    // Create a normalized version of the message that strips special characters
+    // This helps with matching @mentions which might have different formatting on different devices
+    const normalizedMessage = lowerMessage.replace(/[\u0000-\u001F\u007F-\u009F\u200B-\u200F\u2028-\u202F]/g, '');
+    
+    console.log(`[Group] Original message: '${messageText}'`);
+    console.log(`[Group] Normalized message: '${normalizedMessage}'`);
+    
+    // Check for ANY trigger word in the message (not just at start)
+    let hasTriggerWord = false;
+    for (const trigger of botTriggers) {
+      // Try matching against both the original lowercase message and the normalized version
+      if (lowerMessage.includes(trigger) || normalizedMessage.includes(trigger)) {
+        hasTriggerWord = true;
+        console.log(`[Group] Trigger word found: '${trigger}'`);
+        break;
+      }
+      
+      // Special handling for @ mentions
+      if (trigger.startsWith('@')) {
+        // Try matching without the @ symbol in case it's formatted differently
+        const triggerWithoutAt = trigger.substring(1);
+        if (lowerMessage.includes(triggerWithoutAt) || normalizedMessage.includes(triggerWithoutAt)) {
+          hasTriggerWord = true;
+          console.log(`[Group] Trigger word found (without @): '${triggerWithoutAt}'`);
+          break;
+        }
+      }
+    }
+    
+    // Check if this message is a reply to one of the bot's messages
+    let isReplyToBot = false;
+    let quotedMessage = null;
+    
+    try {
+      // Get the quoted message if it exists
+      quotedMessage = message._data?.quotedMsg;
+      
+      if (quotedMessage) {
+        console.log('[Group] Quoted message details:', {
+          fromMe: quotedMessage.fromMe,
+          participant: quotedMessage.participant,
+          sender: quotedMessage.sender,
+          botNumber: botNumber,
+          id: quotedMessage.id,
+          raw: JSON.stringify(quotedMessage, null, 2)
+        });
+        
+        // Normalize bot number for comparison (remove @c.us if present)
+        const normalizedBotNumber = botNumber.split('@')[0];
+        
+        // Check 1: Direct fromMe flag
+        if (quotedMessage.fromMe === true) {
+          isReplyToBot = true;
+          console.log(`[Group] Reply detected (fromMe: true)`);
+        }
+        
+        // Check 2: Participant match (group chat)
+        if (!isReplyToBot && quotedMessage.participant) {
+          const quotedParticipant = quotedMessage.participant.split('@')[0];
+          if (quotedParticipant === normalizedBotNumber) {
+            isReplyToBot = true;
+            console.log(`[Group] Reply detected (participant match: ${quotedParticipant})`);
+          }
+        }
+        
+        // Check 3: Sender ID match (alternative format)
+        if (!isReplyToBot && quotedMessage.sender) {
+          let senderId = quotedMessage.sender;
+          
+          // Handle different sender ID formats
+          if (typeof senderId === 'string') {
+            if (senderId.includes('@')) {
+              senderId = senderId.split('@')[0];
+            }
+            if (senderId === normalizedBotNumber) {
+              isReplyToBot = true;
+              console.log(`[Group] Reply detected (sender.id string match: ${senderId})`);
+            }
+          } else if (senderId._serialized) {
+            const serializedId = senderId._serialized.split('@')[0];
+            if (serializedId === normalizedBotNumber) {
+              isReplyToBot = true;
+              console.log(`[Group] Reply detected (sender._serialized match: ${serializedId})`);
+            }
+          }
+        }
+        
+        // Check 4: Try to get the quoted message explicitly
+        if (!isReplyToBot) {
+          try {
+            const quotedMsgObj = await message.getQuotedMessage();
+            if (quotedMsgObj && quotedMsgObj.fromMe) {
+              isReplyToBot = true;
+              console.log(`[Group] Reply confirmed via getQuotedMessage()`);
+            }
+          } catch (err) {
+            console.log(`[Group] Error in getQuotedMessage:`, err.message);
+          }
+        }
+      }
+    } catch (error) {
+      console.error(`[Group] Error checking for reply to bot:`, error);
+    }
+
+    // Determine if bot should respond based on specific rules
+    const shouldRespond = isBotMentioned || hasTriggerWord || isReplyToBot;
+    console.log(`[Group] Should bot respond? ${shouldRespond} (mention: ${isBotMentioned}, trigger: ${hasTriggerWord}, reply: ${isReplyToBot})`);
+    
+    if (!shouldRespond && GROUP_CHAT_REQUIRE_MENTION) {
+      console.log(`[Group Chat] IGNORING - Bot not explicitly mentioned or triggered`);
+      return;  // CRITICAL: Don't process this message
+    }
+    
+    // Log that we're proceeding with this group message
+    console.log(`[Group Chat] PROCESSING GROUP MESSAGE - Bot was called!`);
+    
+    // Process message based on whether it's a reply to the bot or not
+    let timeDateResponse = null;
+    let cleanMessageText = messageText.trim();
+    
+    // If this is a reply to the bot, handle it specially
+    if (isReplyToBot) {
+      console.log('[Group] Processing reply to bot message');
+      
+      // First try with the original message
+      timeDateResponse = handleTimeDateQuery(cleanMessageText);
+      
+      // If no match, try cleaning common reply prefixes
+      if (!timeDateResponse) {
+        const cleanedReply = cleanMessageText.replace(/^[\s\S]*?[:：]\s*/, '').trim();
+        if (cleanedReply !== cleanMessageText) {
+          console.log(`[Group] Trying cleaned reply text: "${cleanedReply}"`);
+          timeDateResponse = handleTimeDateQuery(cleanedReply);
+        }
+      }
+      
+      // If we still don't have a response, treat the full message as the query
+      if (!timeDateResponse) {
+        timeDateResponse = handleTimeDateQuery(cleanMessageText);
+      }
+      
+      // If we have a time/date response, send it and return
+      if (timeDateResponse) {
+        console.log('[Group Chat] Handling time/date query in reply');
+        try {
+          await message.reply(timeDateResponse);
+          return;
+        } catch (error) {
+          console.error('Error sending time/date response to reply:', error);
+        }
+      }
+    } 
+    // Not a reply to bot, process normally
+    else {
+      // Check for time/date queries in the original message
+      timeDateResponse = handleTimeDateQuery(cleanMessageText);
+      
+      // If we have a time/date response, send it and return
+      if (timeDateResponse) {
+        console.log('[Group Chat] Handling time/date query');
+        try {
+          await message.reply(timeDateResponse);
+          return;
+        } catch (error) {
+          console.error('Error sending time/date response in group:', error);
+        }
+      }
+      
+      // Clean message text - remove mentions or trigger words
+      if (hasTriggerWord) {
+        for (const trigger of botTriggers) {
+          if (lowerMessage.startsWith(trigger)) {
+            // Remove trigger from start of message
+            cleanMessageText = messageText.substring(trigger.length).trim();
+            console.log(`[Group] Removed trigger '${trigger}', message now: ${cleanMessageText}`);
+            break;
+          }
+        }
+      }
+      
+      // If there's an @ symbol, try to remove the first @mention pattern
+      if (isBotMentioned && cleanMessageText.includes('@')) {
+        // Remove the bot's mention from the message
+        cleanMessageText = cleanMessageText.replace(new RegExp(`@${botPhoneNumber}\\s*`), '').trim();
+        console.log(`[Group] Cleaned @ mention, message now: ${cleanMessageText}`);
+      }
+      
+      // Check again with the cleaned message
+      if (!timeDateResponse) {
+        const cleanedTimeDateResponse = handleTimeDateQuery(cleanMessageText);
+        if (cleanedTimeDateResponse) {
+          console.log('[Group Chat] Handling time/date query (after cleaning)');
+          try {
+            await message.reply(cleanedTimeDateResponse);
+            return;
+          } catch (error) {
+            console.error('Error sending cleaned time/date response in group:', error);
+          }
+        }
+      }
+    }
+    
+    // Final check for time/date queries with the cleaned message
+    if (!timeDateResponse) {
+      const cleanedTimeDateResponse = handleTimeDateQuery(cleanMessageText);
+      if (cleanedTimeDateResponse) {
+        console.log('[Group Chat] Handling time/date query (after cleaning)');
+        try {
+          await message.reply(cleanedTimeDateResponse);
+          return;
+        } catch (error) {
+          console.error('Error sending cleaned time/date response in group:', error);
+        }
+      }
+    }
+    
+    // Forward the cleaned message to workflow system
+    try {
+      await workflowManager.publishWhatsAppMessage({
+        chatId,
+        body: cleanMessageText,
+        from: message.from,
+        sender: message.author || message.from,
+        isGroup: true,
+        groupName: message.chat?.name || 'Group',
+        timestamp: message.timestamp,
+        type: message.type
+      });
+      console.log('[Group Chat] Message published to workflow system');
+    } catch (error) {
+      console.error('[Group Chat] Error publishing message to workflow:', error);
+    }
+    
+    // CRITICAL FIX: Generate and send a response for group chats too!
+    try {
+      // Send typing indicator
+      const chat = await message.getChat();
+      chat.sendStateTyping();
+      console.log('[Group Chat] Sent typing indicator');
+      
+      let response;
+      
+      // Check if message is a command
+      if (commandHandler.isCommand(cleanMessageText)) {
+        response = await commandHandler.processCommand(cleanMessageText, chatId, message.author || message.from);
+        updateLLMClient(); // Update LLM client if provider/model changed
+      } else {
+        // Add user message to chat history
+        chatHandler.addMessage(chatId, 'user', cleanMessageText);
+        
+        // Get conversation history
+        const conversation = chatHandler.getConversation(chatId);
+        
+        // Get current settings
+        const settings = commandHandler.getCurrentSettings();
+        
+        // Convert conversation to format expected by LLM
+        let messages = [
+          { role: 'system', content: settings.systemPrompt },
+          ...conversation.map(msg => ({ role: msg.role, content: msg.content }))
+        ];
+        
+        // Apply RAG if enabled
+        let context = null;
+        if (settings.ragEnabled) {
+          const ragResult = await ragProcessor.processQuery(cleanMessageText, messages);
+          messages = ragResult.messages;
+          context = ragResult.context;
+          
+          if (context) {
+            console.log('[Group Chat] RAG context applied to query');
+          }
+        }
+        
+        // Process message with current LLM and parameters
+        if (settings.provider === 'mcp') {
+          // For MCP, we pass parameters directly
+          response = await currentLLMClient.generateResponse(cleanMessageText, messages, settings.parameters);
+        } else {
+          // For other providers, we pass parameters in the standard way
+          response = await currentLLMClient.generateResponse(cleanMessageText, messages, settings.parameters);
+        }
+        
+        // Add assistant response to chat history
+        chatHandler.addMessage(chatId, 'assistant', response);
+        
+        // Add citations if RAG was used and citations are enabled
+        const showCitations = process.env.KB_SHOW_CITATIONS === 'true';
+        if (context && showCitations) {
+          const sources = extractSourcesFromContext(context);
+          if (sources.length > 0) {
+            response += '\n\n*Sources:* ' + sources.join(', ');
+          }
+        }
+      }
+      
+      // Send response
+      await message.reply(response);
+      console.log('[Group Chat] Response sent successfully');
+    } catch (error) {
+      console.error('[Group Chat] Error processing message:', error);
+      await message.reply(`Sorry, I encountered an error: ${error.message}`);
+    }
+    
+    // Skip the direct message handling
+    return;
+  }
+  
+  // Additional verification - if any group chat identifiers are found, don't proceed
+  // This is a failsafe in case the group chat detection above fails
+  if (chatId.includes('@g.us') || (message.author && message.author !== message.from)) {
+    console.log(`[Safety] Message appears to be from a group but wasn't caught earlier - ignoring`);
+    return;
+  }
+
+  // Handle direct messages (non-group)
+  console.log(`[Direct] Message from ${chatId}: ${messageText}`);
+  
+  // Check for time/date queries in direct messages
+  const timeDateResponse = handleTimeDateQuery(messageText);
+  if (timeDateResponse) {
+    console.log('[Direct] Handling time/date query');
+    try {
+      await message.reply(timeDateResponse);
+      return;
+    } catch (error) {
+      console.error('Error sending time/date response in direct message:', error);
+    }
+  }
+  
+  // Forward message to workflow system for keyword triggers
+  try {
+    // Publish message to MQTT for workflow triggers
+    await workflowManager.publishWhatsAppMessage({
+      chatId,
+      body: messageText,
+      from: message.from,
+      timestamp: message.timestamp,
+      type: message.type
+    });
+    console.log('[Direct] Message published to workflow system');
+  } catch (error) {
+    console.error('[Direct] Error publishing message to workflow:', error);
+  }
   
   try {
     // Send typing indicator
@@ -259,6 +848,14 @@ async function shutdown(exitCode = 0) {
     console.log('File watcher stopped');
   } catch (err) {
     console.error('Error stopping file watcher:', err);
+  }
+  
+  // Shutdown workflow system
+  try {
+    await workflowManager.shutdown();
+    console.log('Workflow system shut down');
+  } catch (err) {
+    console.error('Error shutting down workflow system:', err);
   }
   
   // Destroy WhatsApp client

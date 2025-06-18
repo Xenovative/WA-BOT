@@ -1,0 +1,58 @@
+<script type="text/javascript">
+    RED.nodes.registerType('wa-bot-file-trigger', 'wa-bot-nodes', {
+        category: 'WhatsApp Bot',
+        color: '#3FADB5',
+        defaults: {
+            name: { value: "" },
+            eventType: { value: "all" },
+            filePattern: { value: "" }
+        },
+        inputs: 0,
+        outputs: 1,
+        icon: "file.png",
+        label: function() {
+            return this.name || "File Trigger";
+        },
+        paletteLabel: "File Trigger"
+    });
+</script>
+
+<script type="text/html" data-template-name="wa-bot-file-trigger">
+    <div class="form-row">
+        <label for="node-input-name"><i class="fa fa-tag"></i> Name</label>
+        <input type="text" id="node-input-name" placeholder="Name">
+    </div>
+    <div class="form-row">
+        <label for="node-input-eventType"><i class="fa fa-tasks"></i> Event Type</label>
+        <select id="node-input-eventType">
+            <option value="all">All Events</option>
+            <option value="upload">Upload</option>
+            <option value="delete">Delete</option>
+            <option value="modify">Modify</option>
+        </select>
+    </div>
+    <div class="form-row">
+        <label for="node-input-filePattern"><i class="fa fa-filter"></i> File Pattern</label>
+        <input type="text" id="node-input-filePattern" placeholder="*.pdf">
+    </div>
+</script>
+
+<script type="text/html" data-help-name="wa-bot-file-trigger">
+    <p>Triggers a flow when file events occur in the WhatsApp Bot system.</p>
+    
+    <h3>Outputs</h3>
+    <dl class="message-properties">
+        <dt>payload <span class="property-type">object</span></dt>
+        <dd>The file event information.</dd>
+        <dt>filename <span class="property-type">string</span></dt>
+        <dd>The name of the file that triggered the event.</dd>
+        <dt>event <span class="property-type">string</span></dt>
+        <dd>The type of event (upload, delete, modify).</dd>
+        <dt>path <span class="property-type">string</span></dt>
+        <dd>The full path to the file.</dd>
+    </dl>
+    
+    <h3>Details</h3>
+    <p>This node monitors file events in the WhatsApp Bot system and triggers a flow when a matching event occurs.</p>
+    <p>You can filter by event type and file pattern to only trigger on specific events.</p>
+</script>
