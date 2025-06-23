@@ -460,21 +460,25 @@ class WorkflowManager extends EventEmitter {
     }
     
     try {
-      // Format the message to ensure chatId is at the top level
+      // Format the message to match Node-RED flow expectations
       const mqttPayload = {
         chatId: message.chatId || message.from,
-        payload: message.body,
+        text: message.body,
         from: message.from,
-        timestamp: message.timestamp,
-        type: message.type,
+        timestamp: message.timestamp || Date.now(),
+        type: message.type || 'text',
+        // Include common WhatsApp message fields
+        body: message.body,
         // Include the original message for reference
         originalMessage: message
       };
       
       // Publish to whatsapp/messages topic
-      this.mqttClient.publish('whatsapp/messages', JSON.stringify(mqttPayload), { qos: 0 });
+      const payloadStr = JSON.stringify(mqttPayload);
+      this.mqttClient.publish('whatsapp/messages', payloadStr, { qos: 1 });
       console.log(`[WorkflowManager] Published message to MQTT: ${message.body?.substring(0, 20)}...`);
       console.log(`[WorkflowManager] Message chatId: ${mqttPayload.chatId}`);
+      console.log(`[WorkflowManager] Full MQTT payload: ${payloadStr}`);
       return true;
     } catch (error) {
       console.error(`[WorkflowManager] Error publishing message to MQTT: ${error.message}`);

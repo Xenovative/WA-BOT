@@ -11,19 +11,15 @@
         "type": "function",
         "z": "pnc-payment-notice-combined-flow",
         "name": "Payment Config",
-        "func": "// Configure payment notice settings\nreturn {\n    payload: {\n        // Schedule (cron format: minute hour day month dayOfWeek)\n        // This example runs at 9:00 AM on the 1st day of each month\n        schedule: \"00 09 1 * *\",\n        \n        // Reminder schedule in days before/after due date\n        reminderSchedule: [\n            { days: 1, message: \"Friendly reminder: Your payment is due tomorrow. Please submit your payment proof.\" },\n            { days: 0, message: \"Reminder: Today is the payment due date. Kindly submit your payment proof.\" },\n            { days: -1, message: \"Urgent: Your payment is now overdue. Please submit your payment proof immediately.\" }\n        ],\n        \n        // Payment confirmation settings\n        confirmation: {\n            thanksMessage: \"Thank you for your payment! We have received your proof of payment and will process it shortly.\",\n            forwardTo: \"landlord@example.com\", // Email or ID to forward payment proof\n            processingTime: 24 // Hours to process payment\n        },\n        \n        // Database configuration\n        database: {\n            // Type of database to use (options: 'memory', 'file', 'mongodb', 'mysql', 'postgres')\n            type: 'memory',\n            \n            // Connection details (used for external databases)\n            connection: {\n                host: 'localhost',\n                port: 27017,\n                dbName: 'payments',\n                username: '',\n                password: '',\n                ssl: false\n            }\n        }\n    }\n};",
+        "func": "// Configure payment notice settings\nconst path = require('path');\nconst rootDir = path.join(__dirname, '../..');\n\nreturn {\n    payload: {\n        // Schedule (cron format: minute hour day month dayOfWeek)\n        schedule: \"00 09 1 * *\",  // 9:00 AM on 1st of each month\n        timezone: \"Asia/Kuala_Lumpur\",\n        \n        // File paths\n        dataDir: path.join(rootDir, 'data'),\n        paymentsFile: 'payments.xlsx',\n        customersFile: 'customers.xlsx',\n        logsFile: 'payment_logs.xlsx',\n        backupDir: 'backups',\n        \n        // Reminder schedule in days before/after due date\n        reminderSchedule: [\n            { days: 7, message: \"Friendly reminder: Your payment of RM{amount} is due in 7 days.\" },\n            { days: 3, message: \"Reminder: Your payment of RM{amount} is due in 3 days.\" },\n            { days: 1, message: \"Friendly reminder: Your payment of RM{amount} is due tomorrow.\" },\n            { days: 0, message: \"Reminder: Today is the payment due date for RM{amount}.\" },\n            { days: -1, message: \"Urgent: Your payment of RM{amount} is now overdue.\" }\n        ],\n        \n        // Payment confirmation settings\n        confirmation: {\n            thanksMessage: \"Thank you for your payment of RM{amount}! We have received your proof of payment.\",\n            forwardTo: \"admin@example.com\",\n            processingTime: 24\n        },\n        \n        // Excel settings\n        excel: {\n            dateFormat: 'yyyy-mm-dd',\n            datetimeFormat: 'yyyy-mm-dd hh:mm:ss'\n        }\n    }\n};",
         "outputs": 1,
         "noerr": 0,
         "initialize": "",
         "finalize": "",
-        "libs": [],
-        "x": 190,
-        "y": 80,
-        "wires": [
-            [
-                "pnc-store-config"
-            ]
-        ]
+        "libs": [{"var":"path","module":"path"}],
+        "x": 210,
+        "y": 40,
+        "wires": [["pnc-db-operation-router"]]
     },
     {
         "id": "pnc-store-config",

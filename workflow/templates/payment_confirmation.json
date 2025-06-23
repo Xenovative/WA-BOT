@@ -4,7 +4,22 @@
         "type": "tab",
         "label": "Payment Confirmation",
         "disabled": false,
-        "info": "This flow sends a confirmation message after receiving proof of payment"
+        "info": "This flow sends a confirmation message after receiving proof of payment and logs to Excel"
+    },
+    {
+        "id": "excel-logger",
+        "type": "function",
+        "z": "payment-confirmation-flow",
+        "name": "Log to Excel",
+        "func": "// Log payment confirmation to Excel\nconst excelHelper = require('../../utils/excelHelper');\nconst logPath = './data/payment_logs.xlsx';\n\ntry {\n    // Prepare log entry\n    const logEntry = {\n        timestamp: new Date().toISOString(),\n        customerId: msg.payload.customerId || 'unknown',\n        amount: msg.payload.amount || 0,\n        reference: msg.payload.reference || 'N/A',\n        status: 'confirmed',\n        notes: msg.payload.notes || ''\n    };\n    \n    // Read existing logs\n    let logs = [];\n    try {\n        logs = excelHelper.readExcel(logPath);\n    } catch (e) {\n        node.warn('Creating new payment log file');\n    }\n    \n    // Add new log entry\n    logs.push(logEntry);\n    \n    // Save back to Excel\n    excelHelper.writeExcel(logPath, logs, 'Confirmations', {\n        headers: ['timestamp', 'customerId', 'amount', 'reference', 'status', 'notes']\n    });\n    \n    node.log('Payment logged to Excel');\n    return msg;\n} catch (error) {\n    node.error('Error logging to Excel:', error);\n    msg.error = error.message;\n    return [null, msg];\n}",
+        "outputs": 1,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 400,
+        "y": 80,
+        "wires": [["log-confirmation"]]
     },
     {
         "id": "whatsapp-message-in",
@@ -21,11 +36,7 @@
         "inputs": 0,
         "x": 150,
         "y": 120,
-        "wires": [
-            [
-                "check-for-payment-proof"
-            ]
-        ]
+        "wires": [["check-for-payment-proof"]]
     },
     {
         "id": "check-for-payment-proof",
