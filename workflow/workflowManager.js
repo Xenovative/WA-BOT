@@ -26,6 +26,9 @@ class WorkflowManager extends EventEmitter {
     this.mqtt = null;
     this.mqttConnected = false;
     this.stateFilePath = path.join(__dirname, 'workflow-state.json');
+    this.profileStatePath = path.join(__dirname, 'workflow-profiles.json');
+    this.currentProfile = 'default';
+    this.profiles = {};
     
     this.settings = {
       flowFile: path.join(__dirname, '../.node-red/flows.json'),
@@ -96,93 +99,164 @@ class WorkflowManager extends EventEmitter {
    * @param {Object} botComponents - Core bot components to make available to workflows
    * @returns {Promise} - Resolves when initialization is complete
    */
+  /**
+   * Load saved state from disk
+   * @private
+   */
+  async loadState() {
+    try {
+      if (fs.existsSync(this.stateFilePath)) {
+        const stateData = fs.readFileSync(this.stateFilePath, 'utf8');
+        const state = JSON.parse(stateData);
+        
+        if (state.enabledWorkflows) {
+          this.enabledWorkflows = state.enabledWorkflows;
+          console.log(`[WorkflowManager] Loaded ${this.enabledWorkflows.length} enabled workflows from state`);
+        }
+        
+        if (state.currentProfile) {
+          this.currentProfile = state.currentProfile;
+          console.log(`[WorkflowManager] Loaded active profile: ${this.currentProfile}`);
+        }
+        
+        if (state.profiles) {
+          this.profiles = state.profiles;
+          console.log(`[WorkflowManager] Loaded ${Object.keys(this.profiles).length} profiles`);
+        }
+        
+        return true;
+      }
+      console.log('[WorkflowManager] No saved state found, starting fresh');
+      return false;
+    } catch (error) {
+      console.error('[WorkflowManager] Error loading state:', error);
+      return false;
+    }
+  }
+  
+  /**
+   * Save current state to disk
+   * @private
+   * @returns {Promise<boolean>} - Success status
+   */
+  async saveState() {
+    try {
+      const state = {
+        enabledWorkflows: this.enabledWorkflows,
+        currentProfile: this.currentProfile,
+        profiles: this.profiles,
+        lastUpdated: new Date().toISOString()
+      };
+      
+      // Create directory if it doesn't exist
+      const dir = path.dirname(this.stateFilePath);
+      if (!fs.existsSync(dir)) {
+        fs.mkdirSync(dir, { recursive: true });
+      }
+      
+      fs.writeFileSync(this.stateFilePath, JSON.stringify(state, null, 2), 'utf8');
+      console.log('[WorkflowManager] State saved successfully');
+      return true;
+    } catch (error) {
+      console.error('[WorkflowManager] Error saving state:', error);
+      return false;
+    }
+  }
+
   async initialize(botComponents) {
     if (this.initialized) {
       console.log('[WorkflowManager] Already initialized');
-      return;
+      return true;
     }
     
-    // Store bot components for later use
-    this.botComponents = botComponents;
-    
-    // Make bot components available globally
-    if (!global.whatsappClient && botComponents.whatsappClient) {
-      global.whatsappClient = botComponents.whatsappClient;
-    }
+    console.log('[WorkflowManager] Initializing workflow manager...');
     
     try {
-      console.log('[WorkflowManager] Initializing workflow system...');
+      // Store bot components
+      this.botComponents = botComponents;
       
-      // Start the built-in MQTT broker first
-      await this.startMQTTBroker();
+      // Load saved state
+      await this.loadState();
       
-      // Make bot components available to Node-RED function nodes
-      this.settings.functionGlobalContext = {
-        ...this.settings.functionGlobalContext,
-        ...botComponents
-      };
-      
-      // Create custom nodes directory if it doesn't exist
-      const customNodesDir = path.join(__dirname, 'nodes');
-      if (!fs.existsSync(customNodesDir)) {
-        fs.mkdirSync(customNodesDir, { recursive: true });
+      // Make bot components available globally
+      if (!global.whatsappClient && botComponents.whatsappClient) {
+        global.whatsappClient = botComponents.whatsappClient;
       }
       
-      // Create a standalone Express app for Node-RED
+      console.log('[WorkflowManager] Initializing workflow system...');
+      
+      // Store bot components in function context
+      this.settings.functionGlobalContext.bot = botComponents;
+      
+      // Start MQTT broker
+      await this.startMQTTBroker();
+      
+      // Create Express app
       this.app = express();
       this.server = http.createServer(this.app);
       
       // Initialize Node-RED
       RED.init(this.server, this.settings);
       
-      // Add routes for the editor UI and HTTP nodes
-      if (RED.httpAdmin) {
-        this.app.use("/", RED.httpAdmin);
-      }
+      // Serve UI files
+      this.app.use(express.static(path.join(__dirname, 'public')));
       
-      if (RED.httpNode) {
-        this.app.use("/api", RED.httpNode);
-      }
-      
-      // Start the server
-      this.server.listen(this.workflowPort);
-      
-      // Start the runtime
-      await RED.start();
-      
-      console.log(`[WorkflowManager] Node-RED started on port ${this.workflowPort}`);
-      
-      // Register custom nodes
+      // Register custom nodes and API endpoints
       this.registerCustomNodes();
       
-      // Initialize MQTT client for workflow triggers
+      // Start Node-RED
+      await new Promise((resolve, reject) => {
+        RED.start().then(() => {
+          console.log('[WorkflowManager] Node-RED started');
+          resolve();
+        }).catch(err => {
+          console.error('[WorkflowManager] Failed to start Node-RED:', err);
+          reject(err);
+        });
+      });
+      
+      // Initialize MQTT client
       await this.initMQTT();
       
-      // Load saved workflow state
-      await this.loadWorkflowState();
-      
-      // Re-enable workflows that were previously enabled
-      if (this.enabledWorkflows.length > 0) {
-        console.log(`[WorkflowManager] Re-enabling ${this.enabledWorkflows.length} workflows from saved state...`);
-        const workflowsToEnable = [...this.enabledWorkflows];
-        this.enabledWorkflows = [];
-        
-        for (const workflowId of workflowsToEnable) {
-          try {
-            await this.loadWorkflowIntoNodeRED(workflowId);
-            this.enabledWorkflows.push(workflowId);
-            console.log(`[WorkflowManager] Re-enabled workflow: ${workflowId}`);
-          } catch (err) {
-            console.warn(`[WorkflowManager] Error re-enabling workflow ${workflowId}:`, err.message);
-          }
-        }
-      }
+      // Start HTTP server
+      await new Promise((resolve, reject) => {
+        this.server.listen(this.workflowPort, () => {
+          console.log(`[WorkflowManager] Workflow server running on port ${this.workflowPort}`);
+          resolve();
+        }).on('error', reject);
+      });
       
       this.initialized = true;
-      console.log('[WorkflowManager] Workflow system initialized successfully');
+      console.log('[WorkflowManager] Initialization complete');
+      
+      // Load any enabled workflows
+      await this.loadEnabledWorkflows();
+      
+      return true;
     } catch (error) {
-      console.error('[WorkflowManager] Error initializing workflow system:', error);
+      console.error('[WorkflowManager] Initialization failed:', error);
       throw error;
+    }
+  }
+  
+  /**
+   * Load all enabled workflows into Node-RED
+   */
+  async loadEnabledWorkflows() {
+    if (!this.enabledWorkflows || this.enabledWorkflows.length === 0) {
+      console.log('[WorkflowManager] No workflows to load');
+      return;
+    }
+    
+    console.log(`[WorkflowManager] Loading ${this.enabledWorkflows.length} enabled workflows...`);
+    
+    for (const workflowId of this.enabledWorkflows) {
+      try {
+        console.log(`[WorkflowManager] Loading workflow: ${workflowId}`);
+        await this.loadWorkflowIntoNodeRED(workflowId);
+      } catch (error) {
+        console.error(`[WorkflowManager] Failed to load workflow ${workflowId}:`, error);
+      }
     }
   }
   
@@ -507,24 +581,50 @@ class WorkflowManager extends EventEmitter {
    * @param {string} workflowId - ID of the workflow to enable
    */
   async enableWorkflow(workflowId) {
-    console.log(`[WorkflowManager] Enabling workflow: ${workflowId}`);
-    console.log(`[WorkflowManager] Current enabled workflows: ${JSON.stringify(this.enabledWorkflows)}`);
-    
-    if (!this.enabledWorkflows.includes(workflowId)) {
+    try {
+      console.log(`[WorkflowManager] Enabling workflow: ${workflowId}`);
+      
+      // Check if already enabled
+      if (this.enabledWorkflows.includes(workflowId)) {
+        console.log(`[WorkflowManager] Workflow already enabled: ${workflowId}`);
+        return true;
+      }
+      
+      // Add to enabled workflows
       this.enabledWorkflows.push(workflowId);
-      console.log(`[WorkflowManager] Added workflow to enabled list: ${workflowId}`);
-      console.log(`[WorkflowManager] Updated enabled workflows: ${JSON.stringify(this.enabledWorkflows)}`);
+      
+      // Save state immediately
+      await this.saveState();
+      console.log(`[WorkflowManager] Saved state after enabling workflow: ${workflowId}`);
       
       // Load the workflow into Node-RED
-      await this.loadWorkflowIntoNodeRED(workflowId);
+      const loadSuccess = await this.loadWorkflowIntoNodeRED(workflowId);
       
-      // Save the updated state
-      await this.saveWorkflowState();
-      
-      this.emit('workflow-enabled', workflowId);
-      console.log(`[WorkflowManager] Workflow enabled successfully: ${workflowId}`);
-    } else {
-      console.log(`[WorkflowManager] Workflow already enabled: ${workflowId}`);
+      if (loadSuccess) {
+        // Save state again after successful load
+        await this.saveState();
+        this.emit('workflow-enabled', workflowId);
+        console.log(`[WorkflowManager] Workflow enabled and loaded successfully: ${workflowId}`);
+        return true;
+      } else {
+        // If loading failed, rollback
+        const index = this.enabledWorkflows.indexOf(workflowId);
+        if (index !== -1) {
+          this.enabledWorkflows.splice(index, 1);
+          await this.saveState();
+        }
+        console.error(`[WorkflowManager] Failed to load workflow into Node-RED: ${workflowId}`);
+        return false;
+      }
+    } catch (error) {
+      console.error(`[WorkflowManager] Error enabling workflow ${workflowId}:`, error);
+      // Ensure we don't leave the workflow in an inconsistent state
+      const index = this.enabledWorkflows.indexOf(workflowId);
+      if (index !== -1) {
+        this.enabledWorkflows.splice(index, 1);
+        await this.saveState();
+      }
+      return false;
     }
   }
   
@@ -679,123 +779,154 @@ class WorkflowManager extends EventEmitter {
   /**
    * Disable a workflow by ID
    * @param {string} workflowId - ID of the workflow to disable
+   * @returns {Promise<boolean>} - Success status
    */
   async disableWorkflow(workflowId) {
-    console.log(`[WorkflowManager] Attempting to disable workflow: ${workflowId}`);
+    console.log(`[WorkflowManager] Disabling workflow: ${workflowId}`);
     
-    // Remove from our tracking array if present
-    const index = this.enabledWorkflows.indexOf(workflowId);
-    if (index !== -1) {
+    try {
+      // Check if workflow is already disabled
+      const index = this.enabledWorkflows.indexOf(workflowId);
+      if (index === -1) {
+        console.log(`[WorkflowManager] Workflow ${workflowId} is not enabled`);
+        return true; // Already disabled
+      }
+      
+      // Remove from enabled workflows
       this.enabledWorkflows.splice(index, 1);
-      console.log(`[WorkflowManager] Removed workflow ${workflowId} from enabled workflows tracking array`);
-    } else {
-      console.log(`[WorkflowManager] Workflow ${workflowId} was not in enabled workflows tracking array`);
+      console.log(`[WorkflowManager] Removed workflow ${workflowId} from enabled workflows`);
+      
+      // Save state immediately
+      await this.saveState();
+      console.log(`[WorkflowManager] Saved state after disabling workflow: ${workflowId}`);
+      
+      // Unload from Node-RED if available
+      if (RED && RED.nodes) {
+        try {
+          await this.unloadWorkflowFromNodeRED(workflowId);
+        } catch (err) {
+          console.error(`[WorkflowManager] Error unloading workflow ${workflowId} from Node-RED:`, err);
+        }
+      }
+      
+      this.emit('workflow-disabled', workflowId);
+      console.log(`[WorkflowManager] Successfully disabled workflow: ${workflowId}`);
+      return true;
+    } catch (error) {
+      console.error(`[WorkflowManager] Error disabling workflow ${workflowId}:`, error);
+      throw error; // Re-throw to allow caller to handle the error
+    }
+  }
+  
+  /**
+   * Unload a workflow from Node-RED
+   * @private
+   * @param {string} workflowId - ID of the workflow to unload
+   * @returns {Promise<boolean>} - Success status
+   */
+  async unloadWorkflowFromNodeRED(workflowId) {
+    if (!RED || !RED.nodes) {
+      console.log('[WorkflowManager] Node-RED not initialized, skipping unload');
+      return false;
     }
     
-    // Save the updated state immediately
-    await this.saveWorkflowState();
-    
-    // Actually unload the workflow from Node-RED
     try {
-      if (!RED || !RED.nodes) {
-        console.log(`[WorkflowManager] Node-RED not initialized, cannot disable workflow ${workflowId}`);
-        return;
-      }
-      
-      // Get the current flows
+      // Get current flows
       const flows = RED.nodes.getFlows();
       if (!flows || !flows.flows) {
-        console.log(`[WorkflowManager] No flows found in Node-RED, cannot disable workflow ${workflowId}`);
-        return;
+        console.log('[WorkflowManager] No flows found in Node-RED');
+        return false;
       }
       
-      // Check if the workflow tab exists
+      // Check if workflow exists
       const workflowTab = flows.flows.find(node => node.id === workflowId && node.type === 'tab');
-      if (workflowTab) {
-        console.log(`[WorkflowManager] Found workflow tab: ${workflowId}, Label: ${workflowTab.label || 'Unnamed'}`);
-      } else {
-        console.log(`[WorkflowManager] Workflow tab ${workflowId} not found in Node-RED`);
-        // If the workflow isn't found, we can consider it already disabled
-        console.log(`[WorkflowManager] Workflow ${workflowId} already removed from Node-RED`);
-        this.emit('workflow-disabled', workflowId);
-        return;
+      if (!workflowTab) {
+        console.log(`[WorkflowManager] Workflow ${workflowId} not found in Node-RED`);
+        return true; // Already unloaded
       }
+      
+      console.log(`[WorkflowManager] Found workflow tab: ${workflowId}, Label: ${workflowTab.label || 'Unnamed'}`);
       
       // Find all nodes belonging to this workflow
       const workflowNodes = flows.flows.filter(node => 
-        node.z === workflowId || // Nodes belonging to this workflow
-        node.id === workflowId    // The workflow tab itself
+        node.z === workflowId || node.id === workflowId
       );
       
-      if (workflowNodes.length > 0) {
-        console.log(`[WorkflowManager] Found ${workflowNodes.length} nodes for workflow ${workflowId}`);
-        
-        // Log the types of nodes we're removing
-        const nodeTypes = {};
-        workflowNodes.forEach(node => {
-          if (!nodeTypes[node.type]) nodeTypes[node.type] = 0;
-          nodeTypes[node.type]++;
-        });
-        console.log(`[WorkflowManager] Node types to remove: ${JSON.stringify(nodeTypes)}`);
-        
-        // Remove the nodes from the flows
-        const updatedFlows = flows.flows.filter(node => 
-          node.z !== workflowId && node.id !== workflowId
-        );
-        
-        console.log(`[WorkflowManager] Deploying updated flows with ${updatedFlows.length} nodes (removed ${flows.flows.length - updatedFlows.length} nodes)`);
-        
-        let success = false;
-        
-        // Try multiple approaches to deploy the updated flows
-        try {
-          // Approach 1: With deployment type
-          console.log('[WorkflowManager] Approach 1: Setting with deployment type');
-          await RED.nodes.setFlows({ 
-            flows: updatedFlows,
-            rev: flows.rev || Date.now().toString(),
-            deploymentType: 'full'
-          });
-          console.log('[WorkflowManager] Successfully deployed with approach 1');
-          success = true;
-        } catch (err1) {
-          console.log(`[WorkflowManager] Approach 1 failed: ${err1.message}`);
-          
-          try {
-            // Approach 2: With flows property
-            console.log('[WorkflowManager] Approach 2: Setting with flows property');
-            await RED.nodes.setFlows({ flows: updatedFlows });
-            console.log('[WorkflowManager] Successfully deployed with approach 2');
-            success = true;
-          } catch (err2) {
-            console.log(`[WorkflowManager] Approach 2 failed: ${err2.message}`);
-            
-            try {
-              // Approach 3: Just the array
-              console.log('[WorkflowManager] Approach 3: Setting just the array');
-              await RED.nodes.setFlows(updatedFlows);
-              console.log('[WorkflowManager] Successfully deployed with approach 3');
-              success = true;
-            } catch (err3) {
-              console.log(`[WorkflowManager] All approaches failed: ${err3.message}`);
-            }
-          }
-        }
-        
-        if (success) {
-          console.log(`[WorkflowManager] Successfully unloaded workflow ${workflowId} from Node-RED`);
-        } else {
-          console.error(`[WorkflowManager] Failed to unload workflow ${workflowId} from Node-RED`);
-        }
-      } else {
+      if (workflowNodes.length === 0) {
         console.log(`[WorkflowManager] No nodes found for workflow ${workflowId}`);
+        return true;
       }
-    } catch (err) {
-      console.error(`[WorkflowManager] Error unloading workflow ${workflowId} from Node-RED:`, err);
+      
+      // Log node types being removed
+      const nodeTypes = {};
+      workflowNodes.forEach(node => {
+        if (!nodeTypes[node.type]) nodeTypes[node.type] = 0;
+        nodeTypes[node.type]++;
+      });
+      console.log(`[WorkflowManager] Node types to remove: ${JSON.stringify(nodeTypes)}`);
+      
+      // Create new flows array without the workflow nodes
+      const updatedFlows = flows.flows.filter(node => 
+        node.z !== workflowId && node.id !== workflowId
+      );
+      
+      console.log(`[WorkflowManager] Deploying updated flows with ${updatedFlows.length} nodes`);
+      
+      // Attempt to deploy the updated flows
+      await this.deployUpdatedFlows(updatedFlows, flows.rev);
+      
+      console.log(`[WorkflowManager] Successfully unloaded workflow ${workflowId} from Node-RED`);
+      return true;
+    } catch (error) {
+      console.error(`[WorkflowManager] Error in unloadWorkflowFromNodeRED for ${workflowId}:`, error);
+      throw error;
+    }
+  }
+  
+  /**
+   * Deploy updated flows to Node-RED with retry logic
+   * @private
+   * @param {Array} updatedFlows - The updated flows array
+   * @param {string} rev - The revision ID
+   * @returns {Promise<void>}
+   */
+  async deployUpdatedFlows(updatedFlows, rev) {
+    const deployAttempts = [
+      // Try with full deployment info first
+      async () => {
+        console.log('[WorkflowManager] Attempting deployment with full config');
+        return RED.nodes.setFlows({
+          flows: updatedFlows,
+          rev: rev || Date.now().toString(),
+          deploymentType: 'full'
+        });
+      },
+      // Fallback to minimal config
+      async () => {
+        console.log('[WorkflowManager] Attempting deployment with minimal config');
+        return RED.nodes.setFlows({ flows: updatedFlows });
+      },
+      // Last resort - just the array
+      async () => {
+        console.log('[WorkflowManager] Attempting deployment with array only');
+        return RED.nodes.setFlows(updatedFlows);
+      }
+    ];
+    
+    let lastError;
+    for (let i = 0; i < deployAttempts.length; i++) {
+      try {
+        await deployAttempts[i]();
+        console.log(`[WorkflowManager] Deployment successful with approach ${i + 1}`);
+        return; // Success
+      } catch (err) {
+        lastError = err;
+        console.warn(`[WorkflowManager] Deployment approach ${i + 1} failed:`, err.message);
+      }
     }
     
-    console.log(`[WorkflowManager] Disabled workflow: ${workflowId}`);
-    this.emit('workflow-disabled', workflowId);
+    // If we get here, all deployment attempts failed
+    throw lastError || new Error('All deployment attempts failed');
   }
 
   /**

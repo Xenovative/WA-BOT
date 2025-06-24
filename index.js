@@ -1,5 +1,5 @@
 require('dotenv').config();
-const { Client, LocalAuth, MessageMedia } = require('whatsapp-web.js');
+const { Client, LocalAuth, MessageMedia, ClientState } = require('whatsapp-web.js');
 const qrcode = require('qrcode-terminal');
 const path = require('path');
 const fs = require('fs');
@@ -36,6 +36,9 @@ async function handleGracefulShutdown() {
   
   isShuttingDown = true;
   console.log('\nGraceful shutdown initiated...');
+  
+  // Clear any pending reconnection attempts
+  clearTimeout(reconnectTimeout);
   
   try {
     // Shutdown workflow system
@@ -116,11 +119,37 @@ client.on('qr', (qr) => {
 
 // Authentication handling
 client.on('authenticated', () => {
-  console.log('Authentication successful');
+  console.log('Client is authenticated!');
+  // Reset reconnect attempts on successful authentication
+  reconnectAttempts = 0;
+  clearTimeout(reconnectTimeout);
 });
 
 client.on('auth_failure', (msg) => {
-  console.error('Authentication failed:', msg);
+  console.error('Authentication failure:', msg);
+  if (!isShuttingDown) {
+    console.log('Will attempt to reconnect...');
+    scheduleReconnect();
+  }
+});
+
+// Handle disconnection events
+client.on('disconnected', (reason) => {
+  console.log('Client was disconnected:', reason);
+  if (!isShuttingDown) {
+    console.log('Attempting to reconnect...');
+    scheduleReconnect();
+  }
+});
+
+// Handle connection state changes
+client.on('change_state', (state) => {
+  console.log('Client state changed:', state);
+  
+  if (state === 'TIMEOUT' || state === 'CONFLICT' || state === 'UNPAIRED') {
+    console.log('Connection issue detected, attempting to reconnect...');
+    scheduleReconnect();
+  }
 });
 
 // Ready event
@@ -795,8 +824,50 @@ client.on('message', async (message) => {
   }
 });
 
+// Auto-reconnect configuration
+const RECONNECT_INTERVAL = 10000; // 10 seconds
+let reconnectAttempts = 0;
+const MAX_RECONNECT_ATTEMPTS = 5;
+let reconnectTimeout;
+
+/**
+ * Initialize WhatsApp client with auto-reconnect
+ */
+function initializeClient() {
+  console.log('Initializing WhatsApp client...');
+  client.initialize().catch(err => {
+    console.error('Failed to initialize client:', err);
+    scheduleReconnect();
+  });
+}
+
+/**
+ * Handle reconnection logic
+ */
+function scheduleReconnect() {
+  if (isShuttingDown) {
+    console.log('Shutdown in progress, skipping reconnection');
+    return;
+  }
+
+  reconnectAttempts++;
+  
+  if (reconnectAttempts > MAX_RECONNECT_ATTEMPTS) {
+    console.error('Max reconnection attempts reached. Please check your internet connection and restart the bot.');
+    return;
+  }
+
+  const delay = Math.min(RECONNECT_INTERVAL * Math.pow(2, reconnectAttempts - 1), 300000); // Max 5 minutes
+  console.log(`Attempting to reconnect in ${delay/1000} seconds... (Attempt ${reconnectAttempts}/${MAX_RECONNECT_ATTEMPTS})`);
+  
+  clearTimeout(reconnectTimeout);
+  reconnectTimeout = setTimeout(() => {
+    initializeClient();
+  }, delay);
+}
+
 // Initialize WhatsApp client
-client.initialize();
+initializeClient();
 
 /**
  * Extract source information from context for citations

@@ -45,6 +45,25 @@ const memoryExternalElement = document.getElementById('memory-external');
 let memoryChart;
 
 // Profile management functions
+function saveSelectedProfile(profileName) {
+  try {
+    localStorage.setItem('selectedProfile', profileName);
+    return true;
+  } catch (e) {
+    console.error('Error saving selected profile:', e);
+    return false;
+  }
+}
+
+function getSelectedProfile() {
+  try {
+    return localStorage.getItem('selectedProfile') || 'default';
+  } catch (e) {
+    console.error('Error loading selected profile:', e);
+    return 'default';
+  }
+}
+
 async function saveProfile(profileName) {
   try {
     const response = await fetch('/api/settings', {
@@ -138,6 +157,74 @@ window.commandHistoryState = { loading: false };
 window.currentTriggers = { groupTriggers: [], customTriggers: [] };
 
 // Initialization
+// Save active tab to localStorage
+function saveActiveTab(tabId) {
+  try {
+    localStorage.setItem('activeTab', tabId);
+  } catch (e) {
+    console.error('Error saving tab state:', e);
+  }
+}
+
+// Load and activate the saved tab
+function loadActiveTab() {
+  try {
+    const savedTab = localStorage.getItem('activeTab');
+    if (savedTab) {
+      const targetTab = document.querySelector(`a[href="#${savedTab}"][data-bs-toggle="tab"]`);
+      if (targetTab) {
+        const tab = new bootstrap.Tab(targetTab);
+        tab.show();
+        return true;
+      }
+    }
+  } catch (e) {
+    console.error('Error loading tab state:', e);
+  }
+  return false;
+}
+
+// Initialize tab state persistence
+function initTabPersistence() {
+  const tabElements = document.querySelectorAll('a[data-bs-toggle="tab"]');
+  tabElements.forEach(tab => {
+    // Save active tab when a tab is shown
+    tab.addEventListener('shown.bs.tab', (e) => {
+      const targetId = e.target.getAttribute('href').substring(1);
+      saveActiveTab(targetId);
+      
+      // Handle tab-specific initialization
+      switch(targetId) {
+        case 'chats':
+          loadChats();
+          break;
+        case 'kb':
+          loadKbDocuments();
+          break;
+        case 'commands':
+          loadCommandHistory();
+          break;
+        case 'triggers':
+          loadTriggers();
+          break;
+      }
+    });
+    
+    // Handle tab click for navigation
+    tab.addEventListener('click', (e) => {
+      // Prevent default to handle programmatically
+      e.preventDefault();
+      
+      // Switch to the clicked tab
+      const tabInstance = new bootstrap.Tab(tab);
+      tabInstance.show();
+    });
+  });
+  
+  // Load the saved tab after a short delay to ensure Bootstrap is initialized
+  setTimeout(loadActiveTab, 100);
+}
+
 document.addEventListener('DOMContentLoaded', () => {
   // Initialize event listeners for elements that might be accessed early
   if (document.getElementById('refresh-kb')) {
@@ -152,6 +239,9 @@ document.addEventListener('DOMContentLoaded', () => {
   loadCommandHistory();
   loadSystemStats();
   initializeMemoryChart();
+  
+  // Initialize tab persistence
+  initTabPersistence();
   
   // Set up toggle visibility for API keys
   toggleVisibilityButtons.forEach(button => {
@@ -190,13 +280,28 @@ document.addEventListener('DOMContentLoaded', () => {
   const newProfileNameInput = document.getElementById('new-profile-name');
   
   if (profileSelect) {
+    // Load saved profile on page load if available
+    const savedProfile = getSelectedProfile();
+    if (savedProfile) {
+      // Set the dropdown value
+      profileSelect.value = savedProfile;
+      // Load the profile data
+      loadProfile(savedProfile).catch(error => {
+        console.error('Error loading saved profile:', error);
+      });
+    }
+    
+    // Handle profile changes
     profileSelect.addEventListener('change', async () => {
       const selectedProfile = profileSelect.value;
       if (selectedProfile) {
         try {
           await loadProfile(selectedProfile);
+          // Save the selected profile
+          saveSelectedProfile(selectedProfile);
         } catch (error) {
           console.error('Error loading profile:', error);
+          showToast('Failed to load profile', 'error');
         }
       }
     });
@@ -264,8 +369,6 @@ document.addEventListener('DOMContentLoaded', () => {
     saveSettings();
   });
   
-  // Event listener already set in DOMContentLoaded
-  
   // Set up knowledge base file input
   if (kbFileInput) {
     kbFileInput.addEventListener('change', uploadDocument);
@@ -293,28 +396,44 @@ document.addEventListener('DOMContentLoaded', () => {
   loadCommandHistory();
   loadSystemStats();
   
-  // Initialize Bootstrap tabs
-  const tabElements = document.querySelectorAll('.nav-link');
+  // Initialize Bootstrap tabs with state persistence
+  const tabElements = document.querySelectorAll('a[data-bs-toggle="tab"]');
   tabElements.forEach(tab => {
+    // Save active tab when a tab is shown
+    tab.addEventListener('shown.bs.tab', (e) => {
+      const targetId = e.target.getAttribute('href').substring(1);
+      saveActiveTab(targetId);
+    });
+    
+    // Handle tab click for initialization
     tab.addEventListener('click', (e) => {
       e.preventDefault();
       const targetId = tab.getAttribute('href').substring(1);
       
-      // Hide all tabs
-      document.querySelectorAll('.tab-pane').forEach(pane => {
-        pane.classList.remove('show', 'active');
-      });
+      // Handle tab-specific initialization
+      switch(targetId) {
+        case 'chats':
+          loadChats();
+          break;
+        case 'kb':
+          loadKbDocuments();
+          break;
+        case 'commands':
+          loadCommandHistory();
+          break;
+        case 'triggers':
+          loadTriggers();
+          break;
+      }
       
-      // Deactivate all tab links
-      tabElements.forEach(t => {
-        t.classList.remove('active');
-      });
-      
-      // Show current tab and activate link
-      document.getElementById(targetId).classList.add('show', 'active');
-      tab.classList.add('active');
+      // Bootstrap will handle showing the tab content
+      const tabInstance = new bootstrap.Tab(tab);
+      tabInstance.show();
     });
   });
+  
+  // Load the saved tab after a short delay to ensure Bootstrap is initialized
+  setTimeout(loadActiveTab, 100);
 });
 
 // API functions

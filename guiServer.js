@@ -189,11 +189,12 @@ app.get('/api/workflows', (req, res) => {
 });
 
 // Toggle workflow enabled/disabled state
-app.post('/api/workflows/toggle', async (req, res) => {
+app.post('/api/workflows/:workflowId/toggle', async (req, res) => {
   try {
-    const { id, enabled } = req.body;
+    const { workflowId } = req.params;
+    const { enabled } = req.body;
     
-    if (!id) {
+    if (!workflowId) {
       return res.status(400).json({ success: false, error: 'Missing workflow ID' });
     }
     
@@ -201,17 +202,40 @@ app.post('/api/workflows/toggle', async (req, res) => {
       return res.status(400).json({ success: false, error: 'Missing enabled state' });
     }
     
+    console.log(`[API] Toggling workflow ${workflowId} to ${enabled ? 'enabled' : 'disabled'}`);
+    
     // Enable or disable the workflow
+    let success = false;
     if (enabled) {
-      await workflowManager.enableWorkflow(id);
+      success = await workflowManager.enableWorkflow(workflowId);
     } else {
-      workflowManager.disableWorkflow(id);
+      success = await workflowManager.disableWorkflow(workflowId);
     }
     
-    res.json({ success: true });
+    if (!success) {
+      throw new Error(`Failed to ${enabled ? 'enable' : 'disable'} workflow`);
+    }
+    
+    // Get updated state to ensure consistency
+    const enabledWorkflows = workflowManager.getEnabledWorkflows();
+    const isActive = enabledWorkflows.includes(workflowId);
+    
+    // Force save the state
+    await workflowManager.saveState();
+    
+    res.json({ 
+      success: true, 
+      enabled: isActive,
+      workflowId: workflowId
+    });
+    
   } catch (error) {
     console.error('Error toggling workflow:', error);
-    res.status(500).json({ success: false, error: error.message });
+    res.status(500).json({ 
+      success: false, 
+      error: error.message || 'Failed to toggle workflow',
+      workflowId: req.params.workflowId
+    });
   }
 });
 
@@ -266,33 +290,48 @@ app.get('/api/workflows/:id', (req, res) => {
   }
 });
 
-app.post('/api/workflows/toggle', async (req, res) => {
+// Single workflow toggle endpoint - handles both enable/disable
+app.post('/api/workflows/:workflowId/toggle', async (req, res) => {
   try {
-    const { id, enabled } = req.body;
+    const { workflowId } = req.params;
+    const { enabled } = req.body;
     
-    if (!id) {
-      return res.status(400).json({ success: false, error: 'Workflow ID is required' });
+    if (!workflowId) {
+      return res.status(400).json({ success: false, error: 'Missing workflow ID' });
     }
     
-    console.log(`[API] Toggling workflow ${id} to ${enabled ? 'enabled' : 'disabled'}`);
+    if (enabled === undefined) {
+      return res.status(400).json({ success: false, error: 'Missing enabled state' });
+    }
     
-    // Toggle workflow in the workflow manager
+    console.log(`[API] Toggling workflow ${workflowId} to ${enabled ? 'enabled' : 'disabled'}`);
+    
+    // Enable or disable the workflow
+    let success = false;
     if (enabled) {
-      const success = await workflowManager.enableWorkflow(id);
-      if (!success) {
-        return res.status(500).json({ success: false, error: `Failed to enable workflow ${id}` });
-      }
+      success = await workflowManager.enableWorkflow(workflowId);
     } else {
-      await workflowManager.disableWorkflow(id);
+      success = await workflowManager.disableWorkflow(workflowId);
     }
     
-    // Get updated status from Node-RED
+    if (!success) {
+      throw new Error(`Failed to ${enabled ? 'enable' : 'disable'} workflow`);
+    }
+    
+    // Get updated state to ensure consistency
+    const enabledWorkflows = workflowManager.getEnabledWorkflows();
+    const isActive = enabledWorkflows.includes(workflowId);
+    
+    // Force save the state
+    await workflowManager.saveState();
+    
+    // Check Node-RED status if available
     let isActiveInNodeRED = false;
     try {
       if (RED && RED.nodes) {
         const flows = RED.nodes.getFlows();
         if (flows && flows.flows) {
-          isActiveInNodeRED = flows.flows.some(node => node.id === id && node.type === 'tab');
+          isActiveInNodeRED = flows.flows.some(node => node.id === workflowId && node.type === 'tab');
         }
       }
     } catch (err) {
@@ -301,12 +340,18 @@ app.post('/api/workflows/toggle', async (req, res) => {
     
     res.json({ 
       success: true, 
-      enabled: enabled,
+      enabled: isActive,
+      workflowId: workflowId,
       activeInNodeRED: isActiveInNodeRED
     });
+    
   } catch (error) {
     console.error('Error toggling workflow:', error);
-    res.status(500).json({ success: false, error: error.message });
+    res.status(500).json({ 
+      success: false, 
+      error: error.message || 'Failed to toggle workflow',
+      workflowId: req.params.workflowId
+    });
   }
 });
 
