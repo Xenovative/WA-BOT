@@ -11,11 +11,9 @@ document.addEventListener('DOMContentLoaded', function() {
     const workflowsTab = document.querySelector('a[href="#workflows"]');
     if (workflowsTab) {
         // Load workflows when tab is shown
-        workflowsTab.addEventListener('shown.bs.tab', async function(e) {
+        workflowsTab.addEventListener('shown.bs.tab', function(e) {
             if (e.target.getAttribute('href') === '#workflows') {
-                await loadWorkflows();
-                // Ensure workflow states are properly set after loading
-                updateWorkflowToggles();
+                loadWorkflows();
             }
         });
     }
@@ -23,40 +21,9 @@ document.addEventListener('DOMContentLoaded', function() {
     // If workflows tab is active on page load, load workflows
     if (window.location.hash === '#workflows' || 
         (window.location.hash === '' && document.querySelector('.nav-link.active')?.getAttribute('href') === '#workflows')) {
-        loadWorkflows().then(() => {
-            updateWorkflowToggles();
-        });
+        loadWorkflows();
     }
 });
-
-// Update workflow toggle states based on enabled workflows
-async function updateWorkflowToggles() {
-    try {
-        const response = await fetch('/api/workflows/state');
-        const state = await response.json();
-        
-        if (state && state.enabledWorkflows) {
-            // Update all toggle switches to match the server state
-            document.querySelectorAll('.workflow-toggle').forEach(toggle => {
-                const workflowId = toggle.getAttribute('data-workflow-id');
-                const isEnabled = state.enabledWorkflows.includes(workflowId);
-                toggle.checked = isEnabled;
-                
-                // Update the UI to reflect the actual state
-                const row = toggle.closest('tr');
-                if (row) {
-                    const statusBadge = row.querySelector('.workflow-status');
-                    if (statusBadge) {
-                        statusBadge.className = 'badge ' + (isEnabled ? 'bg-success' : 'bg-secondary');
-                        statusBadge.textContent = isEnabled ? 'Enabled' : 'Disabled';
-                    }
-                }
-            });
-        }
-    } catch (error) {
-        console.error('Error updating workflow toggles:', error);
-    }
-}
 
 // Initialize workflow-related event listeners
 function initWorkflowEvents() {
@@ -191,52 +158,30 @@ function updatePredefinedWorkflowToggles(workflows) {
 }
 
 // Toggle workflow enabled/disabled state
-async function toggleWorkflow(workflowId, enabled) {
-    try {
-        // Immediately update the UI for better responsiveness
-        const toggle = document.querySelector(`.workflow-toggle[data-workflow-id="${workflowId}"]`);
-        const row = toggle?.closest('tr');
-        const statusBadge = row?.querySelector('.workflow-status');
-        
-        // Save original state in case we need to revert
-        const originalState = toggle?.checked;
-        
-        // Optimistically update the UI
-        if (toggle) toggle.checked = enabled;
-        if (statusBadge) {
-            statusBadge.className = 'badge ' + (enabled ? 'bg-success' : 'bg-secondary');
-            statusBadge.textContent = enabled ? 'Enabled' : 'Disabled';
+function toggleWorkflow(workflowId, enabled) {
+    fetch('/api/workflows/toggle', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+            id: workflowId,
+            enabled: enabled
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            showToast(`Workflow ${enabled ? 'enabled' : 'disabled'} successfully`, 'success');
+            loadWorkflows(); // Refresh the list
+        } else {
+            showToast('Failed to update workflow: ' + data.error, 'error');
         }
-        
-        // Send request to server
-        const response = await fetch(`/api/workflows/${workflowId}/toggle`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ enabled })
-        });
-        
-        const data = await response.json();
-        
-        if (!data.success) {
-            throw new Error(data.error || 'Failed to update workflow state');
-        }
-        
-        // Force refresh the workflow state from server to ensure consistency
-        await updateWorkflowToggles();
-        showToast(`Workflow ${enabled ? 'enabled' : 'disabled'} successfully`);
-        
-    } catch (error) {
+    })
+    .catch(error => {
         console.error('Error toggling workflow:', error);
-        
-        // Revert UI to previous state
-        if (toggle) toggle.checked = !enabled;
-        if (statusBadge) {
-            statusBadge.className = 'badge ' + (!enabled ? 'bg-success' : 'bg-secondary');
-            statusBadge.textContent = !enabled ? 'Enabled' : 'Disabled';
-        }
-        
-        showToast(error.message || 'Error toggling workflow', 'error');
-    }
+        showToast('Failed to update workflow', 'error');
+    });
 }
 
 // View workflow details
