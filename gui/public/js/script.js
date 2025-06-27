@@ -439,51 +439,49 @@ document.addEventListener('DOMContentLoaded', () => {
 // API functions
 async function loadStatus() {
   try {
-    const response = await fetch('/api/status');
-    if (!response.ok) throw new Error('Failed to fetch status');
-    
-    const data = await response.json();
+    const data = await ApiClient.get('/api/status');
     
     // Update status elements
-    botStatusElement.textContent = data.status;
-    currentModelElement.textContent = data.model || 'Not set';
-    ragStatusElement.textContent = data.ragEnabled ? 'Enabled' : 'Disabled';
-    providerElement.textContent = data.provider || 'Not set';
+    if (botStatusElement) botStatusElement.textContent = data.status;
+    if (currentModelElement) currentModelElement.textContent = data.model || 'Not set';
+    if (ragStatusElement) ragStatusElement.textContent = data.ragEnabled ? 'Enabled' : 'Disabled';
+    if (providerElement) providerElement.textContent = data.provider || 'Not set';
     
-    connectionStatus.className = 'badge ' + (data.status === 'online' ? 'bg-success' : 'bg-danger');
+    if (connectionStatus) {
+      connectionStatus.className = 'badge ' + (data.status === 'online' ? 'bg-success' : 'bg-danger');
+    }
   } catch (error) {
     console.error('Error loading status:', error);
-    connectionStatus.className = 'badge bg-danger';
-    connectionStatus.textContent = 'Offline';
+    if (connectionStatus) {
+      connectionStatus.className = 'badge bg-danger';
+      connectionStatus.textContent = 'Offline';
+    }
   }
 }
 
 async function loadSettings() {
   try {
-    const response = await fetch('/api/settings');
-    const settings = await response.json();
+    const settings = await ApiClient.get('/api/settings');
     
     // Update form fields
-    providerSelect.value = settings.provider;
-    modelInput.value = settings.model;
-    ragEnabledCheckbox.checked = settings.ragEnabled;
-    systemPromptTextarea.value = settings.systemPrompt;
+    if (providerSelect) providerSelect.value = settings.provider || 'openai';
+    if (modelInput) modelInput.value = settings.model || '';
+    if (ragEnabledCheckbox) ragEnabledCheckbox.checked = settings.ragEnabled || false;
+    if (systemPromptTextarea) systemPromptTextarea.value = settings.systemPrompt || '';
     
-    // API keys - show masked versions if present (already masked by backend)
-    if (settings.apiKeys) {
-      if (settings.apiKeys.openai) {
-        openaiApiKeyInput.value = settings.apiKeys.openai;
-        openaiApiKeyInput.dataset.masked = 'true';
-      }
-      
-      if (settings.apiKeys.openrouter) {
-        openrouterApiKeyInput.value = settings.apiKeys.openrouter;
-        openrouterApiKeyInput.dataset.masked = 'true';
-      }
+    // Update API key fields
+    if (openaiApiKeyInput) {
+      openaiApiKeyInput.value = settings.openaiApiKey || '';
+      openaiApiKeyInput.dataset.masked = 'true';
     }
     
-    // Update which API key fields are visible
-    updateApiKeyVisibility(settings.provider);
+    if (openrouterApiKeyInput) {
+      openrouterApiKeyInput.value = settings.openrouterApiKey || '';
+      openrouterApiKeyInput.dataset.masked = 'true';
+    }
+    
+    // Update API key visibility based on provider
+    updateApiKeyVisibility(settings.provider || 'openai');
     
     // Update profile information if available
     const profileSelect = document.getElementById('profile-select');
@@ -496,16 +494,18 @@ async function loadSettings() {
         const option = document.createElement('option');
         option.value = profile;
         option.textContent = profile;
+        if (profile === settings.currentProfile) {
+          option.selected = true;
+        }
         profileSelect.appendChild(option);
       });
-      
-      // Select current profile
-      if (settings.currentProfileName) {
-        profileSelect.value = settings.currentProfileName;
-      }
     }
+    
+    return settings;
   } catch (error) {
     console.error('Error loading settings:', error);
+    showToast(`Error loading settings: ${error.message}`, 'danger');
+    throw error;
   }
 }
 
@@ -515,37 +515,14 @@ async function saveSettings() {
       provider: providerSelect.value,
       model: modelInput.value,
       ragEnabled: ragEnabledCheckbox.checked,
-      systemPrompt: systemPromptTextarea.value,
-      apiKeys: {}
+      systemPrompt: systemPromptTextarea.value.trim(),
+      openaiApiKey: openaiApiKeyInput.value,
+      openrouterApiKey: openrouterApiKeyInput.value
     };
-    
-    // Only send API keys if they've been changed (not masked)
-    if (openaiApiKeyInput.value && openaiApiKeyInput.dataset.masked !== 'true') {
-      settings.apiKeys.openai = openaiApiKeyInput.value;
-    }
-    
-    if (openrouterApiKeyInput.value && openrouterApiKeyInput.dataset.masked !== 'true') {
-      settings.apiKeys.openrouter = openrouterApiKeyInput.value;
-    }
-    
-    const response = await fetch('/api/settings', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify(settings)
-    });
-    
-    const result = await response.json();
-    
-    if (result.success) {
-      showToast('Settings saved successfully!');
-      // Reload settings to get properly masked keys from backend
-      loadSettings();
-      loadStatus(); // Refresh status to show updated settings
-    } else {
-      showToast(`Error: ${result.error}`, 'error');
-    }
+
+    const result = await ApiClient.post('/api/settings', settings);
+    showToast('Settings saved successfully!', 'success');
+    return result;
   } catch (error) {
     console.error('Error saving settings:', error);
     showToast(`Error saving settings: ${error.message}`, 'error');
@@ -680,10 +657,7 @@ async function deleteChat(chatId) {
 
     if (!confirmed) return;
 
-    const response = await fetch(`/api/chats/${encodeURIComponent(chatId)}`, {
-      method: 'DELETE'
-    });
-
+    const response = await ApiClient.delete(`/api/chats/${encodeURIComponent(chatId)}`);
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({}));
       throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
@@ -1623,13 +1597,7 @@ async function loadChats() {
     const { limit, offset, sort } = chatHistoryState;
     const url = `/api/chats?limit=${limit}&offset=${offset}&sort=${sort}`;
     
-    const response = await fetch(url);
-    if (!response.ok) {
-      const errorData = await response.json().catch(() => ({}));
-      throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
-    }
-    
-    const result = await response.json();
+    const result = await ApiClient.get(url);
     const { data: chats, total } = result;
     
     // Update pagination state
@@ -1717,18 +1685,12 @@ async function loadChats() {
         
         if (confirmed) {
           try {
-            const response = await fetch(`/api/chats/${encodeURIComponent(chatId)}`, {
-              method: 'DELETE'
-            });
-            if (response.ok) {
-              loadChats(); // Refresh the list
-              showToast('Chat deleted successfully', 'success');
-            } else {
-              throw new Error('Failed to delete chat');
-            }
+            await ApiClient.delete(`/api/chats/${encodeURIComponent(chat.id)}`);
+            loadChats(); // Refresh the list
+            showToast('Chat deleted successfully', 'success');
           } catch (error) {
             console.error('Error deleting chat:', error);
-            showToast('Error deleting chat', 'danger');
+            showToast(`Error deleting chat: ${error.message}`, 'danger');
           }
         }
       });
@@ -2095,32 +2057,13 @@ async function uploadDocument(event) {
     const formData = new FormData();
     formData.append('document', file);
     
-    // Send the file to the server
-    const response = await fetch('/api/kb/upload', {
-      method: 'POST',
-      body: formData
-    });
+    // Send the file to the server using ApiClient
+    const result = await ApiClient.post('/api/kb/upload', formData, false);
+    console.log('Upload response:', result);
     
-    // Get response text first
-    const responseText = await response.text();
-    console.log('Raw response:', responseText);
-    
-    // Try to parse as JSON
-    let result;
-    try {
-      result = JSON.parse(responseText);
-      console.log('Upload response:', result);
-    } catch (parseError) {
-      console.error('Failed to parse response as JSON:', parseError);
-      throw new Error(`Server returned invalid JSON response. Status: ${response.status} ${response.statusText}`);
+    if (!result.success) {
+      throw new Error(result.error || 'Failed to upload document');
     }
-    
-    if (!response.ok || !result.success) {
-      throw new Error(result.error || `Failed to upload document: ${response.status} ${response.statusText}`);
-    }
-    
-    // Reset the file input
-    event.target.value = '';
     
     // Show success message
     showToast('Document uploaded successfully', 'success');
@@ -2131,11 +2074,11 @@ async function uploadDocument(event) {
     console.error('Error uploading document:', error);
     showToast(`Upload failed: ${error.message}`, 'error');
     
-    // Reset the file input
-    event.target.value = '';
-    
-    // Reload the KB documents list
+    // Reload the KB documents list to show current state
     loadKbDocuments();
+  } finally {
+    // Always reset the file input
+    event.target.value = '';
   }
 }
 
@@ -2152,13 +2095,7 @@ async function loadKbDocuments() {
   `;
   
   try {
-    const response = await fetch('/api/kb');
-    
-    if (!response.ok) {
-      throw new Error(`Failed to fetch KB documents: ${response.status} ${response.statusText}`);
-    }
-    
-    const documents = await response.json();
+    const documents = await ApiClient.get('/api/kb');
     renderKnowledgeBase(Array.isArray(documents) ? documents : []);
   } catch (error) {
     console.error('Error loading KB documents:', error);
@@ -2257,17 +2194,7 @@ async function deleteKbDocument(filename) {
   try {
     console.log('Deleting document:', filename);
     
-    const response = await fetch(`/api/kb/documents/${encodeURIComponent(filename)}`, {
-      method: 'DELETE'
-    });
-    
-    if (!response.ok) {
-      const text = await response.text();
-      console.error('Delete error response:', text);
-      throw new Error(`Failed to delete document: ${response.status} ${response.statusText}`);
-    }
-    
-    const result = await response.json();
+    const result = await ApiClient.delete(`/api/kb/documents/${encodeURIComponent(filename)}`);
     console.log('Delete response:', result);
     
     if (!result.success) {
@@ -2299,28 +2226,15 @@ function formatFileSize(size) {
 // Toggle document enabled/disabled state for RAG operations
 async function toggleKbDocument(fileName, enabled) {
   try {
-    const response = await fetch('/api/kb/document/toggle', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({ fileName, enabled })
-    });
+    const result = await ApiClient.post('/api/kb/document/toggle', { fileName, enabled });
     
-    if (!response.ok) {
-      const errorData = await response.json();
-      throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
-    }
-    
-    const result = await response.json();
     if (result.success) {
       showToast(`Document ${fileName} ${enabled ? 'enabled' : 'disabled'} for RAG operations`, 'success');
+      // Update the document list to reflect the change
+      loadKbDocuments();
     } else {
       throw new Error(result.message || 'Failed to toggle document status');
     }
-    
-    // Update the document list to reflect the change
-    loadKbDocuments();
     
     return result;
   } catch (error) {
@@ -2481,10 +2395,7 @@ async function loadCommandHistory() {
     const { limit, offset, sort } = commandHistoryState;
     const url = `/api/commands?limit=${limit}&offset=${offset}&sort=${sort}`;
     
-    const response = await fetch(url);
-    if (!response.ok) throw new Error('Failed to fetch command history');
-    
-    const { data: commands, total } = await response.json();
+    const { data: commands, total } = await ApiClient.get(url);
     commandHistoryState.total = total;
     
     // Clear table
@@ -2688,21 +2599,18 @@ function initializeMemoryChart() {
 // System stats functions
 async function loadSystemStats() {
   try {
-    const response = await fetch('/api/stats');
-    if (!response.ok) throw new Error('Failed to fetch system stats');
-    
-    const stats = await response.json();
+    const stats = await ApiClient.get('/api/stats');
     
     // Update dashboard values
-    uptimeValue.textContent = formatUptime(stats.uptime);
-    heapUsedValue.textContent = formatBytes(stats.memory.heapUsed);
-    cpuUsageValue.textContent = formatCpuUsage(stats.cpu);
-    platformInfoValue.textContent = `${stats.platform} (${stats.nodeVersion})`;
+    if (uptimeValue) uptimeValue.textContent = formatUptime(stats.uptime);
+    if (heapUsedValue) heapUsedValue.textContent = formatBytes(stats.memory.heapUsed);
+    if (cpuUsageValue) cpuUsageValue.textContent = formatCpuUsage(stats.cpu);
+    if (platformInfoValue) platformInfoValue.textContent = `${stats.platform} (${stats.nodeVersion})`;
     
     // Update system tab values
-    nodeVersionElement.textContent = stats.nodeVersion;
-    systemPlatformElement.textContent = stats.platform;
-    systemUptimeElement.textContent = formatUptime(stats.uptime);
+    if (nodeVersionElement) nodeVersionElement.textContent = stats.nodeVersion;
+    if (systemPlatformElement) systemPlatformElement.textContent = stats.platform;
+    if (systemUptimeElement) systemUptimeElement.textContent = formatUptime(stats.uptime);
     
     // Update CPU model
     const cpuModelElement = document.getElementById('cpu-model');
@@ -2711,10 +2619,10 @@ async function loadSystemStats() {
     }
     
     // Memory usage details
-    memoryRssElement.textContent = formatBytes(stats.memory.rss);
-    memoryHeapTotalElement.textContent = formatBytes(stats.memory.heapTotal);
-    memoryHeapUsedElement.textContent = formatBytes(stats.memory.heapUsed);
-    memoryExternalElement.textContent = formatBytes(stats.memory.external || 0);
+    if (memoryRssElement) memoryRssElement.textContent = formatBytes(stats.memory.rss);
+    if (memoryHeapTotalElement) memoryHeapTotalElement.textContent = formatBytes(stats.memory.heapTotal);
+    if (memoryHeapUsedElement) memoryHeapUsedElement.textContent = formatBytes(stats.memory.heapUsed);
+    if (memoryExternalElement) memoryExternalElement.textContent = formatBytes(stats.memory.external || 0);
     
     // Update GPU information if available
     updateGpuInfo(stats.gpu);
