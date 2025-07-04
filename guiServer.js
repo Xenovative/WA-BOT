@@ -1,6 +1,7 @@
 // Load environment variables from .env file
 require('dotenv').config();
 
+const { MessageMedia } = require('whatsapp-web.js');
 const express = require('express');
 const path = require('path');
 const http = require('http');
