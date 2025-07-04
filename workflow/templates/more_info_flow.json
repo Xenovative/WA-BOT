@@ -1,0 +1,107 @@
+[
+    {
+        "id": "more-info-flow",
+        "type": "tab",
+        "label": "More Info Flow",
+        "disabled": false,
+        "info": "Responds to keywords with relevant media and information"
+    },
+    {
+        "id": "whatsapp-message-in",
+        "type": "mqtt in",
+        "z": "more-info-flow",
+        "name": "WhatsApp Messages",
+        "topic": "whatsapp/messages",
+        "qos": "2",
+        "datatype": "json",
+        "broker": "broker",
+        "nl": false,
+        "rap": true,
+        "rh": 0,
+        "x": 170,
+        "y": 120,
+        "wires": [
+            ["detect-keywords"]
+        ]
+    },
+    {
+        "id": "detect-keywords",
+        "type": "function",
+        "z": "more-info-flow",
+        "name": "Detect Keywords",
+        "func": "// Define keywords and their corresponding responses\nconst keywordResponses = {\n    'product': {\n        message: 'Here\\'s information about our product:',\n        media: 'https://example.com/product.jpg',\n        caption: 'Check out our amazing product!',\n        type: 'image'\n    },\n    'service': {\n        message: 'Here\\'s information about our services:', \n        media: 'https://example.com/services.pdf',\n        caption: 'Our services brochure',\n        type: 'document'\n    },\n    'price': {\n        message: 'Here\\'s our price list:',\n        media: 'https://example.com/price-list.pdf',\n        caption: 'Current price list',\n        type: 'document'\n    },\n    'catalog': {\n        message: 'Here\\'s our latest catalog:',\n        media: 'https://example.com/catalog.pdf',\n        caption: 'Product catalog',\n        type: 'document'\n    },\n    'contact': {\n        message: '📞 Contact Us:\\\\n\\\\n📱 Phone: +852 1234 5678\\\\n📧 Email: info@example.com\\\\n📍 Address: 123 Business Street, Hong Kong',\n        media: 'https://example.com/location.jpg',\n        caption: 'Our location',\n        type: 'image'\n    }\n};\n\n// Extract message content\nconst messageData = msg.payload;\n\n// Skip if not a text message\nif (!messageData || !messageData.text) {\n    return [null, msg];\n}\n\n// Convert message to lowercase for case-insensitive matching\nconst text = messageData.text.toLowerCase();\n\n// Check for keywords\nlet response = null;\nfor (const [keyword, data] of Object.entries(keywordResponses)) {\n    if (text.includes(keyword)) {\n        response = {\n            ...data,\n            chatId: messageData.chatId\n        };\n        break;\n    }\n}\n\nif (response) {\n    msg.payload = response;\n    return [msg, null];\n}\n\nreturn [null, msg];",
+        "outputs": 2,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 390,
+        "y": 120,
+        "wires": [
+            ["prepare-response"],
+            []
+        ]
+    },
+    {
+        "id": "prepare-response",
+        "type": "function",
+        "z": "more-info-flow",
+        "name": "Prepare Response",
+        "func": "// Prepare the response message\nconst response = {\n    chatId: msg.payload.chatId,\n    message: msg.payload.message,\n    media: msg.payload.media,\n    caption: msg.payload.caption,\n    type: msg.payload.type\n};\n\nmsg.payload = response;\nreturn [msg, null];\n",
+        "outputs": 1,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 630,
+        "y": 120,
+        "wires": [
+            ["send-message"]
+        ]
+    },
+    {
+        "id": "send-message",
+        "type": "http request",
+        "z": "more-info-flow",
+        "name": "Send WhatsApp Message",
+        "method": "POST",
+        "ret": "obj",
+        "paytoqs": "ignore",
+        "url": "http://localhost:3000/api/workflow/send-message",
+        "tls": "",
+        "persist": false,
+        "proxy": "",
+        "authType": "",
+        "x": 850,
+        "y": 120,
+        "wires": [
+            []
+        ]
+    },
+    {
+        "id": "broker",
+        "type": "mqtt-broker",
+        "name": "Local Broker",
+        "broker": "localhost",
+        "port": "1883",
+        "clientid": "",
+        "autoConnect": true,
+        "usetls": false,
+        "protocolVersion": "4",
+        "keepalive": "60",
+        "cleansession": true,
+        "birthTopic": "",
+        "birthQos": "0",
+        "birthPayload": "",
+        "birthMsg": {},
+        "closeTopic": "",
+        "closeQos": "0",
+        "closePayload": "",
+        "closeMsg": {},
+        "willTopic": "",
+        "willQos": "0",
+        "willPayload": "",
+        "willMsg": {},
+        "sessionExpiry": ""
+    }
+]

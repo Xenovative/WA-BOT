@@ -55,10 +55,16 @@ app.post('/api/workflow/send-message', express.json(), async (req, res) => {
     const chatId = req.body.chatId || req.body.recipient;
     // Support both message and text parameters for compatibility
     const messageContent = req.body.message || req.body.text || req.body.payload;
+    const mediaUrl = req.body.media;
+    const caption = req.body.caption || '';
+    const mediaType = req.body.type || 'image'; // default to image if not specified
     
-    if (!chatId || !messageContent) {
-      console.log('Missing parameters:', { chatId, messageContent, body: req.body });
-      return res.status(400).json({ success: false, error: 'Missing chatId/recipient or message parameter' });
+    if (!chatId || (!messageContent && !mediaUrl)) {
+      console.log('Missing parameters:', { chatId, messageContent, mediaUrl, body: req.body });
+      return res.status(400).json({ 
+        success: false, 
+        error: 'Missing required parameters: chatId/recipient and either message or media is required' 
+      });
     }
     
     // Get the WhatsApp client from global scope
@@ -74,15 +80,29 @@ app.post('/api/workflow/send-message', express.json(), async (req, res) => {
       
       // Add message to chat history before sending
       if (global.chatHandler) {
-        global.chatHandler.addMessage(chatId, 'assistant', messageContent);
+        const displayContent = messageContent || `[${mediaType.toUpperCase()}] ${caption || mediaUrl}`;
+        global.chatHandler.addMessage(chatId, 'assistant', displayContent);
         console.log(`[Workflow: ${workflowName}] Added message to chat history for ${chatId}`);
       } else {
         console.warn('Chat handler not available, message not saved to history');
       }
       
-      // Send the message
-      await whatsapp.client.sendMessage(chatId, messageContent);
-      console.log(`Message sent to ${chatId}: ${messageContent.substring(0, 50)}${messageContent.length > 50 ? '...' : ''}`);
+      // Send media if URL is provided
+      if (mediaUrl) {
+        await whatsapp.client.sendMessage(chatId, {
+          [mediaType === 'document' ? 'document' : mediaType]: {
+            url: mediaUrl
+          },
+          caption: messageContent || caption
+        });
+        console.log(`Media (${mediaType}) sent to ${chatId}: ${mediaUrl}`);
+      } 
+      // Otherwise send text message
+      else {
+        await whatsapp.client.sendMessage(chatId, messageContent);
+        console.log(`Message sent to ${chatId}: ${messageContent.substring(0, 50)}${messageContent.length > 50 ? '...' : ''}`);
+      }
+      
       res.json({ success: true, message: 'Message sent successfully' });
     } catch (error) {
       console.error('Error sending WhatsApp message:', error);
