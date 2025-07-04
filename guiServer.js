@@ -103,21 +103,38 @@ app.post('/api/workflow/send-message', express.json(), async (req, res) => {
           console.error('Error checking media URL:', error.message);
         }
 
-        // Debug: Log the message object being sent
-        const messageObj = {
-          [mediaType === 'document' ? 'document' : mediaType]: {
-            url: mediaUrl
-          },
-          caption: messageContent || caption
-        };
-        console.log('Sending to WhatsApp client:', JSON.stringify(messageObj, null, 2));
+        // Create the media object according to whatsapp-web.js format
+        const media = await MessageMedia.fromUrl(mediaUrl, {
+          unsafeMime: true,
+          filename: `media.${mediaType === 'image' ? 'jpg' : 'pdf'}`
+        });
+        
+        // Add caption if provided
+        const sendOptions = {};
+        if (messageContent || caption) {
+          sendOptions.caption = messageContent || caption;
+        }
+        
+        console.log('Sending media to WhatsApp client:', {
+          type: mediaType,
+          hasCaption: !!(messageContent || caption),
+          mimeType: media.mimetype
+        });
 
         // Send the message and log the result
         try {
-          const message = await whatsapp.client.sendMessage(chatId, messageObj);
+          let message;
+          if (mediaType === 'document') {
+            message = await whatsapp.client.sendMessage(chatId, media, {
+              ...sendOptions,
+              sendMediaAsDocument: true
+            });
+          } else {
+            message = await whatsapp.client.sendMessage(chatId, media, sendOptions);
+          }
           console.log('Message sent with ID:', message.id?._serialized || 'No ID returned');
         } catch (error) {
-          console.error('Error sending message:', error.message);
+          console.error('Error sending message:', error);
           throw error;
         }
       } 
