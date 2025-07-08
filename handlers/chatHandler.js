@@ -22,17 +22,31 @@ class ChatHandler {
   }
 
   /**
+   * Get platform-prefixed chat ID
+   * @param {string} platform - Platform identifier ('telegram', 'whatsapp', etc.)
+   * @param {string} chatId - Original chat ID
+   * @returns {string} Platform-prefixed chat ID
+   */
+  getPlatformChatId(platform, chatId) {
+    if (!platform || !chatId) return chatId;
+    return `${platform}:${chatId}`;
+  }
+
+  /**
    * Add a message to the conversation history
    * @param {string} chatId - Unique identifier for the chat
    * @param {string} role - 'user' or 'assistant'
    * @param {string} content - Message content
+   * @param {string} [platform] - Platform identifier ('telegram', 'whatsapp', etc.)
    */
-  addMessage(chatId, role, content) {
-    if (!this.conversations.has(chatId)) {
-      this.conversations.set(chatId, []);
+  addMessage(chatId, role, content, platform) {
+    const platformChatId = platform ? this.getPlatformChatId(platform, chatId) : chatId;
+    
+    if (!this.conversations.has(platformChatId)) {
+      this.conversations.set(platformChatId, []);
     }
     
-    const conversation = this.conversations.get(chatId);
+    const conversation = this.conversations.get(platformChatId);
     const timestamp = new Date().toISOString();
     conversation.push({ 
       role, 
@@ -49,10 +63,12 @@ class ChatHandler {
 
   /**
    * Get conversation history for a chat
-   * @param {string} chatId - Unique identifier for the chat
-   * @returns {Array} Array of message objects with role and content
+   * @param {string} chatId - The chat ID to get conversation for
+   * @param {string} [platform] - Platform identifier ('telegram', 'whatsapp', etc.)
+   * @returns {Array} Array of message objects
    */
-  getConversation(chatId) {
+  getConversation(chatId, platform) {
+    const platformChatId = platform ? this.getPlatformChatId(platform, chatId) : chatId;
     console.log(`[ChatHandler] Getting conversation for chat ID: ${chatId}`);
     if (!chatId) {
       console.log('[ChatHandler] No chat ID provided, returning empty array');
@@ -60,7 +76,7 @@ class ChatHandler {
     }
     
     // Always load from disk to ensure we have the most up-to-date messages
-    const messages = this.loadChat(chatId);
+    const messages = this.loadChat(platformChatId);
     console.log(`[ChatHandler] Loaded ${messages.length} messages for chat ${chatId} from disk`);
     
     // Return the loaded messages (or empty array if none found)

@@ -12,12 +12,26 @@ const ragProcessor = require('./kb/ragProcessor');
 const fileWatcher = require('./kb/fileWatcher');
 const { handleTimeDateQuery } = require('./utils/timeUtils');
 
+// Import bots
+const TelegramBotService = require('./services/telegramBot');
+
 // Import GUI server
 const guiServer = require('./guiServer');
 
 // Import workflow manager
 const WorkflowManager = require('./workflow/workflowManager');
 const workflowManager = new WorkflowManager();
+
+// Initialize Telegram bot if token is provided
+let telegramBot = null;
+if (process.env.TELEGRAM_BOT_TOKEN) {
+  try {
+    telegramBot = new TelegramBotService(process.env.TELEGRAM_BOT_TOKEN);
+    telegramBot.start();
+  } catch (error) {
+    console.error('Failed to start Telegram bot:', error);
+  }
+}
 
 // Make chatHandler globally available for workflow messages
 global.chatHandler = chatHandler;
@@ -45,6 +59,12 @@ async function handleGracefulShutdown() {
     if (workflowManager) {
       console.log('Shutting down workflow system...');
       await workflowManager.shutdown();
+    }
+    
+    // Shutdown Telegram bot if running
+    if (telegramBot) {
+      console.log('Shutting down Telegram bot...');
+      telegramBot.stop();
     }
     
     // Close WhatsApp client
@@ -111,10 +131,13 @@ function updateLLMClient() {
   console.log(`System prompt: ${settings.systemPrompt.substring(0, 50)}${settings.systemPrompt.length > 50 ? '...' : ''}`);
 }
 
-// QR code handling
+// Make client globally available for QR code generation
+global.client = client;
+
+// QR code handling - store for web interface
 client.on('qr', (qr) => {
-  console.log('QR Code received. Scan with WhatsApp to authenticate:');
-  qrcode.generate(qr, { small: true });
+  console.log('QR Code generated for web interface');
+  global.qrCodeData = qr;
 });
 
 // Authentication handling
@@ -163,54 +186,8 @@ client.on('ready', async () => {
   };
   console.log('WhatsApp client made globally available');
   
-  // Initialize knowledge base
-  try {
-    await kbManager.initialize();
-    console.log('Knowledge base initialized');
-    
-    // Start file watcher for the uploads directory
-    fileWatcher.startWatching();
-    
-    // Initialize workflow system
-    try {
-      // Make bot components available to workflows
-      const botComponents = {
-        whatsappClient: client,
-        chatHandler: chatHandler,
-        commandHandler: commandHandler,
-        kbManager: kbManager,
-        fileHandler: fileHandler,
-        ragProcessor: ragProcessor
-      };
-      
-      // Initialize the workflow manager with bot components
-      await workflowManager.initialize(botComponents);
-      console.log('Workflow system initialized with MQTT broker');
-      
-      // Clear workflows on startup if configured
-      if (CLEAR_WORKFLOWS_ON_STARTUP) {
-        console.log('CLEAR_WORKFLOWS_ON_STARTUP is enabled, clearing all workflows...');
-        await workflowManager.clearEnabledWorkflows();
-      } else {
-        console.log('CLEAR_WORKFLOWS_ON_STARTUP is disabled, workflows will maintain their previous state');
-      }
-
-      // Wait a moment for MQTT to fully initialize
-      await new Promise(resolve => setTimeout(resolve, 1000));
-
-      // Register shutdown handlers
-      process.on('SIGINT', handleGracefulShutdown);
-      process.on('SIGTERM', handleGracefulShutdown);
-      process.on('uncaughtException', (err) => {
-        console.error('Uncaught exception:', err);
-        handleGracefulShutdown();
-      });
-    } catch (workflowError) {
-      console.error('Error initializing workflow system:', workflowError);
-    }
-  } catch (error) {
-    console.error('Error initializing knowledge base:', error);
-  }
+  // Initialize all services independently
+  initializeServices().catch(console.error);
 });
 
 // Handle file uploads for knowledge base
@@ -657,11 +634,11 @@ client.on('message', async (message) => {
         response = await commandHandler.processCommand(cleanMessageText, chatId, message.author || message.from);
         updateLLMClient(); // Update LLM client if provider/model changed
       } else {
-        // Add user message to chat history
-        chatHandler.addMessage(chatId, 'user', cleanMessageText);
+        // Add user message to chat history with platform identifier
+        chatHandler.addMessage(chatId, 'user', cleanMessageText, 'whatsapp');
         
-        // Get conversation history
-        const conversation = chatHandler.getConversation(chatId);
+        // Get conversation history with platform identifier
+        const conversation = chatHandler.getConversation(chatId, 'whatsapp');
         
         // Get current settings
         const settings = commandHandler.getCurrentSettings();
@@ -693,8 +670,8 @@ client.on('message', async (message) => {
           response = await currentLLMClient.generateResponse(cleanMessageText, messages, settings.parameters);
         }
         
-        // Add assistant response to chat history
-        chatHandler.addMessage(chatId, 'assistant', response);
+        // Add assistant response to chat history with platform identifier
+        chatHandler.addMessage(chatId, 'assistant', response, 'whatsapp');
         
         // Add citations if RAG was used and citations are enabled
         const showCitations = process.env.KB_SHOW_CITATIONS === 'true';
@@ -865,6 +842,74 @@ function scheduleReconnect() {
     initializeClient();
   }, delay);
 }
+
+// Initialize all services independently
+async function initializeServices() {
+  // Initialize workflow system
+  try {
+    await initializeWorkflowSystem();
+  } catch (error) {
+    console.error('Error initializing workflow system:', error);
+  }
+  
+  // Initialize knowledge base
+  try {
+    await kbManager.initialize();
+    console.log('Knowledge base initialized');
+    
+    // Start file watcher for the uploads directory
+    fileWatcher.startWatching();
+  } catch (error) {
+    console.error('Error initializing knowledge base:', error);
+  }
+  
+  // Initialize other services here as needed
+}
+
+// Initialize workflow system
+async function initializeWorkflowSystem() {
+  try {
+    // Make bot components available to workflows
+    const botComponents = {
+      whatsappClient: client,  // This will be null until WhatsApp is connected
+      chatHandler: chatHandler,
+      commandHandler: commandHandler,
+      kbManager: kbManager,
+      fileHandler: fileHandler,
+      ragProcessor: ragProcessor
+    };
+    
+    // Initialize the workflow manager with bot components
+    await workflowManager.initialize(botComponents);
+    console.log('Workflow system initialized with MQTT broker');
+    
+    // Clear workflows on startup if configured
+    if (CLEAR_WORKFLOWS_ON_STARTUP) {
+      console.log('CLEAR_WORKFLOWS_ON_STARTUP is enabled, clearing all workflows...');
+      await workflowManager.clearEnabledWorkflows();
+    } else {
+      console.log('CLEAR_WORKFLOWS_ON_STARTUP is disabled, workflows will maintain their previous state');
+    }
+    
+    // Update the WhatsApp client reference when it becomes available
+    if (client) {
+      workflowManager.updateBotComponent('whatsappClient', client);
+    }
+  } catch (workflowError) {
+    console.error('Error initializing workflow system:', workflowError);
+  }
+}
+
+// Register shutdown handlers
+process.on('SIGINT', handleGracefulShutdown);
+process.on('SIGTERM', handleGracefulShutdown);
+process.on('uncaughtException', (err) => {
+  console.error('Uncaught exception:', err);
+  handleGracefulShutdown();
+});
+
+// Initialize all services
+initializeServices().catch(console.error);
 
 // Initialize WhatsApp client
 initializeClient();

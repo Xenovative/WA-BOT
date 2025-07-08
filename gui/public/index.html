@@ -17,6 +17,8 @@
     <!-- Marked.js for markdown rendering -->
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/dompurify@3.0.5/dist/purify.min.js"></script>
+    <!-- QR Code Generator -->
+    <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.1/build/qrcode.min.js"></script></script>
     <link rel="stylesheet" href="/css/style.css">
     <link rel="stylesheet" href="/css/chat.css">
 </head>
@@ -30,6 +32,32 @@
                         <img src="/assets/whatsxeno.png" alt="WhatsXENO Logo" class="img-fluid mb-3" style="max-height: 80px; width: auto;">
                         <h3 class="text-light mb-0">WhatsXENO</h3>
                         <div id="connection-status" class="badge bg-success mt-1">Online</div>
+                        <div class="mt-3">
+                            <select id="app-selector" class="form-select form-select-sm mb-2">
+                                <option value="whatsapp">WhatsApp</option>
+                                <option value="telegram">Telegram</option>
+                            </select>
+                            
+                            <!-- WhatsApp QR Code Button -->
+                            <div id="whatsapp-auth-container">
+                                <button id="show-qr-scanner" class="btn btn-outline-light w-100 btn-sm mb-2" data-bs-toggle="modal" data-bs-target="#qrScannerModal">
+                                    <i class="bi bi-qr-code-scan"></i> Scan WhatsApp QR Code
+                                </button>
+                            </div>
+                            
+                            <!-- Telegram Token Input -->
+                            <div id="telegram-auth-container" style="display: none;">
+                                <div class="input-group input-group-sm mb-2">
+                                    <input type="password" id="telegram-token" class="form-control" placeholder="Enter Telegram Bot Token">
+                                    <button id="save-telegram-token" class="btn btn-outline-light" type="button">
+                                        <i class="bi bi-save"></i>
+                                    </button>
+                                </div>
+                                <div id="telegram-status" class="small text-muted">
+                                    <i class="bi bi-info-circle"></i> Get token from @BotFather
+                                </div>
+                            </div>
+                        </div>
                     </div>
                     <ul class="nav flex-column">
                         <li class="nav-item">
@@ -676,6 +704,32 @@
                     </div>
                 </div>
             </main>
+        </div>
+    </div>
+
+    <!-- QR Code Scanner Modal -->
+    <div class="modal fade" id="qrScannerModal" tabindex="-1" aria-labelledby="qrScannerModalLabel" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header bg-primary text-white">
+                    <h5 class="modal-title" id="qrScannerModalLabel">Scan WhatsApp QR Code</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body text-center">
+                    <div id="qr-code-container" class="mb-3">
+                        <p>Loading QR code...</p>
+                    </div>
+                    <div id="qr-status" class="alert alert-info">
+                        <i class="bi bi-qr-code-scan"></i> Scan the QR code with your WhatsApp mobile app
+                    </div>
+                    <button id="refresh-qr" class="btn btn-primary">
+                        <i class="bi bi-arrow-clockwise"></i> Refresh QR Code
+                    </button>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                </div>
+            </div>
         </div>
     </div>
 

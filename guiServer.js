@@ -47,6 +47,129 @@ try {
 
 // API endpoints for the GUI
 
+// Get WhatsApp QR code for authentication
+app.get('/api/whatsapp/qr', (req, res) => {
+    try {
+        // Get the WhatsApp client instance
+        const client = global.client;
+        if (!client) {
+            return res.status(503).json({ error: 'WhatsApp client not initialized' });
+        }
+
+        // If client is already authenticated, no need for QR code
+        if (client.info) {
+            return res.status(200).json({ authenticated: true });
+        }
+
+        // Set up QR code handler if not already set
+        if (!global.qrCodeData) {
+            client.on('qr', (qr) => {
+                // Store the latest QR code data
+                global.qrCodeData = qr;
+                console.log('QR Code generated');
+            });
+        }
+
+        // Return the latest QR code data
+        if (global.qrCodeData) {
+            return res.json({ qr: global.qrCodeData });
+        } else {
+            return res.status(202).json({ message: 'Generating QR code...' });
+        }
+    } catch (error) {
+        console.error('Error generating QR code:', error);
+        res.status(500).json({ error: 'Failed to generate QR code' });
+    }
+});
+
+// Check WhatsApp authentication status
+app.get('/api/whatsapp/status', (req, res) => {
+    try {
+        const client = global.client;
+        if (!client) {
+            return res.json({ authenticated: false, message: 'WhatsApp client not initialized' });
+        }
+        
+        // Check if client is authenticated
+        const isAuthenticated = !!client.info;
+        
+        // If authenticated, clear any stored QR code
+        if (isAuthenticated && global.qrCodeData) {
+            delete global.qrCodeData;
+        }
+        
+        res.json({ 
+            authenticated: isAuthenticated,
+            user: isAuthenticated ? client.info.wid.user : null
+        });
+    } catch (error) {
+        console.error('Error checking WhatsApp status:', error);
+        res.status(500).json({ error: 'Failed to check WhatsApp status' });
+    }
+});
+
+// Handle Telegram token update
+app.post('/api/telegram/set-token', express.json(), async (req, res) => {
+    try {
+        const { token } = req.body;
+        if (!token) {
+            return res.status(400).json({ error: 'Token is required' });
+        }
+
+        // Update .env file with new token
+        const envPath = path.join(process.cwd(), '.env');
+        let envContent = '';
+        
+        // Read existing .env file if it exists
+        if (fs.existsSync(envPath)) {
+            envContent = fs.readFileSync(envPath, 'utf-8');
+        }
+        
+        // Update or add TELEGRAM_BOT_TOKEN
+        if (envContent.includes('TELEGRAM_BOT_TOKEN=')) {
+            envContent = envContent.replace(
+                /TELEGRAM_BOT_TOKEN=.*/,
+                `TELEGRAM_BOT_TOKEN=${token}`
+            );
+        } else {
+            envContent += `\nTELEGRAM_BOT_TOKEN=${token}\n`;
+        }
+        
+        // Save the updated .env file
+        fs.writeFileSync(envPath, envContent);
+        
+        // Update environment variable
+        process.env.TELEGRAM_BOT_TOKEN = token;
+        
+        // Restart the Telegram bot if it exists
+        if (global.telegramBot) {
+            try {
+                await global.telegramBot.stop();
+            } catch (e) {
+                console.error('Error stopping Telegram bot:', e);
+            }
+        }
+        
+        // Start new Telegram bot instance
+        try {
+            const TelegramBotService = require('./services/telegramBot');
+            global.telegramBot = new TelegramBotService(token);
+            await global.telegramBot.start();
+            console.log('Telegram bot restarted with new token');
+            return res.json({ success: true, message: 'Telegram token updated and bot restarted' });
+        } catch (e) {
+            console.error('Error starting Telegram bot:', e);
+            const errorMessage = e.message || 'Failed to start Telegram bot with new token';
+            return res.status(400).json({ error: errorMessage });
+        }
+        
+        res.json({ success: true, message: 'Telegram token updated and bot restarted' });
+    } catch (error) {
+        console.error('Error updating Telegram token:', error);
+        res.status(500).json({ error: 'Failed to update Telegram token' });
+    }
+});
+
 // API endpoint for workflows to send WhatsApp messages
 app.post('/api/workflow/send-message', express.json(), async (req, res) => {
   try {
@@ -104,34 +227,29 @@ app.post('/api/workflow/send-message', express.json(), async (req, res) => {
           console.error('Error checking media URL:', error.message);
         }
 
-        // Create the media object according to whatsapp-web.js format
-        const media = await MessageMedia.fromUrl(mediaUrl, {
-          unsafeMime: true,
-          filename: `media.${mediaType === 'image' ? 'jpg' : 'pdf'}`
-        });
-        
-        // Add caption if provided
-        const sendOptions = {};
-        if (messageContent || caption) {
-          sendOptions.caption = messageContent || caption;
-        }
-        
-        console.log('Sending media to WhatsApp client:', {
-          type: mediaType,
-          hasCaption: !!(messageContent || caption),
-          mimeType: media.mimetype
-        });
-
-        // Send the message and log the result
         try {
-          let message;
-          if (mediaType === 'document') {
-            message = await whatsapp.client.sendMessage(chatId, media, {
-              ...sendOptions,
-              sendMediaAsDocument: true
+          // First, send the text message
+          if (messageContent) {
+            await whatsapp.client.sendMessage(chatId, messageContent);
+            console.log('Text message sent to', chatId);
+          }
+          
+          // Then send the media if URL is provided
+          if (mediaUrl) {
+            const media = await MessageMedia.fromUrl(mediaUrl, {
+              unsafeMime: true,
+              filename: `media.${mediaType === 'image' ? 'jpg' : 'pdf'}`
             });
-          } else {
-            message = await whatsapp.client.sendMessage(chatId, media, sendOptions);
+            
+            console.log('Sending media to WhatsApp client:', {
+              type: mediaType,
+              mimeType: media.mimetype,
+              url: mediaUrl
+            });
+            
+            const sendOptions = mediaType === 'document' ? { sendMediaAsDocument: true } : {};
+            const message = await whatsapp.client.sendMessage(chatId, media, sendOptions);
+            console.log('Media sent with ID:', message.id?._serialized || 'No ID returned');
           }
           console.log('Message sent with ID:', message.id?._serialized || 'No ID returned');
         } catch (error) {

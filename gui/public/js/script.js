@@ -155,6 +155,8 @@ async function deleteProfile(profileName) {
 window.chatHistoryState = { loading: false };
 window.commandHistoryState = { loading: false };
 window.currentTriggers = { groupTriggers: [], customTriggers: [] };
+window.currentApp = 'whatsapp'; // Default to WhatsApp
+window.qrCodeInterval = null; // For QR code refresh interval
 
 // Initialization
 // Save active tab to localStorage
@@ -439,9 +441,10 @@ document.addEventListener('DOMContentLoaded', () => {
 // API functions
 async function loadStatus() {
   try {
-    const response = await fetch('/api/status');
-    if (!response.ok) throw new Error('Failed to fetch status');
-    
+    const response = await fetch(`/api/status?app=${window.currentApp}`);
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
     const data = await response.json();
     
     // Update status elements
@@ -811,6 +814,17 @@ document.addEventListener('DOMContentLoaded', () => {
 // Triggers management
 // Load triggers from the server
 async function loadTriggers() {
+  try {
+    const response = await fetch(`/api/triggers?app=${window.currentApp}`);
+    if (!response.ok) throw new Error('Failed to fetch triggers');
+    
+    const data = await response.json();
+    window.currentTriggers = data;
+    renderTriggers();
+  } catch (error) {
+    console.error('Error loading triggers:', error);
+    showToast('Failed to load triggers', 'error');
+  }
     // currentTriggers is already initialized globally
     
     try {
@@ -893,6 +907,284 @@ function saveTriggers() {
         }
     });
 }
+
+// Handle app switching
+document.getElementById('app-selector').addEventListener('change', function(e) {
+    const newApp = e.target.value;
+    if (newApp !== window.currentApp) {
+        window.currentApp = newApp;
+        // Update UI elements based on the selected app
+        updateAppUI();
+        // Reload relevant data for the new app
+        loadStatus();
+        loadRecentChats();
+        loadTriggers();
+    }
+});
+
+// Update UI elements based on the selected app
+function updateAppUI() {
+    if (!window.currentApp) return;
+    
+    const appName = window.currentApp.charAt(0).toUpperCase() + window.currentApp.slice(1);
+    document.title = `${appName} Management Console`;
+    
+    const h2Element = document.querySelector('h2');
+    if (h2Element) {
+        h2Element.textContent = `${appName} Management Console`;
+    }
+    
+    // Toggle between WhatsApp and Telegram auth UI
+    const whatsappAuth = document.getElementById('whatsapp-auth-container');
+    const telegramAuth = document.getElementById('telegram-auth-container');
+    
+    if (window.currentApp === 'whatsapp') {
+        if (whatsappAuth) whatsappAuth.style.display = 'block';
+        if (telegramAuth) telegramAuth.style.display = 'none';
+    } else if (window.currentApp === 'telegram') {
+        if (whatsappAuth) whatsappAuth.style.display = 'none';
+        if (telegramAuth) telegramAuth.style.display = 'block';
+        
+        // Load saved token if exists
+        const savedToken = localStorage.getItem('telegram_bot_token');
+        if (savedToken) {
+            const tokenInput = document.getElementById('telegram-token');
+            if (tokenInput) {
+                tokenInput.value = savedToken;
+                updateTelegramStatus('Token loaded', 'success');
+            }
+        }
+    }
+}
+
+/**
+ * Generate a QR code from a string
+ * @param {string} qrData - The data to encode in the QR code
+ * @param {HTMLElement} container - The container to render the QR code in
+ */
+function generateQRCode(qrData, container) {
+    // Clear previous QR code if any
+    container.innerHTML = '';
+    
+    // Create a canvas element for the QR code
+    const canvas = document.createElement('canvas');
+    container.appendChild(canvas);
+    
+    // Create QR code using the QRCode.js library
+    return new Promise((resolve) => {
+        QRCode.toCanvas(canvas, qrData, {
+            width: 200,
+            margin: 1,
+            color: {
+                dark: '#000000',
+                light: '#ffffff'
+            }
+        }, (error) => {
+            if (error) {
+                console.error('Error generating QR code:', error);
+                container.innerHTML = '<p class="text-danger">Failed to generate QR code</p>';
+            }
+            resolve();
+        });
+    });
+}
+
+/**
+ * Check WhatsApp authentication status
+ */
+async function checkWhatsAppAuth() {
+    try {
+        const response = await fetch('/api/whatsapp/status');
+        const data = await response.json();
+        
+        if (data.authenticated) {
+            // Hide QR scanner if authenticated
+            const qrScannerBtn = document.getElementById('show-qr-scanner');
+            if (qrScannerBtn) qrScannerBtn.style.display = 'none';
+            
+            // Update connection status
+            const statusElement = document.getElementById('connection-status');
+            if (statusElement) {
+                statusElement.className = 'badge bg-success mt-1';
+                statusElement.textContent = 'Connected';
+            }
+            
+            // Close QR scanner modal if open
+            const qrModal = bootstrap.Modal.getInstance(document.getElementById('qrScannerModal'));
+            if (qrModal) qrModal.hide();
+            
+            // Clear any existing interval
+            if (window.qrCodeInterval) {
+                clearInterval(window.qrCodeInterval);
+                window.qrCodeInterval = null;
+            }
+            
+            return true;
+        }
+        return false;
+    } catch (error) {
+        console.error('Error checking WhatsApp auth status:', error);
+        return false;
+    }
+}
+
+/**
+ * Start QR code generation and checking
+ */
+async function startQRCodeGeneration() {
+    const qrContainer = document.getElementById('qr-code-container');
+    const qrStatus = document.getElementById('qr-status');
+    
+    if (!qrContainer || !qrStatus) return;
+    
+    try {
+        // Clear any existing interval
+        if (window.qrCodeInterval) {
+            clearInterval(window.qrCodeInterval);
+        }
+        
+        // Show loading state
+        qrContainer.innerHTML = '<div class="spinner-border text-primary" role="status"><span class="visually-hidden">Loading...</span></div>';
+        qrStatus.textContent = 'Generating QR code...';
+        
+        // Get QR code data from server
+        const response = await fetch('/api/whatsapp/qr');
+        if (!response.ok) {
+            throw new Error('Failed to get QR code');
+        }
+        
+        const data = await response.json();
+        
+        if (data.qr) {
+            // Generate QR code
+            qrContainer.innerHTML = '';
+            await generateQRCode(data.qr, qrContainer);
+            qrStatus.textContent = 'Scan the QR code with your WhatsApp mobile app';
+            
+            // Start checking authentication status
+            window.qrCodeInterval = setInterval(async () => {
+                const isAuthenticated = await checkWhatsAppAuth();
+                if (isAuthenticated) {
+                    clearInterval(window.qrCodeInterval);
+                    window.qrCodeInterval = null;
+                    
+                    // Refresh chats after successful authentication
+                    if (window.currentApp === 'whatsapp') {
+                        loadRecentChats();
+                    }
+                }
+            }, 3000);
+        } else {
+            qrContainer.innerHTML = '<p class="text-danger">Failed to generate QR code</p>';
+            qrStatus.textContent = 'Please try again';
+        }
+    } catch (error) {
+        console.error('Error generating QR code:', error);
+        qrContainer.innerHTML = '<p class="text-danger">Error: ' + error.message + '</p>';
+        qrStatus.textContent = 'Failed to generate QR code';
+    }
+}
+
+/**
+ * Update Telegram status message
+ * @param {string} message - Status message to display
+ * @param {string} type - Message type (success, error, info)
+ */
+function updateTelegramStatus(message, type = 'info') {
+    const statusElement = document.getElementById('telegram-status');
+    if (!statusElement) return;
+    
+    // Set appropriate icon based on type
+    let icon = 'info-circle';
+    let textClass = 'text-muted';
+    
+    if (type === 'success') {
+        icon = 'check-circle';
+        textClass = 'text-success';
+    } else if (type === 'error') {
+        icon = 'exclamation-circle';
+        textClass = 'text-danger';
+    }
+    
+    statusElement.innerHTML = `<i class="bi bi-${icon}"></i> ${message}`;
+    statusElement.className = `small ${textClass}`;
+}
+
+// Initialize QR code scanner modal
+document.addEventListener('DOMContentLoaded', function() {
+    const qrScannerModal = document.getElementById('qrScannerModal');
+    if (qrScannerModal) {
+        qrScannerModal.addEventListener('show.bs.modal', function() {
+            startQRCodeGeneration();
+        });
+        
+        qrScannerModal.addEventListener('hidden.bs.modal', function() {
+            // Clean up when modal is closed
+            if (window.qrCodeInterval) {
+                clearInterval(window.qrCodeInterval);
+                window.qrCodeInterval = null;
+            }
+        });
+    }
+    
+    // Refresh QR code button
+    const refreshQrBtn = document.getElementById('refresh-qr');
+    if (refreshQrBtn) {
+        refreshQrBtn.addEventListener('click', startQRCodeGeneration);
+    }
+    
+    // Initial check if already authenticated
+    if (window.currentApp === 'whatsapp') {
+        checkWhatsAppAuth();
+    }
+    
+    // Handle Telegram token save
+    const saveTokenBtn = document.getElementById('save-telegram-token');
+    const telegramTokenInput = document.getElementById('telegram-token');
+    
+    if (saveTokenBtn && telegramTokenInput) {
+        saveTokenBtn.addEventListener('click', async () => {
+            const token = telegramTokenInput.value.trim();
+            if (!token) {
+                updateTelegramStatus('Please enter a token', 'error');
+                return;
+            }
+            
+            try {
+                // Save token to localStorage
+                localStorage.setItem('telegram_bot_token', token);
+                
+                // Send token to server
+                const response = await fetch('/api/telegram/set-token', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ token })
+                });
+                
+                if (response.ok) {
+                    updateTelegramStatus('Token saved and bot restarted', 'success');
+                    // Reload the page to apply changes
+                    setTimeout(() => window.location.reload(), 1500);
+                } else {
+                    const error = await response.json();
+                    throw new Error(error.message || 'Failed to save token');
+                }
+            } catch (error) {
+                console.error('Error saving Telegram token:', error);
+                updateTelegramStatus(`Error: ${error.message}`, 'error');
+            }
+        });
+        
+        // Allow saving with Enter key
+        telegramTokenInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                saveTokenBtn.click();
+            }
+        });
+    }
+});
 
 // Document ready handler
 $(document).ready(function() {
@@ -1125,6 +1417,79 @@ document.addEventListener('DOMContentLoaded', function() {
  * Load and display recent chats in the dashboard
  */
 async function loadRecentChats() {
+  try {
+    const response = await fetch(`/api/chats/recent?limit=10&app=${window.currentApp}`);
+    if (!response.ok) {
+      throw new Error(`Failed to fetch recent chats: ${response.statusText}`);
+    }
+    
+    const data = await response.json();
+    const chatsTableBody = document.getElementById('recent-chats-body');
+    if (!chatsTableBody) {
+      console.warn('Chats table body not found');
+      return;
+    }
+    
+    // Clear existing rows
+    chatsTableBody.innerHTML = '';
+    
+    // Ensure data is an array
+    const chats = Array.isArray(data) ? data : [];
+    
+    if (chats.length === 0) {
+      const row = document.createElement('tr');
+      row.innerHTML = '<td colspan="4" class="text-center">No recent chats found</td>';
+      chatsTableBody.appendChild(row);
+      return;
+    }
+    
+    // Process each chat
+    chats.forEach(chat => {
+      try {
+        const row = document.createElement('tr');
+        const lastMessage = chat.lastMessage || '';
+        const timestamp = chat.timestamp ? new Date(chat.timestamp).toLocaleString() : 'N/A';
+        
+        row.innerHTML = `
+          <td>${escapeHtml(chat.name || 'Unknown')}</td>
+          <td>${escapeHtml(lastMessage.substring(0, 50))}${lastMessage.length > 50 ? '...' : ''}</td>
+          <td>${timestamp}</td>
+          <td class="text-end">
+            <button class="btn btn-sm btn-outline-primary view-chat" data-chat-id="${chat.id || ''}">
+              <i class="bi bi-chat-dots"></i> View
+            </button>
+          </td>
+        `;
+        chatsTableBody.appendChild(row);
+      } catch (error) {
+        console.error('Error rendering chat row:', error, chat);
+      }
+    });
+    
+    // Add event listeners to view chat buttons
+    document.querySelectorAll('.view-chat').forEach(button => {
+      button.addEventListener('click', (e) => {
+        const chatId = e.currentTarget.getAttribute('data-chat-id');
+        if (chatId) {
+          viewChat(chatId);
+        }
+      });
+    });
+  } catch (error) {
+    console.error('Error loading recent chats:', error);
+    showToast(`Failed to load recent chats: ${error.message}`, 'error');
+    
+    // Show error in the table if possible
+    const chatsTableBody = document.getElementById('recent-chats-body');
+    if (chatsTableBody) {
+      chatsTableBody.innerHTML = `
+        <tr>
+          <td colspan="4" class="text-center text-danger">
+            Failed to load chats: ${escapeHtml(error.message)}
+          </td>
+        </tr>`;
+    }
+  }
     const tbody = document.getElementById('recent-chats-body');
     if (!tbody) return;
     
