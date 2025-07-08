@@ -100,6 +100,33 @@ body {
   }
 }
 
+/* Add your custom styles here */
+
+/* Advanced settings section */
+#settings #advanced-config {
+  margin-top: 1.5rem;
+  padding-top: 1.5rem;
+  border-top: 1px solid #dee2e6;
+}
+
+/* Hide advanced settings in other tabs */
+.tab-pane:not(#settings) #advanced-config,
+.tab-pane:not(#settings) #toggle-advanced,
+.tab-pane:not(#settings) #advanced-options {
+  display: none !important;
+}
+
+/* Settings form styling */
+#settings-form {
+  padding: 0;
+  margin: 0;
+}
+
+/* Ensure proper spacing in settings tab */
+#settings .tab-pane {
+  padding: 1rem 0;
+}
+
 /* Form and button styles */
 textarea.form-control {
   min-height: 100px;

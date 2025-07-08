@@ -120,16 +120,46 @@ function updateLLMClient() {
     mcpResourceUri: settings.mcpResourceUri
   };
   
+  // Create new LLM client instance
   currentLLMClient = LLMFactory.createLLMClient(settings.provider, options);
   
-  // Update the model if needed
-  if (settings.provider === 'openai' || settings.provider === 'openrouter' || settings.provider === 'ollama') {
+  // Update the model and other settings based on provider
+  if (['openai', 'openrouter', 'ollama'].includes(settings.provider)) {
     currentLLMClient.model = settings.model;
+    
+    // Set base URL for Ollama if not already set
+    if (settings.provider === 'ollama') {
+      currentLLMClient.baseUrl = process.env.OLLAMA_BASE_URL || 'http://localhost:11434';
+    }
   }
   
-  console.log(`Using LLM provider: ${settings.provider}, model: ${settings.model}`);
+  // Update system prompt and parameters
+  if (currentLLMClient.setSystemPrompt) {
+    currentLLMClient.setSystemPrompt(settings.systemPrompt);
+  }
+  
+  if (currentLLMClient.setParameters) {
+    currentLLMClient.setParameters(settings.parameters || {});
+  }
+  
+  // Update Telegram bot's LLM client if it exists
+  if (global.telegramBot) {
+    try {
+      global.telegramBot.llmClient = currentLLMClient;
+      console.log('Updated Telegram bot LLM client with new provider:', settings.provider);
+    } catch (error) {
+      console.error('Failed to update Telegram bot LLM client:', error);
+    }
+  }
+  
+  console.log(`LLM client updated - Provider: ${settings.provider}, Model: ${settings.model}`);
   console.log(`System prompt: ${settings.systemPrompt.substring(0, 50)}${settings.systemPrompt.length > 50 ? '...' : ''}`);
+  
+  return currentLLMClient;
 }
+
+// Make updateLLMClient globally available
+global.updateLLMClient = updateLLMClient;
 
 // Make client globally available for QR code generation
 global.client = client;
@@ -137,7 +167,14 @@ global.client = client;
 // QR code handling - store for web interface
 client.on('qr', (qr) => {
   console.log('QR Code generated for web interface');
+  // Store the QR code data for the web interface
   global.qrCodeData = qr;
+  
+  // If there's a pending QR code request, respond to it
+  if (global.pendingQrResolve) {
+    global.pendingQrResolve({ qr });
+    global.pendingQrResolve = null;
+  }
 });
 
 // Authentication handling
@@ -794,10 +831,21 @@ client.on('message', async (message) => {
     }
     
     // Send response
-    await message.reply(response);
+    if (message && typeof message.reply === 'function') {
+      await message.reply(response);
+    } else {
+      console.error('Invalid message object, cannot send reply:', message);
+    }
   } catch (error) {
     console.error('Error processing message:', error);
-    await message.reply(`Sorry, I encountered an error: ${error.message}`);
+    // Don't send error message to user to avoid the 'serialize' error
+    // Just log it to the console for debugging
+    console.error('Error details:', {
+      error: error.message,
+      stack: error.stack,
+      messageId: message?.id?._serialized || 'no message id',
+      chatId: message?.from || 'unknown chat'
+    });
   }
 });
 

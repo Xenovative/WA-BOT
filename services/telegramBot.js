@@ -19,10 +19,17 @@ class TelegramBotService {
   }
   
   /**
-   * Get or create the LLM client
+   * Get the LLM client, using the global one if available
    * @returns {Object} The LLM client instance
    */
   getLLMClient() {
+    // Use the global LLM client if available (will be updated by updateLLMClient)
+    if (global.currentLLMClient) {
+      this.llmClient = global.currentLLMClient;
+      return this.llmClient;
+    }
+    
+    // Fallback to creating a new client if global one isn't available
     if (!this.llmClient) {
       const settings = commandHandler.getCurrentSettings();
       const options = {
@@ -32,11 +39,16 @@ class TelegramBotService {
       this.llmClient = LLMFactory.createLLMClient(settings.provider, options);
       
       // Update the model if needed
-      if (settings.provider === 'openai' || settings.provider === 'openrouter' || settings.provider === 'ollama') {
+      if (['openai', 'openrouter', 'ollama'].includes(settings.provider)) {
         this.llmClient.model = settings.model;
+        
+        // Set base URL for Ollama if needed
+        if (settings.provider === 'ollama') {
+          this.llmClient.baseUrl = process.env.OLLAMA_BASE_URL || 'http://localhost:11434';
+        }
       }
       
-      console.log(`[Telegram] Using LLM provider: ${settings.provider}, model: ${settings.model}`);
+      console.log(`[Telegram] Created new LLM client - Provider: ${settings.provider}, Model: ${settings.model}`);
     }
     
     return this.llmClient;

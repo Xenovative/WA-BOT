@@ -24,6 +24,7 @@ const refreshDashboardBtn = document.getElementById('refresh-dashboard');
 const openaiApiKeyInput = document.getElementById('openai-api-key');
 const openrouterApiKeyInput = document.getElementById('openrouter-api-key');
 const toggleVisibilityButtons = document.querySelectorAll('.toggle-visibility');
+const configSection = document.getElementById('config-section');
 
 // Upload state
 let isUploading = false;
@@ -461,16 +462,122 @@ async function loadStatus() {
   }
 }
 
+// Toggle advanced options visibility
+function toggleAdvancedOptions(show) {
+  const advancedConfig = document.querySelector('#settings #advanced-config');
+  if (!advancedConfig) return;
+  
+  // If showConfig is false, don't show advanced options
+  const showConfig = advancedConfig.style.display !== 'none';
+  if (!showConfig) return;
+  
+  const advancedOptions = advancedConfig.querySelector('#advanced-options');
+  const toggleBtn = advancedConfig.querySelector('#toggle-advanced');
+  
+  if (advancedOptions && toggleBtn) {
+    if (show === undefined) {
+      show = window.getComputedStyle(advancedOptions).display === 'none';
+    }
+    
+    advancedOptions.style.display = show ? 'block' : 'none';
+    toggleBtn.innerHTML = `<i class="bi bi-chevron-${show ? 'up' : 'down'}"></i> ${show ? 'Hide' : 'Show'} Advanced`;
+    
+    // Save the state in localStorage
+    localStorage.setItem('showAdvancedSettings', show);
+  }
+}
+
+// Initialize advanced options toggle
+document.addEventListener('DOMContentLoaded', () => {
+  // Handle tab changes
+  const tabLinks = document.querySelectorAll('a[data-bs-toggle="tab"]');
+  tabLinks.forEach(link => {
+    link.addEventListener('shown.bs.tab', () => {
+      if (link.getAttribute('href') === '#settings') {
+        const advancedConfig = document.querySelector('#settings #advanced-config');
+        if (advancedConfig && advancedConfig.style.display !== 'none') {
+          const toggleBtn = advancedConfig.querySelector('#toggle-advanced');
+          if (toggleBtn) {
+            // Load the saved state
+            const showAdvanced = localStorage.getItem('showAdvancedSettings') === 'true';
+            toggleAdvancedOptions(showAdvanced);
+            
+            // Add click handler if not already added
+            if (!toggleBtn.hasAttribute('data-listener-attached')) {
+              toggleBtn.setAttribute('data-listener-attached', 'true');
+              toggleBtn.addEventListener('click', (e) => {
+                e.preventDefault();
+                toggleAdvancedOptions();
+              });
+            }
+          }
+        }
+      }
+    });
+  });
+  
+  // Initialize for the first load if settings tab is active
+  if (window.location.hash === '#settings' || !window.location.hash) {
+    const advancedConfig = document.querySelector('#settings #advanced-config');
+    if (advancedConfig && advancedConfig.style.display !== 'none') {
+      const toggleBtn = advancedConfig.querySelector('#toggle-advanced');
+      if (toggleBtn) {
+        const showAdvanced = localStorage.getItem('showAdvancedSettings') === 'true';
+        toggleAdvancedOptions(showAdvanced);
+        
+        // Add click handler if not already added
+        if (!toggleBtn.hasAttribute('data-listener-attached')) {
+          toggleBtn.setAttribute('data-listener-attached', 'true');
+          toggleBtn.addEventListener('click', (e) => {
+            e.preventDefault();
+            toggleAdvancedOptions();
+          });
+        }
+      }
+    }
+  }
+});
+
 async function loadSettings() {
   try {
     const response = await fetch('/api/settings');
     const settings = await response.json();
     
+    // Always ensure these tabs are visible
+    const alwaysVisibleTabs = ['#kb', '#commands', '#system', '#workflows'];
+    alwaysVisibleTabs.forEach(tabId => {
+      const tab = document.querySelector(`[href="${tabId}"]`);
+      if (tab) {
+        tab.closest('.nav-item').style.display = 'block';
+      }
+    });
+    
+    // Handle advanced config visibility based on showConfig flag
+    const showConfig = settings.showConfig !== false; // Default to true if not specified
+    const advancedConfig = document.querySelector('#settings #advanced-config');
+    
+    // Hide the entire advanced config section if showConfig is false
+    if (advancedConfig) {
+      if (!showConfig) {
+        advancedConfig.style.display = 'none';
+      } else {
+        // Only show the toggle and handle its state if showConfig is true
+        const advancedOptions = advancedConfig.querySelector('#advanced-options');
+        const toggleBtn = advancedConfig.querySelector('#toggle-advanced');
+        
+        if (advancedOptions && toggleBtn) {
+          const showAdvanced = localStorage.getItem('showAdvancedSettings') === 'true';
+          advancedOptions.style.display = showAdvanced ? 'block' : 'none';
+          toggleBtn.innerHTML = `<i class="bi bi-chevron-${showAdvanced ? 'up' : 'down'}"></i> ${showAdvanced ? 'Hide' : 'Show'} Advanced`;
+        }
+      }
+    }
+    
     // Update form fields
-    providerSelect.value = settings.provider;
-    modelInput.value = settings.model;
-    ragEnabledCheckbox.checked = settings.ragEnabled;
-    systemPromptTextarea.value = settings.systemPrompt;
+    if (settings.provider) document.getElementById('provider-select').value = settings.provider;
+    if (settings.model) document.getElementById('model-input').value = settings.model;
+    if (settings.ragEnabled !== undefined) document.getElementById('rag-enabled').checked = settings.ragEnabled;
+    if (settings.systemPrompt) document.getElementById('system-prompt').value = settings.systemPrompt;
     
     // API keys - show masked versions if present (already masked by backend)
     if (settings.apiKeys) {
@@ -613,6 +720,15 @@ if (openaiApiKeyInput) {
 if (openrouterApiKeyInput) {
   openrouterApiKeyInput.addEventListener('input', function() {
     this.dataset.masked = 'false';
+  });
+}
+
+// Settings form submission handler
+if (settingsForm) {
+  settingsForm.addEventListener('submit', async function(e) {
+    e.preventDefault();
+    console.log('[DEBUG] Settings form submitted');
+    await saveSettings();
   });
 }
 

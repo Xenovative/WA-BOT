@@ -61,24 +61,31 @@ app.get('/api/whatsapp/qr', (req, res) => {
             return res.status(200).json({ authenticated: true });
         }
 
-        // Set up QR code handler if not already set
-        if (!global.qrCodeData) {
-            client.on('qr', (qr) => {
-                // Store the latest QR code data
-                global.qrCodeData = qr;
-                console.log('QR Code generated');
-            });
-        }
-
-        // Return the latest QR code data
+        // If we already have a QR code, return it
         if (global.qrCodeData) {
             return res.json({ qr: global.qrCodeData });
-        } else {
-            return res.status(202).json({ message: 'Generating QR code...' });
         }
+
+        // Set up a promise to wait for the next QR code
+        return new Promise((resolve) => {
+            // Set a timeout to prevent hanging
+            const timeout = setTimeout(() => {
+                if (global.pendingQrResolve) {
+                    global.pendingQrResolve = null;
+                    resolve(res.status(408).json({ error: 'QR code generation timeout' }));
+                }
+            }, 10000); // 10 second timeout
+
+            // Store the resolve function to be called when we get a QR code
+            global.pendingQrResolve = (data) => {
+                clearTimeout(timeout);
+                global.pendingQrResolve = null;
+                resolve(res.json(data));
+            };
+        });
     } catch (error) {
         console.error('Error generating QR code:', error);
-        res.status(500).json({ error: 'Failed to generate QR code' });
+        res.status(500).json({ error: 'Failed to generate QR code: ' + error.message });
     }
 });
 
@@ -87,24 +94,34 @@ app.get('/api/whatsapp/status', (req, res) => {
     try {
         const client = global.client;
         if (!client) {
-            return res.json({ authenticated: false, message: 'WhatsApp client not initialized' });
+            return res.json({ 
+                authenticated: false, 
+                status: 'disconnected',
+                message: 'WhatsApp client not initialized' 
+            });
         }
         
-        // Check if client is authenticated
-        const isAuthenticated = !!client.info;
+        // Check client state
+        const state = client.info ? 'authenticated' : 'disconnected';
         
         // If authenticated, clear any stored QR code
-        if (isAuthenticated && global.qrCodeData) {
+        if (state === 'authenticated' && global.qrCodeData) {
             delete global.qrCodeData;
         }
         
         res.json({ 
-            authenticated: isAuthenticated,
-            user: isAuthenticated ? client.info.wid.user : null
+            authenticated: !!client.info,
+            status: state,
+            phoneNumber: client.info?.wid.user,
+            pushname: client.info?.pushname
         });
     } catch (error) {
-        console.error('Error checking WhatsApp status:', error);
-        res.status(500).json({ error: 'Failed to check WhatsApp status' });
+        console.error('Error checking auth status:', error);
+        res.status(500).json({ 
+            error: 'Failed to check auth status',
+            details: error.message,
+            status: 'error'
+        });
     }
 });
 
@@ -624,6 +641,9 @@ app.get('/api/settings', (req, res) => {
     const commandHandler = require('./handlers/commandHandler');
     const settings = commandHandler.getCurrentSettings();
     
+    // Add showConfig flag from environment variables
+    settings.showConfig = process.env.SHOW_CONFIG !== 'false'; // Default to true if not set
+    
     // Mask API keys for security
     if (settings.apiKeys && settings.apiKeys.openai) {
       settings.apiKeys.openai = '********';
@@ -639,18 +659,23 @@ app.get('/api/settings', (req, res) => {
   }
 });
 
-app.post('/api/settings', (req, res) => {
+app.post('/api/settings', async (req, res) => {
   try {
     const commandHandler = require('./handlers/commandHandler');
     const newSettings = req.body;
     
-    // Update settings
-    commandHandler.updateSettings(newSettings);
+    // Update settings and wait for completion
+    const result = await commandHandler.updateSettings(newSettings);
+    
+    if (result && result.error) {
+      console.error('Error updating settings:', result.error);
+      return res.status(400).json({ success: false, error: result.error });
+    }
     
     res.json({ success: true });
   } catch (error) {
     console.error('Error updating settings:', error);
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ success: false, error: error.message });
   }
 });
 
