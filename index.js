@@ -11,6 +11,7 @@ const blocklist = require('./utils/blocklist');
 const fileHandler = require('./kb/fileHandler');
 const ragProcessor = require('./kb/ragProcessor');
 const fileWatcher = require('./kb/fileWatcher');
+const voiceHandler = require('./utils/voiceHandler');
 const { handleTimeDateQuery } = require('./utils/timeUtils');
 
 // Import bots
@@ -267,9 +268,57 @@ client.on('message_create', async (message) => {
 });
 
 // Message processing
+// Handle voice messages
 client.on('message', async (message) => {
   // Skip messages from self
   if (message.fromMe) return;
+  
+  // Handle voice messages
+  if (message.hasMedia && message.type === 'ptt') {
+    try {
+      const chat = await message.getChat();
+      await chat.sendStateRecording();
+      
+      console.log(`[Voice] Processing voice message from ${message.from}`);
+      const result = await voiceHandler.processVoiceMessage(
+        { seconds: message.duration },
+        message
+      );
+      
+      if (result.error) {
+        console.error(`[Voice] Error: ${result.error}`);
+        return; // Don't send error message to user for voice processing failures
+      }
+      
+      if (result.text) {
+        // Process the transcribed text as a regular message
+        console.log(`[Voice] Transcribed: ${result.text}`);
+        
+        // Create a pseudo-message with the transcribed text
+        const pseudoMsg = {
+          ...message,
+          body: result.text,
+          hasQuotedMsg: false,
+          _data: {
+            ...message._data,
+            body: result.text,
+            isVoiceMessage: true
+          },
+          // Add a reply method to the pseudo-message
+          reply: async (text) => {
+            return message.reply(`🎤 *You said*: ${result.text}\n\n${text}`);
+          }
+        };
+        
+        // Emit a new message event with the transcribed text
+        client.emit('message', pseudoMsg);
+      }
+      return;
+    } catch (error) {
+      console.error('[Voice] Error handling voice message:', error);
+      return;
+    }
+  }
   
   // Skip media uploads handled by other handler
   if (message.hasMedia && message.body && message.body.startsWith('kb:')) return;
