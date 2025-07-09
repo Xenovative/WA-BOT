@@ -1,12 +1,17 @@
 const fs = require('fs');
 const path = require('path');
+const { setTimeout } = require('timers/promises');
 
 class BlocklistManager {
   constructor() {
     this.blocklistFile = path.join(__dirname, '../data/blocklist.json');
     this.blockedNumbers = new Set();
     this.blockedTelegramIds = new Set();
+    this.tempBlocks = new Map(); // userId -> { until: timestamp, reason: string }
     this.loadBlocklist();
+    
+    // Clean up expired temp blocks every 5 minutes
+    setInterval(() => this.cleanupTempBlocks(), 5 * 60 * 1000);
   }
 
   loadBlocklist() {
@@ -120,8 +125,26 @@ class BlocklistManager {
     return false;
   }
 
-  isBlocked(identifier, type = 'whatsapp') {
+  isBlocked(identifier, type = 'whatsapp', checkManualOnly = false) {
     if (!identifier) return false;
+    
+    // Check temporary blocks first (manual intervention)
+    if (this.tempBlocks.has(identifier)) {
+      const block = this.tempBlocks.get(identifier);
+      if (Date.now() < block.until) {
+        // If we're only checking for manual blocks, or if this is a manual block
+        if (!checkManualOnly || block.reason.includes('manual')) {
+          console.log(`[Blocklist] ${checkManualOnly ? 'Manual' : 'Temporary'} block active for ${identifier}`);
+          return true;
+        }
+      } else {
+        // Clean up expired block
+        this.tempBlocks.delete(identifier);
+      }
+    }
+    
+    // Skip permanent block check if we're only looking for manual blocks
+    if (checkManualOnly) return false;
     
     if (type === 'whatsapp') {
       // Check both the full number and just the digits
@@ -135,6 +158,72 @@ class BlocklistManager {
     }
     
     return false;
+  }
+  
+  /**
+   * Add a temporary block
+   * @param {string} identifier - User ID or number to block
+   * @param {number} durationMs - Duration in milliseconds
+   * @param {string} reason - Reason for the block
+   * @returns {boolean} True if block was added
+   */
+  /**
+   * Add a temporary block
+   * @param {string} identifier - User ID or number to block
+   * @param {number} durationMs - Duration in milliseconds
+   * @param {string} reason - Reason for the block
+   * @param {boolean} isManual - Whether this is a manual block (vs automatic)
+   * @returns {boolean} True if block was added
+   */
+  addTempBlock(identifier, durationMs = 3600000, reason = 'manual intervention', isManual = true) {
+    if (!identifier) return false;
+    
+    const until = Date.now() + durationMs;
+    this.tempBlocks.set(identifier, { until, reason });
+    console.log(`[Blocklist] Added temporary block for ${identifier} until ${new Date(until).toISOString()}`);
+    
+    // Auto-remove after duration
+    setTimeout(() => {
+      if (this.tempBlocks.get(identifier)?.until === until) {
+        this.tempBlocks.delete(identifier);
+        console.log(`[Blocklist] Temporary block expired for ${identifier}`);
+      }
+    }, durationMs);
+    
+    return true;
+  }
+  
+  /**
+   * Remove a temporary block
+   * @param {string} identifier - User ID or number to unblock
+   * @returns {boolean} True if block was removed
+   */
+  removeTempBlock(identifier) {
+    const existed = this.tempBlocks.has(identifier);
+    if (existed) {
+      this.tempBlocks.delete(identifier);
+      console.log(`[Blocklist] Removed temporary block for ${identifier}`);
+    }
+    return existed;
+  }
+  
+  /**
+   * Clean up expired temporary blocks
+   */
+  cleanupTempBlocks() {
+    const now = Date.now();
+    let count = 0;
+    
+    for (const [id, block] of this.tempBlocks.entries()) {
+      if (now >= block.until) {
+        this.tempBlocks.delete(id);
+        count++;
+      }
+    }
+    
+    if (count > 0) {
+      console.log(`[Blocklist] Cleaned up ${count} expired temporary blocks`);
+    }
   }
 
   getBlockedNumbers(type = 'whatsapp') {

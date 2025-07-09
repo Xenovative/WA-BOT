@@ -255,4 +255,36 @@ function handleTimeDateQuery(message) {
   return responses[lang][responseType]();
 }
 
-module.exports = { handleTimeDateQuery };
+/**
+ * Parse a duration string into milliseconds
+ * @param {string} durationStr - Duration string (e.g., '30m', '2h', '1d')
+ * @returns {number} Duration in milliseconds
+ * @throws {Error} If the format is invalid
+ */
+function parseDuration(durationStr) {
+  const match = durationStr.match(/^(\d+)([smhd])?$/i);
+  if (!match) {
+    throw new Error('Invalid duration format');
+  }
+  
+  const value = parseInt(match[1], 10);
+  const unit = (match[2] || 'm').toLowerCase();
+  
+  const multipliers = {
+    's': 1000,          // seconds
+    'm': 60 * 1000,     // minutes
+    'h': 60 * 60 * 1000, // hours
+    'd': 24 * 60 * 60 * 1000 // days
+  };
+  
+  if (!(unit in multipliers)) {
+    throw new Error(`Invalid time unit: ${unit}. Use s, m, h, or d`);
+  }
+  
+  return value * multipliers[unit];
+}
+
+module.exports = { 
+  handleTimeDateQuery,
+  parseDuration 
+};

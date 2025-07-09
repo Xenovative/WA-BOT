@@ -166,6 +166,38 @@ global.updateLLMClient = updateLLMClient;
 // Make client globally available for QR code generation
 global.client = client;
 
+// Initialize the LLM client
+updateLLMClient();
+
+// Patch the sendMessage function to add temporary blocks for manual messages
+const originalSendMessage = client.sendMessage.bind(client);
+client.sendMessage = async function(chatId, content, options = {}) {
+  try {
+    // If this is a direct message (not a group) and not from a command
+    if (!chatId.includes('@g.us') && !options.isAutomated) {
+      const cleanChatId = chatId.split('@')[0];
+      
+      // Add a 5-minute temporary block for manual messages
+      const blockDuration = 5 * 60 * 1000; // 5 minutes
+      const success = blocklist.addTempBlock(
+        cleanChatId, 
+        blockDuration, 
+        'manual - message sent directly',
+        true  // Mark as manual block
+      );
+      
+      if (success) {
+        console.log(`[Manual-Block] Temporarily blocked ${cleanChatId} for ${blockDuration/1000} seconds`);
+      }
+    }
+  } catch (error) {
+    console.error('[Manual-Block] Error in sendMessage interceptor:', error);
+  }
+  
+  // Call the original sendMessage
+  return originalSendMessage(chatId, content, options);
+};
+
 // QR code handling - store for web interface
 client.on('qr', (qr) => {
   console.log('QR Code generated for web interface');
@@ -266,6 +298,17 @@ client.on('message_create', async (message) => {
     }
   }
 });
+
+// Helper function to send an automated message (won't trigger manual blocks)
+async function sendAutomatedMessage(chatId, content, options = {}) {
+  return client.sendMessage(chatId, content, { 
+    ...options, 
+    isAutomated: true  // Mark as automated message
+  });
+}
+
+// Make it available globally
+global.sendMessage = sendAutomatedMessage;
 
 // Message processing
 // Handle voice messages
@@ -789,8 +832,8 @@ client.on('message', async (message) => {
         }
       }
       
-      // Send response
-      await message.reply(response);
+      // Send response back as automated message
+      await sendAutomatedMessage(message.from, response);
       console.log('[Group Chat] Response sent successfully');
     } catch (error) {
       console.error('[Group Chat] Error processing message:', error);

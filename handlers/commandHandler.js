@@ -2,6 +2,8 @@ const chatHandler = require('./chatHandler');
 const kbManager = require('../kb/kbManager');
 const blocklist = require('../utils/blocklist');
 const rateLimiter = require('../utils/rateLimiter');
+const { isAdmin } = require('../utils/adminUtils');
+const { parseDuration } = require('../utils/timeUtils');
 const fs = require('fs');
 const path = require('path');
 
@@ -44,7 +46,10 @@ class CommandHandler {
       unblock: this.handleUnblockNumber,
       blocklist: this.handleListBlocked,
       refreshlimit: this.handleRefreshLimit,
-      rlrefresh: this.handleRefreshLimit
+      rlrefresh: this.handleRefreshLimit,
+      tempblock: this.handleTempBlock,
+      unblocktemp: this.handleUnblockTemp,
+      blockstatus: this.handleBlockStatus
     };
     
     // Load configuration profiles
@@ -94,7 +99,7 @@ class CommandHandler {
   async processCommand(message, chatId, senderPhone) {
     // Format the phone number - remove any WhatsApp suffixes
     const cleanPhone = senderPhone.split('@')[0];
-    const isAdmin = this.isAdmin(cleanPhone);
+    const isAdmin = await this.isAdmin(cleanPhone);
     
     // Check authentication if required
     if (this.authRequired && !isAdmin) {
@@ -144,7 +149,7 @@ class CommandHandler {
    * @param {string} userId - User ID to check
    * @returns {boolean} - True if admin, false otherwise
    */
-  isAdmin(userId) {
+  async isAdmin(userId) {
     if (!this.authRequired) return true;
     if (!userId) return false;
     
@@ -162,7 +167,7 @@ class CommandHandler {
 
   // Block a number from using the bot
   async handleBlockNumber(args, chatId, phoneNumber) {
-    if (!this.isAdmin(phoneNumber)) {
+    if (!await this.isAdmin(phoneNumber)) {
       return '❌ You do not have permission to use this command.';
     }
 
@@ -183,7 +188,7 @@ class CommandHandler {
 
   // Unblock a number
   async handleUnblockNumber(args, chatId, phoneNumber) {
-    if (!this.isAdmin(phoneNumber)) {
+    if (!await this.isAdmin(phoneNumber)) {
       return '❌ You do not have permission to use this command.';
     }
 
@@ -203,47 +208,150 @@ class CommandHandler {
   }
 
   // List all blocked numbers/users
-  async handleListBlocked(args, chatId, phoneNumber) {
-    if (!this.isAdmin(phoneNumber)) {
-      return '❌ You do not have permission to use this command.';
+  async handleListBlocked(args, chatId, from) {
+    if (!await this.isAdmin(from)) {
+      return '❌ You do not have permission to view the blocklist.';
     }
-
-    const isTelegram = phoneNumber.startsWith('telegram:');
-    const blocked = blocklist.getBlockedNumbers(isTelegram ? 'telegram' : 'whatsapp');
     
-    if (blocked.length === 0) {
-      return 'ℹ️ No numbers/users are currently blocked.';
+    const whatsappNumbers = blocklist.getBlockedNumbers('whatsapp');
+    const telegramIds = blocklist.getBlockedNumbers('telegram');
+    
+    let response = '🚫 *Blocked Users*\n\n';
+    
+    if (whatsappNumbers.length > 0) {
+      response += '*WhatsApp Numbers:*\n';
+      response += whatsappNumbers.map(num => `• ${num}`).join('\n');
+      response += '\n\n';
     }
-
-    const type = isTelegram ? 'Telegram Users' : 'Phone Numbers';
-    return `🚫 *Blocked ${type}* (${blocked.length}):\n` +
-      blocked.map((num, index) => `${index + 1}. ${num}`).join('\n');
+    
+    if (telegramIds.length > 0) {
+      response += '*Telegram IDs:*\n';
+      response += telegramIds.map(id => `• ${id}`).join('\n');
+    }
+    
+    if (whatsappNumbers.length === 0 && telegramIds.length === 0) {
+      response = 'No users are currently permanently blocked.';
+    }
+    
+    return response;
   }
-  
-  // Refresh rate limit for a user
-  async handleRefreshLimit(args, chatId, phoneNumber) {
-    if (!this.isAdmin(phoneNumber)) {
-      return '❌ You do not have permission to use this command.';
-    }
 
-    const userId = args[0];
-    if (!userId) {
+  async handleRefreshLimit(args, chatId, from) {
+    if (!await this.isAdmin(from)) {
+      return '❌ You do not have permission to refresh rate limits.';
+    }
+    
+    if (!args || args.length === 0) {
       return '❌ Please provide a user ID/number. Example: !refreshlimit 1234567890';
     }
-
-    // Handle both Telegram and WhatsApp IDs
-    let targetId = userId;
-    if (!userId.startsWith('telegram:') && isNaN(Number(userId))) {
-      targetId = `telegram:${userId}`; // Assume Telegram ID if not a number
-    }
-
-    const success = rateLimiter.resetUser(targetId);
+    
+    const userId = args[0];
+    const success = rateLimiter.resetUser(userId);
     
     if (success) {
-      return `✅ Rate limit has been refreshed for ${userId}. Their message count has been reset.`;
+      return `✅ Rate limit refreshed for ${userId}. They can now send messages again.`;
     } else {
-      return `❌ Could not find usage data for ${userId}. They may not have used the bot yet.`;
+      return `❌ Failed to refresh rate limit for ${userId}. User may not exist in the rate limit database.`;
     }
+  }
+  
+  /**
+   * Handle temporary block command
+   * Usage: !tempblock <user> [duration] [reason]
+   * Example: !tempblock 1234567890 1h Manual intervention
+   */
+  async handleTempBlock(args, chatId, from) {
+    if (!await this.isAdmin(from)) {
+      return '❌ You do not have permission to block users.';
+    }
+    
+    if (!args || args.length === 0) {
+      return '❌ Please specify a user to block. Usage: !tempblock <user> [duration=1h] [reason]';
+    }
+    
+    const [user, durationStr = '1h', ...reasonParts] = args;
+    const reason = reasonParts.join(' ') || 'Manual intervention';
+    
+    // Parse duration (default: 1 hour)
+    let durationMs = 3600000; // 1 hour default
+    if (durationStr) {
+      try {
+        durationMs = parseDuration(durationStr);
+      } catch (e) {
+        return `❌ Invalid duration format. Examples: 30m, 2h, 1d`;
+      }
+    }
+    
+    // Add temporary block
+    const success = blocklist.addTempBlock(user, durationMs, reason);
+    if (!success) {
+      return '❌ Failed to add temporary block. Invalid user ID.';
+    }
+    
+    const until = new Date(Date.now() + durationMs).toLocaleString();
+    return `✅ Temporarily blocked ${user} until ${until}. Reason: ${reason}`;
+  }
+  
+  /**
+   * Handle temporary unblock command
+   * Usage: !unblocktemp <user>
+   */
+  async handleUnblockTemp(args, chatId, from) {
+    if (!await this.isAdmin(from)) {
+      return '❌ You do not have permission to unblock users.';
+    }
+    
+    if (!args || args.length === 0) {
+      return '❌ Please specify a user to unblock. Usage: !unblocktemp <user>';
+    }
+    
+    const user = args[0];
+    const wasBlocked = blocklist.removeTempBlock(user);
+    
+    if (wasBlocked) {
+      return `✅ Removed temporary block for ${user}.`;
+    } else {
+      return `ℹ️ No active temporary block found for ${user}.`;
+    }
+  }
+  
+  /**
+   * Check block status for a user
+   * Usage: !blockstatus <user>
+   */
+  async handleBlockStatus(args, chatId, from) {
+    if (!await this.isAdmin(from)) {
+      return '❌ You do not have permission to check block status.';
+    }
+    
+    if (!args || args.length === 0) {
+      return '❌ Please specify a user. Usage: !blockstatus <user>';
+    }
+    
+    const user = args[0];
+    const tempBlock = blocklist.tempBlocks?.get?.(user);
+    const isPermanentlyBlocked = blocklist.isBlocked(user);
+    
+    let response = `🔍 *Block Status for ${user}*\n\n`;
+    
+    if (tempBlock) {
+      const until = new Date(tempBlock.until).toLocaleString();
+      const remaining = Math.ceil((tempBlock.until - Date.now()) / 60000); // in minutes
+      response += `🚫 *Temporarily Blocked*\n`;
+      response += `• Reason: ${tempBlock.reason}\n`;
+      response += `• Until: ${until} (${remaining} minutes remaining)\n\n`;
+    } else {
+      response += `✅ No active temporary block\n\n`;
+    }
+    
+    if (isPermanentlyBlocked) {
+      response += `🚫 *Permanently Blocked*\n`;
+      response += `• This user is on the permanent blocklist.`;
+    } else {
+      response += `✅ Not on permanent blocklist`;
+    }
+    
+    return response;
   }
 
   /**
