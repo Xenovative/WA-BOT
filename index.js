@@ -7,6 +7,7 @@ const LLMFactory = require('./llm/llmFactory');
 const chatHandler = require('./handlers/chatHandler');
 const commandHandler = require('./handlers/commandHandler');
 const kbManager = require('./kb/kbManager');
+const blocklist = require('./utils/blocklist');
 const fileHandler = require('./kb/fileHandler');
 const ragProcessor = require('./kb/ragProcessor');
 const fileWatcher = require('./kb/fileWatcher');
@@ -267,8 +268,27 @@ client.on('message_create', async (message) => {
 
 // Message processing
 client.on('message', async (message) => {
+  // Skip messages from self
+  if (message.fromMe) return;
+  
   // Skip media uploads handled by other handler
   if (message.hasMedia && message.body && message.body.startsWith('kb:')) return;
+  
+  // Check if sender is blocked
+  const senderNumber = message.from.split('@')[0]; // Remove @c.us suffix if present
+  if (blocklist.isBlocked(senderNumber)) {
+    console.log(`Ignoring message from blocked number: ${senderNumber}`);
+    return;
+  }
+  
+  // Skip if this is a reply to the bot's own message (manual response)
+  if (message.hasQuotedMsg) {
+    const quotedMsg = await message.getQuotedMessage();
+    if (quotedMsg.fromMe) {
+      console.log('Skipping message as it\'s a reply to bot\'s own message');
+      return;
+    }
+  }
   
   const chatId = message.from;
   const messageText = (message.body || '').trim();

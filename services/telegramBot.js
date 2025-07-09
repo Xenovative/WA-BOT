@@ -3,6 +3,7 @@ const LLMFactory = require('../llm/llmFactory');
 const chatHandler = require('../handlers/chatHandler');
 const commandHandler = require('../handlers/commandHandler');
 const ragProcessor = require('../kb/ragProcessor');
+const blocklist = require('../utils/blocklist');
 
 class TelegramBotService {
   constructor(token) {
@@ -135,33 +136,32 @@ class TelegramBotService {
 
     // Handle all text messages
     this.bot.on('message', async (msg) => {
-      const chatId = msg.chat.id;
-      const messageText = msg.text || '';
-      
-      // Skip non-text messages and commands (they're handled separately)
-      if (!messageText || messageText.startsWith('/')) return;
-
       try {
-        // Send typing action
-        await this.bot.sendChatAction(chatId, 'typing');
-
-        // Process the message
-        await this.processMessage(chatId, messageText);
+        // Skip non-text messages for now
+        if (!msg.text) return;
+        
+        console.log(`[Telegram] Message from ${msg.from.id} (${msg.from.username || 'no username'}): ${msg.text}`);
+        await this.processMessage(msg.chat.id, msg.text, msg.from);
       } catch (error) {
-        console.error('Error processing message:', error);
-        this.sendMessage(chatId, '❌ An error occurred while processing your message.');
+        console.error('Error processing Telegram message:', error);
       }
     });
   }
 
-  async processMessage(chatId, messageText) {
+  async processMessage(chatId, messageText, from) {
     try {
       const senderId = chatId.toString();
       const cleanMessageText = messageText.trim();
       
+      // Check if user is blocked
+      if (blocklist.isBlocked(from.id.toString(), 'telegram')) {
+        console.log(`Ignoring message from blocked Telegram user: ${from.id}`);
+        return;
+      }
+      
       // Check for commands first
       if (messageText.startsWith('/')) {
-        return this.handleCommand(chatId, cleanMessageText);
+        return this.handleCommand(chatId, cleanMessageText, from);
       }
       
       // Check if message is a command (starts with !)
@@ -230,15 +230,46 @@ class TelegramBotService {
     }
   }
 
-  async handleCommand(chatId, command) {
+  async handleCommand(chatId, command, from) {
     try {
       const [cmd, ...args] = command.split(' ');
+      const isAdmin = commandHandler.isAdmin(`telegram:${from.id}`);
+      
+      // Block/Unblock commands handling
+      if (cmd.toLowerCase() === '/block' && isAdmin) {
+        const targetId = args[0];
+        if (!targetId) return this.sendMessage(chatId, 'Please provide a user ID to block');
+        
+        const success = blocklist.addToBlocklist(targetId, 'telegram');
+        return this.sendMessage(chatId, success ? 
+          `✅ User ${targetId} has been blocked` : 
+          '❌ Failed to block user');
+      }
+      
+      if (cmd.toLowerCase() === '/unblock' && isAdmin) {
+        const targetId = args[0];
+        if (!targetId) return this.sendMessage(chatId, 'Please provide a user ID to unblock');
+        
+        const success = blocklist.removeFromBlocklist(targetId, 'telegram');
+        return this.sendMessage(chatId, success ? 
+          `✅ User ${targetId} has been unblocked` : 
+          '❌ User not found in blocklist or failed to unblock');
+      }
+      
+      if ((cmd.toLowerCase() === '/blocklist' || cmd.toLowerCase() === '/blocked') && isAdmin) {
+        const blockedUsers = blocklist.getBlockedNumbers('telegram');
+        return this.sendMessage(chatId, blockedUsers.length > 0 ?
+          `🚫 *Blocked Users*:\n${blockedUsers.map(id => `- ${id}`).join('\n')}` :
+          'No users are currently blocked.');
+      }
+      
+      // Handle other commands
       const response = await commandHandler.handleCommand({
-        from: chatId.toString(),
+        from: `telegram:${from.id}`,
         body: command,
         getChat: async () => ({
           isGroup: false,
-          name: 'Telegram User'
+          name: from.username ? `@${from.username}` : `User ${from.id}`
         })
       });
 

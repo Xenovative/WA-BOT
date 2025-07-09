@@ -1,5 +1,6 @@
 const chatHandler = require('./chatHandler');
 const kbManager = require('../kb/kbManager');
+const blocklist = require('../utils/blocklist');
 const fs = require('fs');
 const path = require('path');
 
@@ -37,7 +38,10 @@ class CommandHandler {
       kblist: this.handleKBList,
       kbdelete: this.handleKBDelete,
       citations: this.handleCitationsToggle,
-      profile: this.handleProfile
+      profile: this.handleProfile,
+      block: this.handleBlockNumber,
+      unblock: this.handleUnblockNumber,
+      blocklist: this.handleListBlocked
     };
     
     // Load configuration profiles
@@ -126,17 +130,24 @@ class CommandHandler {
   }
   
   /**
-   * Check if a phone number is in the admin list
-   * @param {string} phoneNumber - Phone number to check
+   * Check if a user ID is in the admin list
+   * @param {string} userId - User ID to check
    * @returns {boolean} - True if admin, false otherwise
    */
-  isAdmin(phoneNumber) {
-    // If no admins defined, everyone is allowed
-    if (this.adminPhoneNumbers.length === 0) {
-      return true;
+  isAdmin(userId) {
+    if (!this.authRequired) return true;
+    if (!userId) return false;
+    
+    // Check if it's a Telegram user ID (format: 'telegram:123456789')
+    if (userId.startsWith('telegram:')) {
+      const telegramId = userId.replace('telegram:', '');
+      return this.adminPhoneNumbers.includes(`telegram:${telegramId}`);
     }
     
-    return this.adminPhoneNumbers.includes(phoneNumber);
+    // Handle regular phone numbers
+    const cleanNumber = userId.replace(/\D/g, '');
+    return this.adminPhoneNumbers.includes(cleanNumber) || 
+           this.adminPhoneNumbers.includes(`telegram:${cleanNumber}`);
   }
 
   /**
