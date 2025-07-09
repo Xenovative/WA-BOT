@@ -189,9 +189,9 @@ client.sendMessage = async function(chatId, content, options = {}) {
       const cleanChatId = chatId.split('@')[0];
       
       console.log(`[Message-Type] Manual message detected from ${cleanChatId}`, {
-        isAutomated,
-        isCommandResponse,
-        isReplyToBot,
+        isAutomated: options.isAutomated,
+        isCommandResponse: options.isCommandResponse,
+        isReplyToBot: options.isReplyToBot,
         options
       });
       
