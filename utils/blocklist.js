@@ -179,16 +179,20 @@ class BlocklistManager {
     if (!identifier) return false;
     
     const until = Date.now() + durationMs;
-    this.tempBlocks.set(identifier, { until, reason });
-    console.log(`[Blocklist] Added temporary block for ${identifier} until ${new Date(until).toISOString()}`);
+    this.tempBlocks.set(identifier, { until, reason, isManual });
+    console.log(`[Blocklist] Added ${isManual ? 'manual' : 'auto'} temporary block for ${identifier} until ${new Date(until).toISOString()}`);
     
-    // Auto-remove after duration
-    setTimeout(() => {
+    // Auto-remove after duration - use regular setTimeout instead of timers/promises
+    const timeout = setTimeout(() => {
       if (this.tempBlocks.get(identifier)?.until === until) {
         this.tempBlocks.delete(identifier);
         console.log(`[Blocklist] Temporary block expired for ${identifier}`);
       }
     }, durationMs);
+    
+    // Store timeout for potential cleanup
+    this.timeouts = this.timeouts || new Map();
+    this.timeouts.set(identifier, { timeout, until });
     
     return true;
   }
@@ -201,6 +205,13 @@ class BlocklistManager {
   removeTempBlock(identifier) {
     const existed = this.tempBlocks.has(identifier);
     if (existed) {
+      // Clear the timeout if it exists
+      if (this.timeouts?.has(identifier)) {
+        const { timeout } = this.timeouts.get(identifier);
+        clearTimeout(timeout);
+        this.timeouts.delete(identifier);
+      }
+      
       this.tempBlocks.delete(identifier);
       console.log(`[Blocklist] Removed temporary block for ${identifier}`);
     }

@@ -169,12 +169,17 @@ global.client = client;
 // Initialize the LLM client
 updateLLMClient();
 
-// Patch the sendMessage function to add temporary blocks for manual messages
+// Store original sendMessage
 const originalSendMessage = client.sendMessage.bind(client);
+
+// Patch the sendMessage function to handle message types
 client.sendMessage = async function(chatId, content, options = {}) {
+  const isGroup = chatId.includes('@g.us');
+  const isAutomated = options.isAutomated === true;
+  
   try {
-    // If this is a direct message (not a group) and not from a command
-    if (!chatId.includes('@g.us') && !options.isAutomated) {
+    // Only process direct messages from non-automated sends
+    if (!isGroup && !isAutomated) {
       const cleanChatId = chatId.split('@')[0];
       
       // Add a 5-minute temporary block for manual messages
@@ -182,7 +187,7 @@ client.sendMessage = async function(chatId, content, options = {}) {
       const success = blocklist.addTempBlock(
         cleanChatId, 
         blockDuration, 
-        'manual - message sent directly',
+        'manual - admin message sent',
         true  // Mark as manual block
       );
       
@@ -192,6 +197,7 @@ client.sendMessage = async function(chatId, content, options = {}) {
     }
   } catch (error) {
     console.error('[Manual-Block] Error in sendMessage interceptor:', error);
+    // Don't fail the message send if our block logic fails
   }
   
   // Call the original sendMessage
@@ -301,10 +307,15 @@ client.on('message_create', async (message) => {
 
 // Helper function to send an automated message (won't trigger manual blocks)
 async function sendAutomatedMessage(chatId, content, options = {}) {
-  return client.sendMessage(chatId, content, { 
-    ...options, 
-    isAutomated: true  // Mark as automated message
-  });
+  try {
+    return await client.sendMessage(chatId, content, { 
+      ...options, 
+      isAutomated: true  // Mark as automated message
+    });
+  } catch (error) {
+    console.error('[Automated-Message] Error sending message:', error);
+    throw error;
+  }
 }
 
 // Make it available globally
