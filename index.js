@@ -176,29 +176,41 @@ const originalSendMessage = client.sendMessage.bind(client);
 client.sendMessage = async function(chatId, content, options = {}) {
   const isGroup = chatId.includes('@g.us');
   const isAutomated = options.isAutomated === true;
+  const isCommandResponse = options.isCommandResponse === true;
+  const isReplyToBot = options.isReplyToBot === true;
   
   try {
-    // Only process direct messages from non-automated sends that are not replies to bot
-    if (!isGroup && !isAutomated && !options.isReplyToBot) {
+    // Only process direct messages that are actual manual sends
+    if (!isGroup && !isAutomated && !isCommandResponse && !isReplyToBot && !options.isBotResponse) {
       const cleanChatId = chatId.split('@')[0];
       
-      // Check if this is a manual message (not from a command or automated process)
-      const isManualMessage = !options.isCommandResponse && !options.isAutomated;
+      console.log(`[Message-Type] Manual message detected from ${cleanChatId}`, {
+        isAutomated,
+        isCommandResponse,
+        isReplyToBot,
+        options
+      });
       
-      if (isManualMessage) {
-        // Add a 5-minute temporary block for manual messages
-        const blockDuration = 5 * 60 * 1000; // 5 minutes
-        const success = blocklist.addTempBlock(
-          cleanChatId, 
-          blockDuration, 
-          'manual - admin message sent',
-          true  // Mark as manual block
-        );
-        
-        if (success) {
-          console.log(`[Manual-Block] Temporarily blocked ${cleanChatId} for ${blockDuration/1000} seconds`);
-        }
+      // Add a 5-minute temporary block for manual messages
+      const blockDuration = 5 * 60 * 1000; // 5 minutes
+      const success = blocklist.addTempBlock(
+        cleanChatId, 
+        blockDuration, 
+        'manual - admin message sent',
+        true  // Mark as manual block
+      );
+      
+      if (success) {
+        console.log(`[Manual-Block] Temporarily blocked ${cleanChatId} for ${blockDuration/1000} seconds`);
       }
+    } else {
+      console.log(`[Message-Type] Non-blocking message:`, {
+        isGroup,
+        isAutomated,
+        isCommandResponse,
+        isReplyToBot,
+        hasBotResponseFlag: options.isBotResponse === true
+      });
     }
   } catch (error) {
     console.error('[Manual-Block] Error in sendMessage interceptor:', error);
@@ -858,7 +870,8 @@ client.on('message', async (message) => {
       // Send response back as automated message with appropriate flags
       await sendAutomatedMessage(message.from, response, {
         isCommandResponse: message.isCommand,
-        isReplyToBot: message.isReplyToBot
+        isReplyToBot: message.isReplyToBot,
+        isBotResponse: true  // Explicitly mark as bot response
       });
       console.log('[Group Chat] Response sent successfully');
     } catch (error) {

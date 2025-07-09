@@ -127,33 +127,60 @@ class BlocklistManager {
   isBlocked(identifier, type = 'whatsapp', checkManualOnly = false) {
     if (!identifier) return false;
     
+    // Clean the identifier
+    const cleanId = String(identifier).split('@')[0];
+    
     // Check temporary blocks first (manual intervention)
-    if (this.tempBlocks.has(identifier)) {
-      const block = this.tempBlocks.get(identifier);
-      if (Date.now() < block.until) {
-        // If we're only checking for manual blocks, or if this is a manual block
-        if (!checkManualOnly || block.reason.includes('manual')) {
-          console.log(`[Blocklist] ${checkManualOnly ? 'Manual' : 'Temporary'} block active for ${identifier}`);
-          return true;
+    for (const [id, block] of this.tempBlocks.entries()) {
+      const cleanBlockId = String(id).split('@')[0];
+      
+      // Check if this block matches our identifier (with or without @c.us)
+      if (cleanBlockId === cleanId || id === identifier) {
+        if (Date.now() < block.until) {
+          // If we're only checking for manual blocks, or if this is a manual block
+          const isManualBlock = block.reason && block.reason.includes('manual');
+          
+          if (!checkManualOnly || isManualBlock) {
+            console.log(`[Blocklist] ${checkManualOnly ? 'Manual' : 'Temporary'} block active for ${identifier} (${cleanId})`, {
+              reason: block.reason,
+              isManual: isManualBlock,
+              until: new Date(block.until).toISOString()
+            });
+            return true;
+          }
+        } else {
+          // Clean up expired block
+          this.tempBlocks.delete(id);
+          if (this.timeouts?.has(id)) {
+            clearTimeout(this.timeouts.get(id).timeout);
+            this.timeouts.delete(id);
+          }
         }
-      } else {
-        // Clean up expired block
-        this.tempBlocks.delete(identifier);
       }
     }
     
     // Skip permanent block check if we're only looking for manual blocks
     if (checkManualOnly) return false;
     
+    // Check permanent blocks
     if (type === 'whatsapp') {
       // Check both the full number and just the digits
-      const cleanNumber = String(identifier).replace(/[^0-9]/g, '').replace(/^0+/, '');
-      return this.blockedNumbers.has(cleanNumber) || 
-             this.blockedNumbers.has(identifier);
+      const cleanNumber = cleanId.replace(/[^0-9]/g, '').replace(/^0+/, '');
+      const isBlocked = this.blockedNumbers.has(cleanNumber) || 
+                       this.blockedNumbers.has(cleanId) ||
+                       this.blockedNumbers.has(identifier);
+      
+      if (isBlocked) {
+        console.log(`[Blocklist] Permanent block active for ${identifier} (${cleanId})`);
+        return true;
+      }
     } else if (type === 'telegram') {
       // For Telegram, we check the numeric user ID
-      const cleanId = String(identifier).trim();
-      return this.blockedTelegramIds.has(cleanId);
+      const cleanIdStr = cleanId.trim();
+      if (this.blockedTelegramIds.has(cleanIdStr)) {
+        console.log(`[Blocklist] Permanent Telegram block active for ${identifier}`);
+        return true;
+      }
     }
     
     return false;
