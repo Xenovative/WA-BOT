@@ -174,29 +174,87 @@ const originalSendMessage = client.sendMessage.bind(client);
 
 // Patch the sendMessage function to handle message types
 client.sendMessage = async function(chatId, content, options = {}) {
+  console.log('[Message-Debug] sendMessage called with:', {
+    chatId,
+    content: typeof content === 'string' ? content.substring(0, 50) + '...' : content,
+    options: {
+      ...options,
+      // Don't log the entire message content to avoid cluttering logs
+      quotedMsg: options.quotedMsg ? '[Message]' : undefined
+    }
+  });
+
   // Skip if it's a group message
   if (chatId.includes('@g.us')) {
+    console.log('[Message-Debug] Skipping group message');
     return originalSendMessage(chatId, content, options);
   }
   
   // Skip if it's an automated message, bot response, or forwarded message
   if (options.isAutomated || options.isBotResponse || options.isResponseToUser) {
+    console.log('[Message-Debug] Skipping automated/bot message');
     return originalSendMessage(chatId, content, options);
   }
   
   // Get the bot's phone number (without @c.us)
   const botNumber = client.info?.wid?.user;
+  console.log('[Message-Debug] Bot number:', botNumber);
+  
   if (!botNumber) {
     console.error('[Manual-Block] Could not determine bot number');
     return originalSendMessage(chatId, content, options);
   }
   
-  // Check if this is a manual message from the bot's number
-  const isFromBot = options.fromMe || 
-                   (options.author && options.author === `${botNumber}@c.us`);
+  // Bot's full ID with @c.us suffix
+  const botId = `${botNumber}@c.us`;
+  
+  // Check if message is from the bot in any possible format
+  const isFromBot = 
+    // Direct fromMe flag
+    options.fromMe === true || 
+    options.fromMe === 'true' ||
+    // Check author/from fields with @c.us suffix
+    (options.author && options.author.endsWith(botId)) ||
+    (options.from && options.from.endsWith(botId)) ||
+    // Check author/from fields without @c.us suffix
+    (options.author && options.author === botNumber) ||
+    (options.from && options.from === botNumber) ||
+    // Check if message is from the bot's number in any format
+    (options.author && options.author.includes(botNumber)) ||
+    (options.from && options.from.includes(botNumber));
+  
+  // Get the message sender's ID in a clean format
+  const senderId = (options.author || options.from || '').toString().trim();
+  const cleanSenderId = senderId.endsWith('@c.us') ? 
+    senderId : 
+    senderId.includes('@') ? 
+      senderId : // Keep as is if it has some other domain
+      `${senderId}@c.us`; // Add @c.us if no domain
+  
+  // Log detailed debug info
+  console.log('[Message-Debug] Message details:', {
+    isFromBot,
+    fromMe: options.fromMe,
+    from: options.from,
+    author: options.author,
+    cleanSenderId,
+    botId,
+    botNumber,
+    isDirectMatch: cleanSenderId === botId || cleanSenderId === botNumber,
+    // Log all options except large objects
+    options: Object.entries(options)
+      .filter(([key]) => !['quotedMsg', 'quotedMessage', 'media'].includes(key))
+      .reduce((obj, [key, value]) => ({
+        ...obj,
+        [key]: typeof value === 'object' ? 
+          (Array.isArray(value) ? `[Array(${value.length})]` : '[Object]') : 
+          value
+      }), {})
+  });
   
   // Only process manual messages from bot
   if (!isFromBot) {
+    console.log('[Message-Debug] Not from bot, skipping block');
     return originalSendMessage(chatId, content, options);
   }
   
