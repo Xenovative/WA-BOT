@@ -1,6 +1,5 @@
 const fs = require('fs');
 const path = require('path');
-const { setTimeout } = require('timers/promises');
 
 class BlocklistManager {
   constructor() {
@@ -182,11 +181,15 @@ class BlocklistManager {
     this.tempBlocks.set(identifier, { until, reason, isManual });
     console.log(`[Blocklist] Added ${isManual ? 'manual' : 'auto'} temporary block for ${identifier} until ${new Date(until).toISOString()}`);
     
-    // Auto-remove after duration - use regular setTimeout instead of timers/promises
-    const timeout = setTimeout(() => {
-      if (this.tempBlocks.get(identifier)?.until === until) {
-        this.tempBlocks.delete(identifier);
-        console.log(`[Blocklist] Temporary block expired for ${identifier}`);
+    // Auto-remove after duration using global setTimeout
+    const timeout = global.setTimeout(() => {
+      try {
+        if (this.tempBlocks.get(identifier)?.until === until) {
+          this.tempBlocks.delete(identifier);
+          console.log(`[Blocklist] Temporary block expired for ${identifier}`);
+        }
+      } catch (error) {
+        console.error(`[Blocklist] Error in block expiration for ${identifier}:`, error);
       }
     }, durationMs);
     
@@ -219,30 +222,53 @@ class BlocklistManager {
   }
   
   /**
-   * Clean up expired temporary blocks
+   * Clean up expired temporary blocks and their timeouts
    */
   cleanupTempBlocks() {
     const now = Date.now();
-    let count = 0;
+    let removed = 0;
     
+    // Initialize timeouts map if it doesn't exist
+    this.timeouts = this.timeouts || new Map();
+    
+    // Clean up expired temporary blocks
     for (const [id, block] of this.tempBlocks.entries()) {
-      if (now >= block.until) {
+      if (block.until <= now) {
+        // Clear the timeout if it exists
+        if (this.timeouts.has(id)) {
+          clearTimeout(this.timeouts.get(id).timeout);
+          this.timeouts.delete(id);
+        }
+        
         this.tempBlocks.delete(id);
-        count++;
+        removed++;
       }
     }
     
-    if (count > 0) {
-      console.log(`[Blocklist] Cleaned up ${count} expired temporary blocks`);
+    // Clean up any orphaned timeouts
+    for (const [id, { until }] of this.timeouts.entries()) {
+      if (until <= now) {
+        clearTimeout(this.timeouts.get(id).timeout);
+        this.timeouts.delete(id);
+        removed++;
+      }
+    }
+    
+    if (removed > 0) {
+      console.log(`[Blocklist] Cleaned up ${removed} expired temporary blocks`);
     }
   }
 
+  /**
+   * Get blocked numbers for a specific type
+   * @param {string} type - 'whatsapp' or 'telegram'
+   * @returns {Array} Sorted array of blocked numbers/IDs
+   */
   getBlockedNumbers(type = 'whatsapp') {
     try {
-      if (type === 'telegram') {
-        return Array.from(this.blockedTelegramIds).sort();
-      }
-      return Array.from(this.blockedNumbers).sort();
+      return type === 'telegram' 
+        ? Array.from(this.blockedTelegramIds).sort()
+        : Array.from(this.blockedNumbers).sort();
     } catch (error) {
       console.error('Error getting blocked numbers:', error);
       return [];

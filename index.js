@@ -178,21 +178,26 @@ client.sendMessage = async function(chatId, content, options = {}) {
   const isAutomated = options.isAutomated === true;
   
   try {
-    // Only process direct messages from non-automated sends
-    if (!isGroup && !isAutomated) {
+    // Only process direct messages from non-automated sends that are not replies to bot
+    if (!isGroup && !isAutomated && !options.isReplyToBot) {
       const cleanChatId = chatId.split('@')[0];
       
-      // Add a 5-minute temporary block for manual messages
-      const blockDuration = 5 * 60 * 1000; // 5 minutes
-      const success = blocklist.addTempBlock(
-        cleanChatId, 
-        blockDuration, 
-        'manual - admin message sent',
-        true  // Mark as manual block
-      );
+      // Check if this is a manual message (not from a command or automated process)
+      const isManualMessage = !options.isCommandResponse && !options.isAutomated;
       
-      if (success) {
-        console.log(`[Manual-Block] Temporarily blocked ${cleanChatId} for ${blockDuration/1000} seconds`);
+      if (isManualMessage) {
+        // Add a 5-minute temporary block for manual messages
+        const blockDuration = 5 * 60 * 1000; // 5 minutes
+        const success = blocklist.addTempBlock(
+          cleanChatId, 
+          blockDuration, 
+          'manual - admin message sent',
+          true  // Mark as manual block
+        );
+        
+        if (success) {
+          console.log(`[Manual-Block] Temporarily blocked ${cleanChatId} for ${blockDuration/1000} seconds`);
+        }
       }
     }
   } catch (error) {
@@ -327,6 +332,10 @@ client.on('message', async (message) => {
   // Skip messages from self
   if (message.fromMe) return;
   
+  // Initialize message type flags if not set
+  message.isCommand = message.isCommand || false;
+  message.isReplyToBot = message.isReplyToBot || false;
+  
   // Handle voice messages
   if (message.hasMedia && message.type === 'ptt') {
     try {
@@ -377,20 +386,23 @@ client.on('message', async (message) => {
   // Skip media uploads handled by other handler
   if (message.hasMedia && message.body && message.body.startsWith('kb:')) return;
   
-  // Check if sender is blocked
+  // Check if sender is blocked (only check for manual blocks)
   const senderNumber = message.from.split('@')[0]; // Remove @c.us suffix if present
-  if (blocklist.isBlocked(senderNumber)) {
-    console.log(`Ignoring message from blocked number: ${senderNumber}`);
+  if (blocklist.isBlocked(senderNumber, 'whatsapp', true)) {
+    console.log(`[Block] Ignoring message from manually blocked number: ${senderNumber}`);
     return;
   }
   
-  // Skip if this is a reply to the bot's own message (manual response)
+  // Handle replies to bot messages
   if (message.hasQuotedMsg) {
     const quotedMsg = await message.getQuotedMessage();
     if (quotedMsg.fromMe) {
-      console.log('Skipping message as it\'s a reply to bot\'s own message');
-      return;
-    }
+      console.log('Processing reply to bot message');
+      // Mark as reply to bot in the message options
+      message.isReplyToBot = true;
+      // Continue processing but mark as reply in the options
+      options = { ...options, isReplyToBot: true };
+    }  
   }
   
   const chatId = message.from;
@@ -843,8 +855,11 @@ client.on('message', async (message) => {
         }
       }
       
-      // Send response back as automated message
-      await sendAutomatedMessage(message.from, response);
+      // Send response back as automated message with appropriate flags
+      await sendAutomatedMessage(message.from, response, {
+        isCommandResponse: message.isCommand,
+        isReplyToBot: message.isReplyToBot
+      });
       console.log('[Group Chat] Response sent successfully');
     } catch (error) {
       console.error('[Group Chat] Error processing message:', error);
