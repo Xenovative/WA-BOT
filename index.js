@@ -175,13 +175,17 @@ const originalSendMessage = client.sendMessage.bind(client);
 // Patch the sendMessage function to handle message types
 client.sendMessage = async function(chatId, content, options = {}) {
   const isGroup = chatId.includes('@g.us');
-  const isAutomated = options.isAutomated === true;
-  const isCommandResponse = options.isCommandResponse === true;
-  const isReplyToBot = options.isReplyToBot === true;
+  const isBotMessage = options.isBotResponse || options.isAutomated || options.isResponseToUser;
+  
+  // Skip processing for bot's own messages
+  if (isBotMessage) {
+    console.log('[Message-Handler] Skipping block check for bot message');
+    return originalSendMessage(chatId, content, options);
+  }
   
   try {
-    // Only process direct messages that are actual manual sends
-    if (!isGroup && !isAutomated && !isCommandResponse && !isReplyToBot && !options.isBotResponse) {
+    // Only process direct messages
+    if (!isGroup) {
       const cleanChatId = chatId.split('@')[0];
       
       console.log(`[Message-Type] Manual message detected from ${cleanChatId}`, {
@@ -323,16 +327,20 @@ client.on('message_create', async (message) => {
 });
 
 // Helper function to send an automated message (won't trigger manual blocks)
-async function sendAutomatedMessage(chatId, content, options = {}) {
-  try {
-    return await client.sendMessage(chatId, content, { 
-      ...options, 
-      isAutomated: true  // Mark as automated message
-    });
-  } catch (error) {
-    console.error('[Automated-Message] Error sending message:', error);
-    throw error;
-  }
+function sendAutomatedMessage(chatId, content, options = {}) {
+  // Always mark as bot response and automated
+  const botOptions = {
+    ...options,
+    isAutomated: true,
+    isBotResponse: true,
+    isCommandResponse: options.isCommandResponse || false,
+    isReplyToBot: options.isReplyToBot || false,
+    // Add a flag to indicate this is a response to a user message
+    isResponseToUser: true
+  };
+  
+  console.log('[Automated-Message] Sending bot response with options:', botOptions);
+  return client.sendMessage(chatId, content, botOptions);
 }
 
 // Make it available globally
@@ -871,7 +879,9 @@ client.on('message', async (message) => {
       await sendAutomatedMessage(message.from, response, {
         isCommandResponse: message.isCommand,
         isReplyToBot: message.isReplyToBot,
-        isBotResponse: true  // Explicitly mark as bot response
+        isBotResponse: true,    // Explicitly mark as bot response
+        isAutomated: true,      // Mark as automated
+        isResponseToUser: true  // Mark as response to user
       });
       console.log('[Group Chat] Response sent successfully');
     } catch (error) {
