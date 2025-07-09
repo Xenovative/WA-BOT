@@ -4,6 +4,7 @@ const chatHandler = require('../handlers/chatHandler');
 const commandHandler = require('../handlers/commandHandler');
 const ragProcessor = require('../kb/ragProcessor');
 const blocklist = require('../utils/blocklist');
+const rateLimiter = require('../utils/rateLimiter');
 
 class TelegramBotService {
   constructor(token) {
@@ -150,13 +151,26 @@ class TelegramBotService {
 
   async processMessage(chatId, messageText, from) {
     try {
-      const senderId = chatId.toString();
+      const senderId = from.id.toString();
       const cleanMessageText = messageText.trim();
+      const userId = `telegram:${senderId}`;
       
       // Check if user is blocked
-      if (blocklist.isBlocked(from.id.toString(), 'telegram')) {
-        console.log(`Ignoring message from blocked Telegram user: ${from.id}`);
+      if (blocklist.isBlocked(senderId, 'telegram')) {
+        console.log(`[Telegram] Ignoring message from blocked user: ${senderId}`);
         return;
+      }
+      
+      // Check rate limit for non-admin users
+      if (!commandHandler.isAdmin(userId)) {
+        const limitCheck = rateLimiter.checkLimit(userId);
+        if (!limitCheck.allowed) {
+          const resetTime = new Date(limitCheck.reset).toLocaleString();
+          return await this.sendMessage(chatId, 
+            `⚠️ Rate limit exceeded. You've used ${limitCheck.limit} messages.\n` +
+            `Limit will reset at ${resetTime}.`
+          );
+        }
       }
       
       // Check for commands first

@@ -1,6 +1,7 @@
 const chatHandler = require('./chatHandler');
 const kbManager = require('../kb/kbManager');
 const blocklist = require('../utils/blocklist');
+const rateLimiter = require('../utils/rateLimiter');
 const fs = require('fs');
 const path = require('path');
 
@@ -41,7 +42,9 @@ class CommandHandler {
       profile: this.handleProfile,
       block: this.handleBlockNumber,
       unblock: this.handleUnblockNumber,
-      blocklist: this.handleListBlocked
+      blocklist: this.handleListBlocked,
+      refreshlimit: this.handleRefreshLimit,
+      rlrefresh: this.handleRefreshLimit
     };
     
     // Load configuration profiles
@@ -89,17 +92,24 @@ class CommandHandler {
    * @returns {Promise<string>} Response to the command
    */
   async processCommand(message, chatId, senderPhone) {
+    // Format the phone number - remove any WhatsApp suffixes
+    const cleanPhone = senderPhone.split('@')[0];
+    const isAdmin = this.isAdmin(cleanPhone);
+    
     // Check authentication if required
-    if (this.authRequired) {
-      // Format the phone number - remove any WhatsApp suffixes
-      const cleanPhone = senderPhone.split('@')[0];
-      
-      // Check if sender is an admin
-      if (!this.isAdmin(cleanPhone)) {
-        // Only allow help command for non-admins
-        if (!message.toLowerCase().startsWith('!help')) {
-          return 'You are not authorized to use bot commands. Contact the bot administrator for access.';
-        }
+    if (this.authRequired && !isAdmin) {
+      // Only allow help command for non-admins
+      if (!message.toLowerCase().startsWith('!help')) {
+        return 'You are not authorized to use bot commands. Contact the bot administrator for access.';
+      }
+    }
+    
+    // Check rate limit for non-admin users
+    if (!isAdmin) {
+      const limitCheck = rateLimiter.checkLimit(cleanPhone);
+      if (!limitCheck.allowed) {
+        const resetTime = new Date(limitCheck.reset).toLocaleString();
+        return `⚠️ Rate limit exceeded. You've used ${limitCheck.limit} messages. Limit will reset at ${resetTime}.`;
       }
     }
     
@@ -208,6 +218,32 @@ class CommandHandler {
     const type = isTelegram ? 'Telegram Users' : 'Phone Numbers';
     return `🚫 *Blocked ${type}* (${blocked.length}):\n` +
       blocked.map((num, index) => `${index + 1}. ${num}`).join('\n');
+  }
+  
+  // Refresh rate limit for a user
+  async handleRefreshLimit(args, chatId, phoneNumber) {
+    if (!this.isAdmin(phoneNumber)) {
+      return '❌ You do not have permission to use this command.';
+    }
+
+    const userId = args[0];
+    if (!userId) {
+      return '❌ Please provide a user ID/number. Example: !refreshlimit 1234567890';
+    }
+
+    // Handle both Telegram and WhatsApp IDs
+    let targetId = userId;
+    if (!userId.startsWith('telegram:') && isNaN(Number(userId))) {
+      targetId = `telegram:${userId}`; // Assume Telegram ID if not a number
+    }
+
+    const success = rateLimiter.resetUser(targetId);
+    
+    if (success) {
+      return `✅ Rate limit has been refreshed for ${userId}. Their message count has been reset.`;
+    } else {
+      return `❌ Could not find usage data for ${userId}. They may not have used the bot yet.`;
+    }
   }
 
   /**
