@@ -174,7 +174,21 @@ const originalSendMessage = client.sendMessage.bind(client);
 
 // Patch the sendMessage function to handle message types
 client.sendMessage = async function(chatId, content, options = {}) {
-  console.log('[Message-Debug] sendMessage called with:', {
+  const timestamp = new Date().toISOString();
+  const debugId = Math.random().toString(36).substring(2, 8);
+  
+  console.log(`[${timestamp}] [${debugId}] [SendMessage] Called with:`, {
+    chatId,
+    content: typeof content === 'string' ? content.substring(0, 100) : '[Non-string content]',
+    options: {
+      ...options,
+      // Don't log large objects
+      quotedMsg: options.quotedMsg ? '[Message]' : undefined,
+      media: options.media ? '[Media]' : undefined
+    },
+    stack: new Error().stack.split('\n').slice(1, 4).join('\n') // Show call stack
+  });
+  console.log(`[${timestamp}] [${debugId}] [Message-Debug] sendMessage details:`, {
     chatId,
     content: typeof content === 'string' ? content.substring(0, 50) + '...' : content,
     options: {
@@ -186,22 +200,30 @@ client.sendMessage = async function(chatId, content, options = {}) {
 
   // Skip if it's a group message
   if (chatId.includes('@g.us')) {
-    console.log('[Message-Debug] Skipping group message');
+    console.log(`[${timestamp}] [${debugId}] [Message-Debug] Skipping group message`);
     return originalSendMessage(chatId, content, options);
   }
   
   // Skip if it's an automated message, bot response, or forwarded message
   if (options.isAutomated || options.isBotResponse || options.isResponseToUser) {
-    console.log('[Message-Debug] Skipping automated/bot message');
+    console.log(`[${timestamp}] [${debugId}] [Message-Debug] Skipping automated/bot message`, {
+      isAutomated: options.isAutomated,
+      isBotResponse: options.isBotResponse,
+      isResponseToUser: options.isResponseToUser
+    });
     return originalSendMessage(chatId, content, options);
   }
   
   // Get the bot's phone number (without @c.us)
   const botNumber = client.info?.wid?.user;
-  console.log('[Message-Debug] Bot number:', botNumber);
+  console.log(`[${timestamp}] [${debugId}] [Message-Debug] Bot info:`, {
+    botNumber,
+    clientInfo: client.info ? 'Available' : 'Missing',
+    wid: client.info?.wid ? 'Available' : 'Missing'
+  });
   
   if (!botNumber) {
-    console.error('[Manual-Block] Could not determine bot number');
+    console.error(`[${timestamp}] [${debugId}] [Manual-Block] Could not determine bot number`);
     return originalSendMessage(chatId, content, options);
   }
   
@@ -422,8 +444,21 @@ global.sendMessage = sendAutomatedMessage;
 // Message processing
 // Handle voice messages
 client.on('message', async (message) => {
+  console.log('[Message-Event] New message received:', {
+    from: message.from,
+    to: message.to,
+    fromMe: message.fromMe,
+    hasMedia: message.hasMedia,
+    type: message.type,
+    body: message.body?.substring(0, 100),
+    timestamp: new Date(message.timestamp * 1000).toISOString()
+  });
+
   // Skip messages from self
-  if (message.fromMe) return;
+  if (message.fromMe) {
+    console.log('[Message-Event] Skipping message from self');
+    return;
+  }
   
   // Initialize message type flags if not set
   message.isCommand = message.isCommand || false;
