@@ -174,26 +174,41 @@ const originalSendMessage = client.sendMessage.bind(client);
 
 // Patch the sendMessage function to handle message types
 client.sendMessage = async function(chatId, content, options = {}) {
-  const isGroup = chatId.includes('@g.us');
-  const isBotMessage = options.isBotResponse || options.isAutomated || options.isResponseToUser;
-  
-  // Skip processing for bot's own messages
-  if (isBotMessage) {
-    console.log('[Message-Handler] Skipping block check for bot message');
+  // Skip if it's a group message
+  if (chatId.includes('@g.us')) {
     return originalSendMessage(chatId, content, options);
   }
+  
+  // Skip if it's an automated message, bot response, or forwarded message
+  if (options.isAutomated || options.isBotResponse || options.isResponseToUser) {
+    return originalSendMessage(chatId, content, options);
+  }
+  
+  // Get the bot's phone number (without @c.us)
+  const botNumber = client.info?.wid?.user;
+  if (!botNumber) {
+    console.error('[Manual-Block] Could not determine bot number');
+    return originalSendMessage(chatId, content, options);
+  }
+  
+  // Check if this is a manual message from the bot's number
+  const isFromBot = options.fromMe || 
+                   (options.author && options.author === `${botNumber}@c.us`);
+  
+  // Only process manual messages from bot
+  if (!isFromBot) {
+    return originalSendMessage(chatId, content, options);
+  }
+  
+  // Log the manual message from bot
+  console.log(`[Manual-Block] Manual message from bot ${botNumber} to ${chatId}`);
   
   try {
     // Only process direct messages
     if (!isGroup) {
       const cleanChatId = chatId.split('@')[0];
       
-      console.log(`[Message-Type] Manual message detected from ${cleanChatId}`, {
-        isAutomated: options.isAutomated,
-        isCommandResponse: options.isCommandResponse,
-        isReplyToBot: options.isReplyToBot,
-        options
-      });
+      console.log(`[Manual-Block] Adding temp block for manual message to ${cleanChatId}`);
       
       // Add a 5-minute temporary block for manual messages
       const blockDuration = 5 * 60 * 1000; // 5 minutes
