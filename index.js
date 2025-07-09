@@ -38,6 +38,43 @@ if (process.env.TELEGRAM_BOT_TOKEN) {
 // Make chatHandler globally available for workflow messages
 global.chatHandler = chatHandler;
 
+// Track message status and detect manual messages
+client.on('message_ack', (msg, ack) => {
+  // Message status updates (0-3: sent, delivered, read)
+  const ackStatus = ['sent', 'delivered', 'read', 'read'][ack] || ack;
+  console.log(`[Message-Status] Message ${msg.id.id} status: ${ackStatus}`);
+  
+  // If message is read and was a manual message, we can track it
+  if (ack === 3 && msg._isManual) {
+    console.log(`[Manual-Message] Manual message was read by recipient`);
+  }
+});
+
+// Track all message creations (both sent and received)
+client.on('message_create', (msg) => {
+  const isManual = msg.fromMe && 
+                  !msg.isForwarded && 
+                  !msg.hasQuotedMsg &&
+                  !msg._isCommandResponse;
+  
+  if (isManual) {
+    msg._isManual = true;
+    console.log('[Manual-Message] Detected manual message:', {
+      id: msg.id.id,
+      to: msg.to,
+      body: msg.body?.substring(0, 100),
+      timestamp: new Date(msg.timestamp * 1000).toISOString()
+    });
+    
+    // Add to blocklist when manual message is sent
+    if (msg.to) {
+      const recipient = msg.to.includes('@') ? msg.to.split('@')[0] : msg.to;
+      blocklist.addTempBlock(recipient, 5 * 60 * 1000, 'manual message sent');
+      console.log(`[Blocklist] Added temporary block for ${recipient}`);
+    }
+  }
+});
+
 // Flag to track if shutdown is in progress
 let isShuttingDown = false;
 
@@ -383,13 +420,12 @@ client.on('ready', async () => {
   initializeServices().catch(console.error);
 });
 
-// Handle file uploads for knowledge base
 client.on('message_create', async (message) => {
   // Only process messages from others, not from yourself
   if (message.fromMe) return;
   
   // Check if the message has media and a filename caption starting with 'kb:'
-  if (message.hasMedia && message.body.startsWith('kb:')) {
+  if (message.body && message.body.startsWith('kb:')) {
     const chatId = message.from;
     
     try {
@@ -419,32 +455,27 @@ client.on('message_create', async (message) => {
       await message.reply(`Error processing document: ${error.message}`);
     }
   }
-});
-
-// Helper function to send an automated message (won't trigger manual blocks)
-function sendAutomatedMessage(chatId, content, options = {}) {
-  // Always mark as bot response and automated
-  const botOptions = {
-    ...options,
-    isAutomated: true,
-    isBotResponse: true,
-    isCommandResponse: options.isCommandResponse || false,
-    isReplyToBot: options.isReplyToBot || false,
-    // Add a flag to indicate this is a response to a user message
-    isResponseToUser: true
-  };
   
-  console.log('[Automated-Message] Sending bot response with options:', botOptions);
-  return client.sendMessage(chatId, content, botOptions);
-}
+  // Handle commands
+  if (message.body && message.body.startsWith('!')) {
+    message.isCommand = true;
+    message._isCommandResponse = true;
+    await commandHandler.handleCommand(message, client);
+    return;
+  }
+});
 
 // Make it available globally
 global.sendMessage = sendAutomatedMessage;
 
 // Message processing
-// Handle voice messages
+// Handle incoming messages
 client.on('message', async (message) => {
+  // Initialize message flags
+  message._isCommandResponse = false;
+  
   console.log('[Message-Event] New message received:', {
+    id: message.id.id,
     from: message.from,
     to: message.to,
     fromMe: message.fromMe,
@@ -454,34 +485,27 @@ client.on('message', async (message) => {
     timestamp: new Date(message.timestamp * 1000).toISOString()
   });
 
-  // Skip messages from self
+  // Skip processing our own messages (they're handled by message_create)
   if (message.fromMe) {
     console.log('[Message-Event] Skipping message from self');
     return;
   }
   
-  // Initialize message type flags if not set
-  message.isCommand = message.isCommand || false;
-  message.isReplyToBot = message.isReplyToBot || false;
+  // Initialize message type flags
+  message.isCommand = false;
+  message.isResponseToUser = false;
   
   // Handle voice messages
   if (message.hasMedia && message.type === 'ptt') {
     try {
-      const chat = await message.getChat();
-      await chat.sendStateRecording();
+      const result = await voiceHandler.handleVoiceMessage(message);
       
-      console.log(`[Voice] Processing voice message from ${message.from}`);
-      const result = await voiceHandler.processVoiceMessage(
-        { seconds: message.duration },
-        message
-      );
-      
-      if (result.error) {
+      if (result && result.error) {
         console.error(`[Voice] Error: ${result.error}`);
         return; // Don't send error message to user for voice processing failures
       }
       
-      if (result.text) {
+      if (result && result.text) {
         // Process the transcribed text as a regular message
         console.log(`[Voice] Transcribed: ${result.text}`);
         
