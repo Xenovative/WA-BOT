@@ -123,7 +123,7 @@ class CommandHandler {
     this.saveCommandHistory();
     
     if (this.commands[commandName]) {
-      return await this.commands[commandName].call(this, args, chatId);
+      return await this.commands[commandName].call(this, args, chatId, senderPhone);
     }
     
     return `Unknown command: ${commandName}. Type !help for available commands.`;
@@ -148,6 +148,66 @@ class CommandHandler {
     const cleanNumber = userId.replace(/\D/g, '');
     return this.adminPhoneNumbers.includes(cleanNumber) || 
            this.adminPhoneNumbers.includes(`telegram:${cleanNumber}`);
+  }
+
+  // Block a number from using the bot
+  async handleBlockNumber(args, chatId, phoneNumber) {
+    if (!this.isAdmin(phoneNumber)) {
+      return '❌ You do not have permission to use this command.';
+    }
+
+    const numberToBlock = args[0];
+    if (!numberToBlock) {
+      return '❌ Please provide a phone number to block. Example: !block 1234567890';
+    }
+
+    const isTelegram = phoneNumber.startsWith('telegram:');
+    const success = blocklist.addToBlocklist(numberToBlock, isTelegram ? 'telegram' : 'whatsapp');
+    
+    if (success) {
+      return `✅ Successfully blocked ${numberToBlock}. The bot will no longer respond to messages from this ${isTelegram ? 'Telegram user' : 'number'}.`;
+    } else {
+      return '❌ Failed to block. Please check the logs for more details.';
+    }
+  }
+
+  // Unblock a number
+  async handleUnblockNumber(args, chatId, phoneNumber) {
+    if (!this.isAdmin(phoneNumber)) {
+      return '❌ You do not have permission to use this command.';
+    }
+
+    const numberToUnblock = args[0];
+    if (!numberToUnblock) {
+      return '❌ Please provide a number/user ID to unblock. Example: !unblock 1234567890';
+    }
+
+    const isTelegram = phoneNumber.startsWith('telegram:');
+    const success = blocklist.removeFromBlocklist(numberToUnblock, isTelegram ? 'telegram' : 'whatsapp');
+    
+    if (success) {
+      return `✅ Successfully unblocked ${numberToUnblock}. The bot will now respond to messages from this ${isTelegram ? 'Telegram user' : 'number'} again.`;
+    } else {
+      return '❌ Number/User not found in blocklist or failed to unblock.';
+    }
+  }
+
+  // List all blocked numbers/users
+  async handleListBlocked(args, chatId, phoneNumber) {
+    if (!this.isAdmin(phoneNumber)) {
+      return '❌ You do not have permission to use this command.';
+    }
+
+    const isTelegram = phoneNumber.startsWith('telegram:');
+    const blocked = blocklist.getBlockedNumbers(isTelegram ? 'telegram' : 'whatsapp');
+    
+    if (blocked.length === 0) {
+      return 'ℹ️ No numbers/users are currently blocked.';
+    }
+
+    const type = isTelegram ? 'Telegram Users' : 'Phone Numbers';
+    return `🚫 *Blocked ${type}* (${blocked.length}):\n` +
+      blocked.map((num, index) => `${index + 1}. ${num}`).join('\n');
   }
 
   /**

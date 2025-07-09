@@ -15,9 +15,31 @@ class BlocklistManager {
         const data = JSON.parse(fs.readFileSync(this.blocklistFile, 'utf8'));
         this.blockedNumbers = new Set(data.numbers || []);
         this.blockedTelegramIds = new Set(data.telegramIds || []);
+        console.log(`[Blocklist] Loaded ${this.blockedNumbers.size} blocked numbers and ${this.blockedTelegramIds.size} blocked Telegram IDs`);
+      } else {
+        console.log('[Blocklist] No existing blocklist file found, starting with empty blocklist');
+        // Create directory if it doesn't exist
+        const dir = path.dirname(this.blocklistFile);
+        if (!fs.existsSync(dir)) {
+          fs.mkdirSync(dir, { recursive: true });
+          console.log(`[Blocklist] Created directory: ${dir}`);
+        }
+        // Save empty blocklist to create the file
+        this.saveBlocklist();
       }
     } catch (error) {
       console.error('Error loading blocklist:', error);
+      // Try to create a fresh blocklist file if loading fails
+      try {
+        const dir = path.dirname(this.blocklistFile);
+        if (!fs.existsSync(dir)) {
+          fs.mkdirSync(dir, { recursive: true });
+        }
+        this.saveBlocklist();
+        console.log('[Blocklist] Created new blocklist file after error');
+      } catch (e) {
+        console.error('Failed to create new blocklist file:', e);
+      }
     }
   }
 
@@ -26,15 +48,33 @@ class BlocklistManager {
       const dir = path.dirname(this.blocklistFile);
       if (!fs.existsSync(dir)) {
         fs.mkdirSync(dir, { recursive: true });
+        console.log(`[Blocklist] Created directory: ${dir}`);
       }
+      
       const data = {
-        numbers: [...this.blockedNumbers],
-        telegramIds: [...this.blockedTelegramIds]
+        numbers: [...this.blockedNumbers].sort(),
+        telegramIds: [...this.blockedTelegramIds].sort(),
+        lastUpdated: new Date().toISOString()
       };
-      fs.writeFileSync(this.blocklistFile, JSON.stringify(data, null, 2));
+      
+      const tempFile = `${this.blocklistFile}.tmp`;
+      fs.writeFileSync(tempFile, JSON.stringify(data, null, 2));
+      
+      // Atomic write
+      fs.renameSync(tempFile, this.blocklistFile);
+      
+      console.log(`[Blocklist] Saved ${data.numbers.length} numbers and ${data.telegramIds.length} Telegram IDs`);
       return true;
     } catch (error) {
       console.error('Error saving blocklist:', error);
+      try {
+        // Try to clean up temp file if it exists
+        if (fs.existsSync(tempFile)) {
+          fs.unlinkSync(tempFile);
+        }
+      } catch (e) {
+        console.error('Error cleaning up temp file:', e);
+      }
       return false;
     }
   }
@@ -98,10 +138,15 @@ class BlocklistManager {
   }
 
   getBlockedNumbers(type = 'whatsapp') {
-    if (type === 'telegram') {
-      return [...this.blockedTelegramIds];
+    try {
+      if (type === 'telegram') {
+        return Array.from(this.blockedTelegramIds).sort();
+      }
+      return Array.from(this.blockedNumbers).sort();
+    } catch (error) {
+      console.error('Error getting blocked numbers:', error);
+      return [];
     }
-    return [...this.blockedNumbers];
   }
 }
 
