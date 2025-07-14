@@ -1082,9 +1082,16 @@ client.on('message', async (message) => {
   }
   
   try {
-    // Send typing indicator
-    const chat = await message.getChat();
-    chat.sendStateTyping();
+    // Send typing indicator - only if getChat is available
+    if (typeof message.getChat === 'function') {
+      try {
+        const chat = await message.getChat();
+        chat.sendStateTyping();
+      } catch (chatError) {
+        console.log(`[Chat] Could not set typing state: ${chatError.message}`);
+        // Continue processing even if we can't set the typing state
+      }
+    }
     
     let response;
     
