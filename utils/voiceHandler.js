@@ -133,11 +133,12 @@ class VoiceHandler {
   }
   
   async transcribeWithOpenAI(filePath) {
+    // Don't force English - let Whisper auto-detect the language
     const transcription = await this.providers[PROVIDER_OPENAI].client.audio.transcriptions.create({
       file: fs.createReadStream(filePath),
       model: this.providers[PROVIDER_OPENAI].model,
-      response_format: 'json',
-      language: 'en'
+      response_format: 'json'
+      // Removed language parameter to allow auto-detection
     });
     
     return {

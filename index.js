@@ -467,12 +467,21 @@ client.on('message', async (message) => {
   // Handle voice messages
   if (message.hasMedia && message.type === 'ptt') {
     try {
-      const chat = await message.getChat();
-      await chat.sendStateRecording();
+      // Only try to get chat and send recording state if the original message has getChat method
+      // This prevents errors when processing pseudo-messages
+      if (typeof message.getChat === 'function') {
+        try {
+          const chat = await message.getChat();
+          await chat.sendStateRecording();
+        } catch (chatError) {
+          console.log(`[Voice] Could not set recording state: ${chatError.message}`);
+          // Continue processing even if we can't set the recording state
+        }
+      }
       
       console.log(`[Voice] Processing voice message from ${message.from}`);
       const result = await voiceHandler.processVoiceMessage(
-        { seconds: message.duration },
+        { seconds: message.duration || 0 },
         message
       );
       
@@ -485,20 +494,30 @@ client.on('message', async (message) => {
         // Process the transcribed text as a regular message
         console.log(`[Voice] Transcribed: ${result.text}`);
         
+        // Check if this is already a pseudo-message to prevent infinite loops
+        if (message._data?.isVoiceMessage) {
+          console.log('[Voice] Already processed this voice message, skipping re-processing');
+          return;
+        }
+        
         // Create a pseudo-message with the transcribed text
         const pseudoMsg = {
           ...message,
           body: result.text,
           hasQuotedMsg: false,
           _data: {
-            ...message._data,
+            ...(message._data || {}),
             body: result.text,
             isVoiceMessage: true
           },
           // Add a reply method to the pseudo-message
           reply: async (text) => {
-            return message.reply(`🎤 *You said*: ${result.text}\n\n${text}`);
-          }
+            return typeof message.reply === 'function' ? 
+              message.reply(`🎤 *You said*: ${result.text}\n\n${text}`) :
+              client.sendMessage(message.from, `🎤 *You said*: ${result.text}\n\n${text}`);
+          },
+          // Add getChat method if it doesn't exist
+          getChat: message.getChat || (() => { throw new Error('getChat not available'); })
         };
         
         // Emit a new message event with the transcribed text
