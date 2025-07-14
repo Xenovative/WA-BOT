@@ -466,9 +466,14 @@ client.on('message', async (message) => {
   
   // Handle voice messages
   if (message.hasMedia && message.type === 'ptt') {
+    // Skip if this is a pseudo-message (already processed voice message)
+    if (message._data?.isVoiceMessage) {
+      console.log('[Voice] Skipping already processed voice message');
+      return;
+    }
+    
     try {
       // Only try to get chat and send recording state if the original message has getChat method
-      // This prevents errors when processing pseudo-messages
       if (typeof message.getChat === 'function') {
         try {
           const chat = await message.getChat();
@@ -477,6 +482,12 @@ client.on('message', async (message) => {
           console.log(`[Voice] Could not set recording state: ${chatError.message}`);
           // Continue processing even if we can't set the recording state
         }
+      }
+      
+      // Check if downloadMedia method exists
+      if (typeof message.downloadMedia !== 'function') {
+        console.error('[Voice] Cannot process voice message: downloadMedia method not available');
+        return;
       }
       
       console.log(`[Voice] Processing voice message from ${message.from}`);
@@ -500,24 +511,37 @@ client.on('message', async (message) => {
           return;
         }
         
-        // Create a pseudo-message with the transcribed text
+        // Create a simplified pseudo-message with just the text
+        // Don't copy all properties from the original message to avoid method issues
         const pseudoMsg = {
-          ...message,
+          from: message.from,
+          to: message.to,
           body: result.text,
+          fromMe: message.fromMe,
+          author: message.author,
+          hasMedia: false, // Important: set to false to avoid voice processing loop
+          type: 'chat', // Change type from 'ptt' to 'chat'
           hasQuotedMsg: false,
+          isForwarded: false,
           _data: {
-            ...(message._data || {}),
+            notifyName: message._data?.notifyName,
             body: result.text,
-            isVoiceMessage: true
+            isVoiceMessage: true, // Mark as processed voice message
+            from: message.from,
+            to: message.to,
+            self: message._data?.self
           },
-          // Add a reply method to the pseudo-message
+          // Add essential methods
           reply: async (text) => {
             return typeof message.reply === 'function' ? 
               message.reply(`🎤 *You said*: ${result.text}\n\n${text}`) :
               client.sendMessage(message.from, `🎤 *You said*: ${result.text}\n\n${text}`);
           },
-          // Add getChat method if it doesn't exist
-          getChat: message.getChat || (() => { throw new Error('getChat not available'); })
+          getChat: () => { throw new Error('getChat not available on pseudo-message'); },
+          downloadMedia: () => { throw new Error('downloadMedia not available on pseudo-message'); },
+          delete: () => { throw new Error('delete not available on pseudo-message'); },
+          // Add timestamp
+          timestamp: message.timestamp || Date.now()/1000
         };
         
         // Emit a new message event with the transcribed text

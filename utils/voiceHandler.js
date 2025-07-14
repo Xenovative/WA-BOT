@@ -70,6 +70,11 @@ class VoiceHandler {
         };
       }
 
+      // Check if downloadMedia method exists
+      if (typeof message.downloadMedia !== 'function') {
+        throw new Error('message.downloadMedia is not a function');
+      }
+      
       // Download the voice message
       const media = await message.downloadMedia();
       if (!media) {
