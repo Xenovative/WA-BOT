@@ -472,6 +472,14 @@ client.on('message', async (message) => {
       return;
     }
     
+    // Check if this is a group message
+    if (message.from.endsWith('@g.us')) {
+      console.log('[Voice] Voice message in group - will be handled by group message logic');
+      // Don't process voice messages in groups here
+      // They will be handled by the group message handler only if the bot is mentioned
+      return;
+    }
+    
     try {
       // Only try to get chat and send recording state if the original message has getChat method
       if (typeof message.getChat === 'function') {
@@ -504,6 +512,14 @@ client.on('message', async (message) => {
       if (result.text) {
         // Process the transcribed text as a regular message
         console.log(`[Voice] Transcribed: ${result.text}`);
+        
+        // Check if message is from a group
+        if (message.from.endsWith('@g.us')) {
+          console.log('[Voice] Transcribed voice message from group - will be processed by group handler');
+          // Create a pseudo-message but don't emit an event
+          // Instead, let the group message handler deal with it
+          return { text: result.text, error: null };
+        }
         
         // Check if this is already a pseudo-message to prevent infinite loops
         if (message._data?.isVoiceMessage) {
@@ -629,7 +645,7 @@ client.on('message', async (message) => {
     // Check if message specifically mentions the bot
     let isBotMentioned = false;
     
-    // 1. Check if the message has mentions
+    // Check if message has mentions
     if (message.mentionedIds && message.mentionedIds.length > 0) {
       console.log(`[Group] Message has ${message.mentionedIds.length} mentions:`, message.mentionedIds);
       
@@ -654,6 +670,11 @@ client.on('message', async (message) => {
           console.log(`[Group] Bot mentioned via phone number match: ${mentionedId}`);
           break;
         }
+      }
+      
+      // If the bot is not specifically mentioned, don't process other mentions
+      if (!isBotMentioned) {
+        console.log(`[Group] Message has mentions but not for this bot - ignoring`);
       }
       
       // 4. If no match found, log for debugging
