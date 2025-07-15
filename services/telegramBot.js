@@ -166,7 +166,8 @@ class TelegramBotService {
         
         // Check rate limiting
         const userId = `telegram:${senderId}`;
-        if (!rateLimiter.checkRateLimit(userId)) {
+        const rateLimit = rateLimiter.checkLimit(userId);
+        if (!rateLimit.allowed) {
           console.log(`[Telegram] Rate limit exceeded for user: ${userId}`);
           return;
         }
@@ -178,21 +179,33 @@ class TelegramBotService {
         const pseudoMessage = {
           from: `telegram:${senderId}`,
           downloadMedia: async () => {
-            // Get file info from Telegram
-            const fileInfo = await this.bot.getFile(msg.voice.file_id);
-            const fileUrl = `https://api.telegram.org/file/bot${this.token}/${fileInfo.file_path}`;
-            
-            // Download the file
-            const response = await fetch(fileUrl);
-            if (!response.ok) {
-              throw new Error(`Failed to download voice file: ${response.statusText}`);
+            try {
+              // Get file info from Telegram
+              const fileInfo = await this.bot.getFile(msg.voice.file_id);
+              const fileUrl = `https://api.telegram.org/file/bot${this.token}/${fileInfo.file_path}`;
+              
+              console.log(`[Telegram] Downloading voice file from: ${fileUrl}`);
+              
+              // Download the file
+              const response = await fetch(fileUrl);
+              if (!response.ok) {
+                throw new Error(`Failed to download voice file: ${response.statusText}`);
+              }
+              
+              // Get array buffer and convert to base64
+              const arrayBuffer = await response.arrayBuffer();
+              const buffer = Buffer.from(arrayBuffer);
+              
+              console.log(`[Telegram] Voice file downloaded, size: ${buffer.length} bytes`);
+              
+              return {
+                data: buffer.toString('base64'),
+                mimetype: 'audio/ogg'
+              };
+            } catch (error) {
+              console.error('[Telegram] Error downloading voice file:', error);
+              throw error;
             }
-            
-            const buffer = await response.buffer();
-            return {
-              data: buffer.toString('base64'),
-              mimetype: 'audio/ogg'
-            };
           }
         };
         
