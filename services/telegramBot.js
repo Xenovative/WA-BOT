@@ -1,10 +1,12 @@
 const TelegramBot = require('node-telegram-bot-api');
+const fetch = require('node-fetch');
 const LLMFactory = require('../llm/llmFactory');
 const chatHandler = require('../handlers/chatHandler');
 const commandHandler = require('../handlers/commandHandler');
 const ragProcessor = require('../kb/ragProcessor');
 const blocklist = require('../utils/blocklist');
 const rateLimiter = require('../utils/rateLimiter');
+const voiceHandler = require('../utils/voiceHandler');
 
 class TelegramBotService {
   constructor(token) {
@@ -145,6 +147,80 @@ class TelegramBotService {
         await this.processMessage(msg.chat.id, msg.text, msg.from);
       } catch (error) {
         console.error('Error processing Telegram message:', error);
+      }
+    });
+
+    // Handle voice messages
+    this.bot.on('voice', async (msg) => {
+      try {
+        const chatId = msg.chat.id;
+        const senderId = msg.from.id;
+        
+        console.log(`[Telegram] Voice message from ${senderId} (${msg.from.username || 'no username'})`);
+        
+        // Check if user is blocked
+        if (blocklist.isBlocked(senderId, 'telegram')) {
+          console.log(`[Telegram] Ignoring voice message from blocked user: ${senderId}`);
+          return;
+        }
+        
+        // Check rate limiting
+        const userId = `telegram:${senderId}`;
+        if (!rateLimiter.checkRateLimit(userId)) {
+          console.log(`[Telegram] Rate limit exceeded for user: ${userId}`);
+          return;
+        }
+        
+        // Send "recording" action to show bot is processing
+        await this.bot.sendChatAction(chatId, 'record_voice');
+        
+        // Create a pseudo-message object compatible with voiceHandler
+        const pseudoMessage = {
+          from: `telegram:${senderId}`,
+          downloadMedia: async () => {
+            // Get file info from Telegram
+            const fileInfo = await this.bot.getFile(msg.voice.file_id);
+            const fileUrl = `https://api.telegram.org/file/bot${this.token}/${fileInfo.file_path}`;
+            
+            // Download the file
+            const response = await fetch(fileUrl);
+            if (!response.ok) {
+              throw new Error(`Failed to download voice file: ${response.statusText}`);
+            }
+            
+            const buffer = await response.buffer();
+            return {
+              data: buffer.toString('base64'),
+              mimetype: 'audio/ogg'
+            };
+          }
+        };
+        
+        // Process voice message
+        const result = await voiceHandler.processVoiceMessage(
+          { seconds: msg.voice.duration || 0 },
+          pseudoMessage
+        );
+        
+        if (result.error) {
+          console.error(`[Telegram] Voice processing error: ${result.error}`);
+          await this.sendMessage(chatId, '❌ Sorry, I couldn\'t process your voice message.');
+          return;
+        }
+        
+        if (result.text) {
+          console.log(`[Telegram] Voice transcribed: ${result.text}`);
+          
+          // Send transcription confirmation
+          await this.sendMessage(chatId, `🎤 *Voice transcribed:* ${result.text}\n\n_Processing your message..._`, { parse_mode: 'Markdown' });
+          
+          // Process the transcribed text as a regular message
+          await this.processMessage(chatId, result.text, msg.from);
+        }
+        
+      } catch (error) {
+        console.error('Error processing Telegram voice message:', error);
+        await this.sendMessage(msg.chat.id, '❌ Sorry, I encountered an error processing your voice message.');
       }
     });
   }
