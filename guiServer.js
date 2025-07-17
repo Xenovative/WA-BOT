@@ -12,8 +12,20 @@ const app = express();
 const port = process.env.GUI_PORT || 3000;
 const adminUtils = require('./utils/adminUtils');
 
+// Serve static files from the public directory first
+app.use(express.static(path.join(__dirname, 'gui/public')));
+
 // Admin mode middleware
 function checkAdminMode(req, res, next) {
+  // Skip admin check for static files and assets
+  if (req.path.startsWith('/css/') || 
+      req.path.startsWith('/js/') || 
+      req.path.startsWith('/img/') ||
+      req.path === '/favicon.ico' ||
+      req.path === '/index.html') {
+    return next();
+  }
+
   // Allow login and public endpoints
   if (req.path === '/api/admin/login' || 
       req.path.startsWith('/api/whatsapp') ||
@@ -26,9 +38,7 @@ function checkAdminMode(req, res, next) {
     '/api/workflows',
     '/api/workflows/',
     '/api/kb',
-    '/api/stats',
-    '/api/restart',
-    '/api/settings'
+    '/api/restart'
   ];
 
   // Allow read-only access to knowledge base, profiles, settings, and stats without admin mode
@@ -55,7 +65,19 @@ function checkAdminMode(req, res, next) {
 }
 
 // Apply admin mode check to all routes
-app.use(checkAdminMode);
+exceptStatic = (req, res, next) => {
+  // Skip admin check for static files and assets
+  if (req.path.startsWith('/css/') || 
+      req.path.startsWith('/js/') || 
+      req.path.startsWith('/img/') ||
+      req.path === '/favicon.ico' ||
+      req.path === '/index.html') {
+    return next();
+  }
+  checkAdminMode(req, res, next);
+};
+
+app.use(exceptStatic);
 
 // Configure multer for file uploads
 const upload = multer({
