@@ -58,10 +58,22 @@ class AdminManager {
   }
 
   updateUI() {
-    // Toggle admin-only elements
+    // Toggle admin-only tabs and elements
     const adminElements = document.querySelectorAll('[data-admin-only]');
     adminElements.forEach(el => {
-      el.style.display = this.adminMode ? '' : 'none';
+      if (el.classList.contains('tab-pane') || el.closest('.tab-pane')) {
+        // For tab panes, we need to handle them specially
+        const tabLink = document.querySelector(`[href="#${el.id}"]`);
+        if (tabLink) {
+          const tabItem = tabLink.closest('.nav-item');
+          if (tabItem) {
+            tabItem.style.display = this.adminMode ? '' : 'none';
+          }
+        }
+      } else {
+        // For other admin-only elements
+        el.style.display = this.adminMode ? '' : 'none';
+      }
     });
 
     // Toggle non-admin elements
@@ -80,6 +92,14 @@ class AdminManager {
     // Update body class for global styling
     if (this.adminMode) {
       document.body.classList.add('admin-mode');
+      // Make sure all admin tabs are visible
+      document.querySelectorAll('[data-admin-only].tab-pane').forEach(tab => {
+        const tabLink = document.querySelector(`[href="#${tab.id}"]`);
+        if (tabLink) {
+          const tabItem = tabLink.closest('.nav-item');
+          if (tabItem) tabItem.style.display = '';
+        }
+      });
     } else {
       document.body.classList.remove('admin-mode');
     }
