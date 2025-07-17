@@ -41,12 +41,12 @@ function checkAdminMode(req, res, next) {
     '/api/restart'
   ];
 
-  // Allow read-only access to knowledge base, profiles, settings, and stats without admin mode
-  if (req.path.startsWith('/api/profiles') || 
+  // Allow full access to knowledge base and profiles without admin mode
+  if (req.path.startsWith('/api/kb') ||
+      req.path.startsWith('/api/profiles') ||
       req.path === '/api/config' ||
       req.path === '/api/settings' ||
-      req.path === '/api/stats' ||
-      (req.path.startsWith('/api/kb') && req.method === 'GET')) {
+      req.path === '/api/stats') {
     return next();
   }
 
