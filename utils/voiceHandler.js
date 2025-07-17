@@ -124,15 +124,21 @@ class VoiceHandler {
 
   async transcribeAudio(filePath) {
     try {
-      if (this.activeProvider === PROVIDER_OPENAI) {
+      // Always try to use OpenAI Whisper first if configured
+      if (this.providers[PROVIDER_OPENAI]?.enabled) {
+        console.log('[Voice] Using OpenAI Whisper for transcription');
         return await this.transcribeWithOpenAI(filePath);
-      } else if (this.activeProvider === PROVIDER_OLLAMA) {
-        return await this.transcribeWithOllama(filePath);
-      } else {
-        throw new Error(`Unsupported provider: ${this.activeProvider}`);
       }
+      
+      // Fall back to Ollama if OpenAI is not available
+      if (this.activeProvider === PROVIDER_OLLAMA && this.providers[PROVIDER_OLLAMA]?.enabled) {
+        console.log('[Voice] Using Ollama for transcription (fallback)');
+        return await this.transcribeWithOllama(filePath);
+      }
+      
+      throw new Error('No transcription provider available');
     } catch (error) {
-      console.error(`[Voice] Error in ${this.activeProvider} transcription:`, error);
+      console.error('[Voice] Transcription error:', error);
       throw new Error('Failed to transcribe audio');
     }
   }
@@ -153,43 +159,25 @@ class VoiceHandler {
   }
   
   async transcribeWithOllama(filePath) {
-    try {
-      // Read the audio file as base64
-      const audioData = fs.readFileSync(filePath);
-      const base64Audio = audioData.toString('base64');
-      
-      const response = await fetch(`${this.providers[PROVIDER_OLLAMA].baseUrl}/api/generate`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          model: this.providers[PROVIDER_OLLAMA].model,
-          prompt: `[INST] Transcribe the following audio file: ${base64Audio} [/INST]`,
-          stream: false
-        })
-      });
-      
-      if (!response.ok) {
-        const error = await response.text();
-        throw new Error(`Ollama API error: ${error}`);
-      }
-      
-      const result = await response.json();
-      
-      // Extract the transcription from the response
-      // The response might be in the format "[INST] Transcribed text...[/INST]"
-      let transcription = result.response || '';
-      transcription = transcription.replace(/\[INST\].*?\[\/INST\]/g, '').trim();
-      
-      return {
-        text: transcription,
-        language: 'en' // Default to English, adjust if needed
-      };
-    } catch (error) {
-      console.error('[Voice] Error in Ollama transcription:', error);
-      throw new Error(`Ollama transcription failed: ${error.message}`);
+    const form = new FormData();
+    form.append('model', this.providers[PROVIDER_OLLAMA].model);
+    form.append('file', fs.createReadStream(filePath));
+    
+    const response = await fetch(`${this.providers[PROVIDER_OLLAMA].baseUrl}/api/transcribe`, {
+      method: 'POST',
+      body: form
+    });
+    
+    if (!response.ok) {
+      const error = await response.text();
+      throw new Error(`Ollama API error: ${error}`);
     }
+    
+    const result = await response.json();
+    return {
+      text: result.text || '',
+      language: result.language || 'en'
+    };
   }
 }
 
