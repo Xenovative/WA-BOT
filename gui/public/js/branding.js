@@ -73,22 +73,57 @@ class BrandingManager {
 
   updateBranding() {
     // Update logo visibility
-    if (this.logoElement) {
-      this.logoElement.style.display = this.brandingEnabled ? '' : 'none';
-    }
-    
-    // Update title visibility
-    if (this.titleElement) {
-      this.titleElement.textContent = this.brandingEnabled ? 'WhatsXENO' : 'Management Console';
-    }
-    
-    // Update favicon
-    this.faviconLinks.forEach(link => {
-      link.href = this.brandingEnabled ? link.href : '/favicon/blank.ico';
+    const logos = document.querySelectorAll('img[src*="whatsxeno"], img[alt*="WhatsXENO"]');
+    logos.forEach(logo => {
+      logo.style.display = this.brandingEnabled ? '' : 'none';
     });
-    
-    // Update page title
-    document.title = this.brandingEnabled ? 'WhatsXENO Management Console' : 'Management Console';
+
+    // Update favicon
+    const favicon = document.querySelector('link[rel*="icon"]');
+    if (favicon) {
+      if (this.brandingEnabled) {
+        // Restore original favicon
+        favicon.href = favicon.getAttribute('data-original-href') || favicon.href;
+      } else {
+        // Save original favicon href if not already saved
+        if (!favicon.hasAttribute('data-original-href')) {
+          favicon.setAttribute('data-original-href', favicon.href);
+        }
+        // Set blank favicon
+        favicon.href = '/favicon/blank.ico';
+      }
+    }
+
+    // Update page title and branding text
+    const brandingTexts = document.querySelectorAll('h1, h2, h3, .branding-text');
+    brandingTexts.forEach(element => {
+      if (element.textContent.includes('WhatsXENO')) {
+        if (this.brandingEnabled) {
+          // Restore original text if it was saved
+          const originalText = element.getAttribute('data-original-text');
+          if (originalText) {
+            element.textContent = originalText;
+          }
+        } else {
+          // Save original text and remove branding
+          if (!element.hasAttribute('data-original-text')) {
+            element.setAttribute('data-original-text', element.textContent);
+          }
+          element.textContent = element.textContent
+            .replace(/WhatsXENO/gi, '')
+            .replace(/\s{2,}/g, ' ')
+            .trim();
+        }
+      }
+    });
+
+    // Update toggle label
+    const toggleLabel = document.querySelector('label[for="toggle-branding"]');
+    if (toggleLabel) {
+      toggleLabel.textContent = this.brandingEnabled 
+        ? 'Show Branding (Logo & Text)' 
+        : 'Branding is hidden';
+    }
   }
 }
 
