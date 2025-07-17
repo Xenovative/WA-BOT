@@ -10,6 +10,43 @@ const multer = require('multer');
 
 const app = express();
 const port = process.env.GUI_PORT || 3000;
+const adminUtils = require('./utils/adminUtils');
+
+// Admin mode middleware
+function checkAdminMode(req, res, next) {
+  // Allow login and public endpoints
+  if (req.path === '/api/admin/login' || 
+      req.path.startsWith('/api/whatsapp') ||
+      req.path.startsWith('/public/')) {
+    return next();
+  }
+
+  // Check if admin mode is required for this endpoint
+  const adminOnlyEndpoints = [
+    '/api/workflows',
+    '/api/workflows/',
+    '/api/kb',
+    '/api/stats',
+    '/api/restart',
+    '/api/settings'
+  ];
+
+  const isAdminEndpoint = adminOnlyEndpoints.some(endpoint => 
+    req.path.startsWith(endpoint)
+  );
+
+  if (isAdminEndpoint && !adminUtils.isAdminMode()) {
+    return res.status(403).json({ 
+      error: 'Admin mode required',
+      requiresAdmin: true 
+    });
+  }
+
+  next();
+}
+
+// Apply admin mode check to all routes
+app.use(checkAdminMode);
 
 // Configure multer for file uploads
 const upload = multer({
@@ -1349,6 +1386,33 @@ app.get('/api/stats', (req, res) => {
     console.error('Error getting system stats:', error);
     res.status(500).json({ error: error.message });
   }
+});
+
+// Admin mode endpoints
+app.post('/api/admin/login', express.json(), (req, res) => {
+  const { password } = req.body;
+  if (!password) {
+    return res.status(400).json({ success: false, message: 'Password is required' });
+  }
+  
+  const result = adminUtils.setAdminMode(true, password);
+  if (result.success) {
+    res.json({ success: true, message: 'Admin mode enabled' });
+  } else {
+    res.status(401).json(result);
+  }
+});
+
+app.post('/api/admin/logout', (req, res) => {
+  adminUtils.setAdminMode(false, '');
+  res.json({ success: true, message: 'Admin mode disabled' });
+});
+
+app.get('/api/admin/status', (req, res) => {
+  res.json({ 
+    adminMode: adminUtils.isAdminMode(),
+    authRequired: adminUtils.isAuthRequired()
+  });
 });
 
 // Restart server endpoint

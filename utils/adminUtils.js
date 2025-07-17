@@ -3,7 +3,9 @@ const path = require('path');
 
 // Load admin configuration
 let adminConfig = {
-  adminUsers: new Set()
+  adminUsers: new Set(),
+  adminMode: false,
+  adminModePassword: process.env.ADMIN_MODE_PASSWORD || 'admin123' // Default password, should be changed in production
 };
 
 // Load admin users from environment variables
@@ -78,10 +80,36 @@ function isAuthRequired() {
   return adminConfig.authRequired;
 }
 
+// Check if admin mode is enabled
+function isAdminMode() {
+  return adminConfig.adminMode;
+}
+
+// Toggle admin mode
+function setAdminMode(enabled, password) {
+  if (password !== adminConfig.adminModePassword) {
+    return { success: false, message: 'Invalid admin password' };
+  }
+  adminConfig.adminMode = enabled;
+  return { success: true, message: `Admin mode ${enabled ? 'enabled' : 'disabled'}` };
+}
+
+// Update admin mode password
+function updateAdminPassword(newPassword, currentPassword) {
+  if (currentPassword !== adminConfig.adminModePassword) {
+    return { success: false, message: 'Current password is incorrect' };
+  }
+  adminConfig.adminModePassword = newPassword;
+  return { success: true, message: 'Admin password updated' };
+}
+
 module.exports = {
   isAdmin,
   addAdmin,
   removeAdmin,
+  isAdminMode,
+  setAdminMode,
+  updateAdminPassword,
   getAdminUsers,
   reloadAdminUsers,
   isAuthRequired

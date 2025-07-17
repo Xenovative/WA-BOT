@@ -100,6 +100,143 @@ body {
   }
 }
 
+/* Admin Mode Styles */
+.admin-mode .nav-link[data-admin-only],
+.admin-mode .tab-pane[data-admin-only] {
+  display: block !important;
+}
+
+.admin-mode .nav-link[data-non-admin-only],
+.admin-mode .tab-pane[data-non-admin-only] {
+  display: none !important;
+}
+
+/* Admin badge */
+.admin-badge {
+  background-color: #dc3545;
+  color: white;
+  font-size: 0.7rem;
+  font-weight: bold;
+  padding: 0.2rem 0.5rem;
+  border-radius: 10px;
+  margin-left: 0.5rem;
+  vertical-align: middle;
+}
+
+/* Admin only elements */
+[data-admin-only] {
+  display: none;
+}
+
+/* Non-admin elements */
+[data-non-admin-only] {
+  display: block;
+}
+
+/* Admin mode indicator */
+body.admin-mode {
+  --bs-primary: #0d6efd;
+  --bs-primary-rgb: 13, 110, 253;
+  --bs-primary-bg-subtle: #cfe2ff;
+  --bs-primary-border-subtle: #9ec5fe;
+  --bs-primary-text-emphasis: #052c65;
+  --bs-primary-bg-subtle: #cfe2ff;
+  --bs-primary-border-subtle: #9ec5fe;
+}
+
+/* Toast notifications */
+.toast {
+  margin-bottom: 0.5rem;
+  opacity: 1;
+  transition: opacity 0.15s linear;
+}
+
+.toast.show {
+  opacity: 1;
+}
+
+/* Admin login form */
+#adminLoginModal .modal-content {
+  border: none;
+  border-radius: 10px;
+  box-shadow: 0 0.5rem 1rem rgba(0, 0, 0, 0.15);
+}
+
+#adminLoginModal .modal-header {
+  background-color: var(--bs-primary);
+  color: white;
+  border-top-left-radius: 9px;
+  border-top-right-radius: 9px;
+  padding: 1rem 1.5rem;
+}
+
+#adminLoginModal .modal-title {
+  font-weight: 600;
+}
+
+#adminLoginModal .modal-body {
+  padding: 1.5rem;
+}
+
+#adminLoginModal .form-label {
+  font-weight: 500;
+  margin-bottom: 0.5rem;
+}
+
+#adminLoginModal .form-control {
+  padding: 0.5rem 0.75rem;
+  border-radius: 6px;
+  border: 1px solid #dee2e6;
+  transition: border-color 0.15s ease-in-out, box-shadow 0.15s ease-in-out;
+}
+
+#adminLoginModal .form-control:focus {
+  border-color: var(--bs-primary);
+  box-shadow: 0 0 0 0.25rem rgba(13, 110, 253, 0.25);
+}
+
+#adminLoginModal .btn-close {
+  filter: invert(1) grayscale(100%) brightness(200%);
+  opacity: 0.8;
+}
+
+#adminLoginModal .btn-close:hover {
+  opacity: 1;
+}
+
+/* Admin toolbar */
+.admin-toolbar {
+  background-color: #f8f9fa;
+  border-bottom: 1px solid #dee2e6;
+  padding: 0.5rem 0;
+  margin-bottom: 1.5rem;
+}
+
+.admin-toolbar .container {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.admin-toolbar .admin-info {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+  .admin-toolbar .container {
+    flex-direction: column;
+    gap: 0.5rem;
+    text-align: center;
+  }
+  
+  .admin-toolbar .admin-info {
+    margin-top: 0.5rem;
+  }
+}
+
 /* Add your custom styles here */
 
 /* Advanced settings section */

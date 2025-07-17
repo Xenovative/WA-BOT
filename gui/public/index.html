@@ -21,6 +21,12 @@
     <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.1/build/qrcode.min.js"></script></script>
     <link rel="stylesheet" href="/css/style.css">
     <link rel="stylesheet" href="/css/chat.css">
+    <!-- Admin Mode CSS -->
+    <style>
+        .admin-only { display: none; }
+        .admin-mode .admin-only { display: block; }
+        .admin-mode .non-admin-only { display: none; }
+    </style>
 </head>
 <body>
     <div class="container-fluid">
@@ -110,6 +116,12 @@
                     <h1 class="h2">WhatsXENO Management Console</h1>
                     <div class="btn-toolbar mb-2 mb-md-0">
                         <div class="btn-group me-2">
+                            <button id="login-btn" class="btn btn-sm btn-outline-secondary">
+                                <i class="bi bi-shield-lock"></i> Admin Login
+                            </button>
+                            <button id="logout-btn" class="btn btn-sm btn-outline-danger" style="display: none;">
+                                <i class="bi bi-shield-lock-fill"></i> Logout Admin
+                            </button>
                             <button id="refresh-btn" type="button" class="btn btn-sm btn-outline-secondary">
                                 <i class="bi bi-arrow-clockwise"></i> Refresh
                             </button>
@@ -276,6 +288,9 @@
 
                     <!-- Settings Tab -->
                     <div class="tab-pane fade" id="settings">
+                        <div class="alert alert-warning non-admin-only">
+                            <i class="bi bi-exclamation-triangle"></i> You are in limited access mode. Log in as admin to access all features.
+                        </div>
                         <h4>Bot Settings</h4>
                         <div class="alert alert-info">
                             <i class="bi bi-info-circle"></i> Changes will be applied immediately.
@@ -435,7 +450,7 @@
                     </div>
 
                     <!-- Knowledge Base Tab -->
-                    <div class="tab-pane fade" id="kb">
+                    <div class="tab-pane fade" id="kb" data-admin-only>
                         <h4>Knowledge Base Documents</h4>
                         <div class="d-flex justify-content-between mb-3">
                             <div>
@@ -542,10 +557,10 @@
                     </div>
                     
                     <!-- System Tab -->
-                    <div class="tab-pane fade" id="system">
+                    <div class="tab-pane fade" id="system" data-admin-only>
                         <div class="d-flex justify-content-between align-items-center mb-3">
                             <h4 class="mb-0">System Information</h4>
-                            <button id="restart-server" class="btn btn-warning">
+                            <button id="restart-server" class="btn btn-warning" data-admin-only>
                                 <i class="bi bi-arrow-clockwise me-1"></i> Restart Server
                             </button>
                         </div>
@@ -671,7 +686,7 @@
                     </div>
 
                     <!-- Workflows Tab -->
-                    <div class="tab-pane fade" id="workflows">
+                    <div class="tab-pane fade" id="workflows" data-admin-only>
                         <div class="d-flex justify-content-between align-items-center mb-3">
                             <h4 class="mb-0">Workflow Management</h4>
                             <a href="http://localhost:1880" target="_blank" class="btn btn-primary">
@@ -717,6 +732,30 @@
                     </div>
                 </div>
             </main>
+        </div>
+    </div>
+
+    <!-- Admin Login Modal -->
+    <div class="modal fade" id="adminLoginModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Admin Login</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <form id="admin-login-form">
+                        <div class="mb-3">
+                            <label for="admin-password" class="form-label">Admin Password</label>
+                            <input type="password" class="form-control" id="admin-password" required>
+                        </div>
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" id="submit-login" class="btn btn-primary">Login</button>
+                </div>
+            </div>
         </div>
     </div>
 
@@ -781,6 +820,7 @@
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@3.7.0/dist/chart.min.js"></script>
     <script src="/js/script.js"></script>
-    <script src="/js/workflows.js"></script>
+    <script src="/js/events.js"></script>
+    <script src="/js/admin.js"></script>
 </body>
 </html>
