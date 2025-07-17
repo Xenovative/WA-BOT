@@ -367,22 +367,38 @@ app.get('/api/workflows', (req, res) => {
     const path = require('path');
     const workflowDir = path.join(__dirname, 'workflow');
     
-    // Get list of workflow files
-    const files = fs.readdirSync(workflowDir);
+    // Initialize workflows array
     const workflows = [];
     
-    // Get list of enabled workflows
-    const enabledWorkflows = workflowManager.getEnabledWorkflows();
+    // Check if workflow directory exists
+    if (!fs.existsSync(workflowDir)) {
+      return res.json({ success: true, workflows: [] });
+    }
+    
+    // Get list of workflow files
+    const files = fs.readdirSync(workflowDir).filter(file => file.endsWith('.json'));
+    
+    // Get list of enabled workflows (if workflow manager is available)
+    let enabledWorkflows = [];
+    try {
+      const WorkflowManager = require('./workflow/workflowManager');
+      const workflowManager = new WorkflowManager();
+      if (workflowManager && typeof workflowManager.getEnabledWorkflows === 'function') {
+        enabledWorkflows = workflowManager.getEnabledWorkflows();
+      }
+    } catch (error) {
+      console.error('Error initializing workflow manager:', error);
+    }
     
     // Get active workflows from Node-RED for additional info
     let activeNodeREDWorkflows = [];
     try {
       // Use synchronous method instead of async
-      const flows = RED?.nodes?.getFlows();
+      const flows = global.RED?.nodes?.getFlows();
       if (flows && flows.flows) {
         // Find all tab nodes (workflows)
         activeNodeREDWorkflows = flows.flows
-          .filter(node => node.type === 'tab')
+          .filter(node => node && node.type === 'tab')
           .map(tab => tab.id);
         console.log(`[API] Found ${activeNodeREDWorkflows.length} active workflows in Node-RED`);
       }
@@ -641,8 +657,15 @@ app.get('/api/stats', (req, res) => {
 // API endpoints for workflow state management
 app.post('/api/workflows/clear', async (req, res) => {
   try {
-    await workflowManager.clearEnabledWorkflows();
-    res.json({ success: true, message: 'All workflows cleared successfully' });
+    const WorkflowManager = require('./workflow/workflowManager');
+    const workflowManager = new WorkflowManager();
+    
+    if (typeof workflowManager.clearEnabledWorkflows === 'function') {
+      await workflowManager.clearEnabledWorkflows();
+      return res.json({ success: true, message: 'All workflows cleared successfully' });
+    }
+    
+    res.status(500).json({ success: false, error: 'Workflow manager not available' });
   } catch (error) {
     console.error('Error clearing workflows:', error);
     res.status(500).json({ error: `Failed to clear workflows: ${error.message}` });
@@ -651,39 +674,39 @@ app.post('/api/workflows/clear', async (req, res) => {
 
 app.get('/api/workflows/state', (req, res) => {
   try {
-    const enabledWorkflows = workflowManager.getEnabledWorkflows();
-    res.json({
-      success: true,
-      enabledWorkflows,
-      count: enabledWorkflows.length
-    });
+    const WorkflowManager = require('./workflow/workflowManager');
+    const workflowManager = new WorkflowManager();
+    
+    if (typeof workflowManager.getEnabledWorkflows === 'function') {
+      const enabledWorkflows = workflowManager.getEnabledWorkflows();
+      return res.json({
+        success: true,
+        enabledWorkflows,
+        count: enabledWorkflows.length
+      });
+    }
+    
+    res.json({ success: true, enabledWorkflows: [], count: 0 });
   } catch (error) {
     console.error('Error getting workflow state:', error);
-    res.status(500).json({ error: `Failed to get workflow state: ${error.message}` });
+    res.json({ success: true, enabledWorkflows: [], count: 0 });
   }
 });
 
 app.post('/api/workflows/save-state', async (req, res) => {
   try {
-    await workflowManager.saveWorkflowState();
-    res.json({ success: true, message: 'Workflow state saved successfully' });
+    const WorkflowManager = require('./workflow/workflowManager');
+    const workflowManager = new WorkflowManager();
+    
+    if (typeof workflowManager.saveWorkflowState === 'function') {
+      await workflowManager.saveWorkflowState();
+      return res.json({ success: true, message: 'Workflow state saved successfully' });
+    }
+    
+    res.status(500).json({ success: false, error: 'Workflow manager not available' });
   } catch (error) {
     console.error('Error saving workflow state:', error);
     res.status(500).json({ error: `Failed to save workflow state: ${error.message}` });
-  }
-});
-
-app.post('/api/workflows/load-state', async (req, res) => {
-  try {
-    const success = await workflowManager.loadWorkflowState();
-    if (success) {
-      res.json({ success: true, message: 'Workflow state loaded successfully' });
-    } else {
-      res.json({ success: false, message: 'No workflow state found or failed to load' });
-    }
-  } catch (error) {
-    console.error('Error loading workflow state:', error);
-    res.status(500).json({ error: `Failed to load workflow state: ${error.message}` });
   }
 });
 
