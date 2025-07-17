@@ -450,7 +450,7 @@
                     </div>
 
                     <!-- Knowledge Base Tab -->
-                    <div class="tab-pane fade" id="kb" data-admin-only>
+                    <div class="tab-pane fade" id="kb">
                         <h4>Knowledge Base Documents</h4>
                         <div class="d-flex justify-content-between mb-3">
                             <div>
@@ -458,7 +458,7 @@
                                     <i class="bi bi-arrow-clockwise"></i> Refresh
                                 </button>
                             </div>
-                            <div>
+                            <div data-admin-only>
                                 <form id="upload-form" class="d-inline">
                                     <input type="file" id="kb-file-input" class="form-control form-control-sm d-none">
                                     <label for="kb-file-input" class="btn btn-primary btn-sm">
