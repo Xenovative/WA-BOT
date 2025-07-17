@@ -48,7 +48,12 @@ class OpenAIClient extends BaseLLMClient {
       
       const response = await this.client.chat.completions.create(requestParams);
       
-      return response.choices[0].message.content.trim();
+      let responseText = response.choices[0].message.content.trim();
+      
+      // Filter out thinking content
+      responseText = this.filterThinkingContent(responseText);
+      
+      return responseText;
     } catch (error) {
       console.error('OpenAI API error:', error);
       throw new Error(`OpenAI API error: ${error.message}`);

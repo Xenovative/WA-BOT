@@ -74,7 +74,12 @@ class MCPClient extends BaseLLMClient {
         Parameters: parameters || {}
       });
 
-      return result.content || "No response from MCP server";
+      let responseText = result.content || "No response from MCP server";
+      
+      // Filter out thinking content
+      responseText = this.filterThinkingContent(responseText);
+      
+      return responseText;
     } catch (error) {
       console.error('MCP error:', error);
       throw new Error(`MCP error: ${error.message}`);

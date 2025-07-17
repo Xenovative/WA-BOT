@@ -62,7 +62,12 @@ class OpenRouterClient extends BaseLLMClient {
       }
 
       const data = await response.json();
-      return data.choices[0].message.content.trim();
+      let responseText = data.choices[0].message.content.trim();
+      
+      // Filter out thinking content
+      responseText = this.filterThinkingContent(responseText);
+      
+      return responseText;
     } catch (error) {
       console.error('OpenRouter API error:', error);
       throw new Error(`OpenRouter API error: ${error.message}`);
