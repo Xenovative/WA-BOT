@@ -31,9 +31,11 @@ function checkAdminMode(req, res, next) {
     '/api/settings'
   ];
 
-  // Allow read-only access to knowledge base and profiles without admin mode
+  // Allow read-only access to knowledge base, profiles, settings, and stats without admin mode
   if (req.path.startsWith('/api/profiles') || 
       req.path === '/api/config' ||
+      req.path === '/api/settings' ||
+      req.path === '/api/stats' ||
       (req.path.startsWith('/api/kb') && req.method === 'GET')) {
     return next();
   }
