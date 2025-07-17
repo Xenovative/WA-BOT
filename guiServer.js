@@ -1422,7 +1422,15 @@ app.get('/api/stats', (req, res) => {
 // Branding endpoints
 app.get('/api/settings/branding', (req, res) => {
   try {
+    // Default to true if SHOW_BRANDING is not set, otherwise use the value from environment
     const showBranding = process.env.SHOW_BRANDING === undefined ? true : process.env.SHOW_BRANDING === 'true';
+    
+    // If the environment variable is set to false, it will override any client-side setting
+    if (process.env.SHOW_BRANDING === 'false') {
+      return res.json({ enabled: false, fromEnv: true });
+    }
+    
+    // Otherwise, respect the client's saved state
     res.json({ enabled: showBranding });
   } catch (error) {
     console.error('Error getting branding setting:', error);

@@ -24,41 +24,31 @@ class BrandingManager {
 
   async loadBrandingState() {
     try {
-      // First try to get the initial state from the server
+      // Try to get the initial state from the server
       const response = await fetch('/api/settings/branding');
       if (response.ok) {
         const data = await response.json();
-        this.brandingEnabled = data.enabled !== false; // Default to true if not set
-        
-        // If the environment variable is set to false, override the UI state
-        if (process.env.SHOW_BRANDING === 'false') {
-          this.brandingEnabled = false;
+        // If the setting comes from environment, force the state
+        if (data.fromEnv) {
+          this.brandingEnabled = data.enabled;
+          // Disable the toggle since it's controlled by environment
           if (this.toggleSwitch) {
-            this.toggleSwitch.checked = false;
+            this.toggleSwitch.disabled = true;
+            this.toggleSwitch.title = 'Branding is controlled by server configuration';
           }
+        } else {
+          this.brandingEnabled = data.enabled !== false;
         }
-        
-        // Save the state to localStorage for consistency
-        localStorage.setItem('brandingEnabled', this.brandingEnabled);
       } else {
         // Fallback to localStorage if server fetch fails
         const savedState = localStorage.getItem('brandingEnabled');
-        if (savedState !== null) {
-          this.brandingEnabled = savedState === 'true';
-        } else if (process.env.SHOW_BRANDING !== undefined) {
-          // Use environment variable if no saved state
-          this.brandingEnabled = process.env.SHOW_BRANDING === 'true';
-        }
+        this.brandingEnabled = savedState !== null ? savedState === 'true' : true;
       }
     } catch (error) {
       console.error('Error loading branding state:', error);
-      // Fallback to localStorage or environment variable if there's an error
+      // Fallback to localStorage if there's an error
       const savedState = localStorage.getItem('brandingEnabled');
-      if (savedState !== null) {
-        this.brandingEnabled = savedState === 'true';
-      } else if (process.env.SHOW_BRANDING !== undefined) {
-        this.brandingEnabled = process.env.SHOW_BRANDING === 'true';
-      }
+      this.brandingEnabled = savedState !== null ? savedState === 'true' : true;
     }
 
     // Update UI
