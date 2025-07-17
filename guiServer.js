@@ -1419,6 +1419,32 @@ app.get('/api/stats', (req, res) => {
   }
 });
 
+// Branding endpoints
+app.get('/api/settings/branding', (req, res) => {
+  try {
+    const showBranding = process.env.SHOW_BRANDING === undefined ? true : process.env.SHOW_BRANDING === 'true';
+    res.json({ enabled: showBranding });
+  } catch (error) {
+    console.error('Error getting branding setting:', error);
+    res.status(500).json({ error: 'Failed to get branding setting' });
+  }
+});
+
+app.post('/api/settings/branding', express.json(), (req, res) => {
+  try {
+    const { enabled } = req.body;
+    if (typeof enabled !== 'boolean') {
+      return res.status(400).json({ error: 'Invalid request body' });
+    }
+    // In a real app, you might want to save this to a database
+    // For now, we'll just return the current state
+    res.json({ success: true, enabled });
+  } catch (error) {
+    console.error('Error updating branding setting:', error);
+    res.status(500).json({ error: 'Failed to update branding setting' });
+  }
+});
+
 // Admin mode endpoints
 app.post('/api/admin/login', express.json(), (req, res) => {
   const { password } = req.body;

@@ -22,15 +22,50 @@ class BrandingManager {
     }
   }
 
-  loadBrandingState() {
-    const savedState = localStorage.getItem('brandingEnabled');
-    if (savedState !== null) {
-      this.brandingEnabled = savedState === 'true';
-      if (this.toggleSwitch) {
-        this.toggleSwitch.checked = this.brandingEnabled;
+  async loadBrandingState() {
+    try {
+      // First try to get the initial state from the server
+      const response = await fetch('/api/settings/branding');
+      if (response.ok) {
+        const data = await response.json();
+        this.brandingEnabled = data.enabled !== false; // Default to true if not set
+        
+        // If the environment variable is set to false, override the UI state
+        if (process.env.SHOW_BRANDING === 'false') {
+          this.brandingEnabled = false;
+          if (this.toggleSwitch) {
+            this.toggleSwitch.checked = false;
+          }
+        }
+        
+        // Save the state to localStorage for consistency
+        localStorage.setItem('brandingEnabled', this.brandingEnabled);
+      } else {
+        // Fallback to localStorage if server fetch fails
+        const savedState = localStorage.getItem('brandingEnabled');
+        if (savedState !== null) {
+          this.brandingEnabled = savedState === 'true';
+        } else if (process.env.SHOW_BRANDING !== undefined) {
+          // Use environment variable if no saved state
+          this.brandingEnabled = process.env.SHOW_BRANDING === 'true';
+        }
       }
-      this.updateBranding();
+    } catch (error) {
+      console.error('Error loading branding state:', error);
+      // Fallback to localStorage or environment variable if there's an error
+      const savedState = localStorage.getItem('brandingEnabled');
+      if (savedState !== null) {
+        this.brandingEnabled = savedState === 'true';
+      } else if (process.env.SHOW_BRANDING !== undefined) {
+        this.brandingEnabled = process.env.SHOW_BRANDING === 'true';
+      }
     }
+
+    // Update UI
+    if (this.toggleSwitch) {
+      this.toggleSwitch.checked = this.brandingEnabled;
+    }
+    this.updateBranding();
   }
 
   saveBrandingState() {
