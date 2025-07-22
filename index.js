@@ -1280,8 +1280,9 @@ async function initializeWorkflowSystem() {
     }
     
     // Update the WhatsApp client reference when it becomes available
-    if (client) {
-      workflowManager.updateBotComponent('whatsappClient', client);
+    if (client && workflowManager.botComponents) {
+      workflowManager.botComponents.whatsappClient = client;
+      console.log('Updated WhatsApp client reference in workflow manager');
     }
   } catch (workflowError) {
     console.error('Error initializing workflow system:', workflowError);
