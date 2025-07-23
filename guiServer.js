@@ -832,14 +832,26 @@ app.post('/api/chats/send-manual', async (req, res) => {
       const normalizedChatId = chatId.replace('_c.us', '@c.us');
       
       if (global.originalSendMessage) {
+        // Track this as a manual message to prevent double processing
+        if (!global.manualMessages) {
+          global.manualMessages = new Set();
+        }
+        const messageId = `${normalizedChatId}_${Date.now()}_${message.substring(0, 20)}`;
+        global.manualMessages.add(messageId);
+        
         // Use the original sendMessage to avoid triggering automated responses
         await global.originalSendMessage(normalizedChatId, message);
         
-        // Add message to chat history
+        // Add message to chat history using normalized chat ID
         const chatHandler = global.chatHandler || require('./handlers/chatHandler');
-        chatHandler.addMessage(chatId, 'assistant', message, 'whatsapp');
+        chatHandler.addMessage(normalizedChatId, 'assistant', message, 'whatsapp');
         
         console.log(`[API] Manual message sent via WhatsApp to ${normalizedChatId}`);
+        
+        // Clean up the tracking after a delay
+        setTimeout(() => {
+          global.manualMessages.delete(messageId);
+        }, 5000);
       } else {
         throw new Error('WhatsApp client not available');
       }
