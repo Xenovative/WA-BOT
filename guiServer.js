@@ -829,11 +829,11 @@ app.post('/api/chats/send-manual', async (req, res) => {
       }
     } else if (chatId.includes('@c.us') || chatId.includes('_c.us')) {
       // WhatsApp chat
-      if (global.whatsappClient) {
-        const client = global.whatsappClient;
+      if (global.whatsappClient && global.whatsappClient.client) {
+        const whatsappClient = global.whatsappClient.client;
         
         // Send message via WhatsApp client
-        await client.sendMessage(chatId, message);
+        await whatsappClient.sendMessage(chatId, message);
         
         // Add message to chat history
         const chatHandler = global.chatHandler || require('./handlers/chatHandler');
