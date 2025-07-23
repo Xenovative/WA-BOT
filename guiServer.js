@@ -828,20 +828,22 @@ app.post('/api/chats/send-manual', async (req, res) => {
         throw new Error('Telegram bot not available');
       }
     } else if (chatId.includes('@c.us') || chatId.includes('_c.us')) {
-      // WhatsApp chat
+      // WhatsApp chat - normalize chat ID format
+      const normalizedChatId = chatId.replace('_c.us', '@c.us');
+      
       if (global.sendMessage) {
         // Use the global sendMessage function with proper options
-        await global.sendMessage(chatId, message);
+        await global.sendMessage(normalizedChatId, message);
         
         // Add message to chat history
         const chatHandler = global.chatHandler || require('./handlers/chatHandler');
         chatHandler.addMessage(chatId, 'assistant', message, 'whatsapp');
         
-        console.log(`[API] Manual message sent via WhatsApp to ${chatId}`);
+        console.log(`[API] Manual message sent via WhatsApp to ${normalizedChatId}`);
       } else if (global.whatsappClient && global.whatsappClient.client) {
         // Fallback to direct client with proper options
         const whatsappClient = global.whatsappClient.client;
-        await whatsappClient.sendMessage(chatId, message, { 
+        await whatsappClient.sendMessage(normalizedChatId, message, { 
           isAutomated: true,
           isBotResponse: true 
         });
@@ -850,7 +852,7 @@ app.post('/api/chats/send-manual', async (req, res) => {
         const chatHandler = global.chatHandler || require('./handlers/chatHandler');
         chatHandler.addMessage(chatId, 'assistant', message, 'whatsapp');
         
-        console.log(`[API] Manual message sent via WhatsApp to ${chatId}`);
+        console.log(`[API] Manual message sent via WhatsApp to ${normalizedChatId}`);
       } else {
         throw new Error('WhatsApp client not available');
       }
