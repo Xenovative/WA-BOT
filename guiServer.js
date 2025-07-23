@@ -856,7 +856,7 @@ app.post('/api/chats/send-manual', async (req, res) => {
     console.log(`[API] Adding to chat history with ID: ${historyChatId}`);
     
     // Add to chat history with the consistent ID format
-    chatHandler.addMessage(cleanNumber, 'assistant', message, platform);
+    chatHandler.addMessage(historyChatId, 'assistant', message, platform);
     
     console.log(`[API] Manual message sent via ${platform} to ${sendToId} (stored as ${historyChatId})`);
     
