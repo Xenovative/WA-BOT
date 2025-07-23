@@ -204,13 +204,12 @@ client.sendMessage = async function(chatId, content, options = {}) {
     return originalSendMessage(chatId, content, options);
   }
   
-  // Skip if it's an automated message, bot response, manual intervention, or forwarded message
-  if (options.isAutomated || options.isBotResponse || options.isResponseToUser || options.isManualIntervention) {
-    console.log(`[${timestamp}] [${debugId}] [Message-Debug] Skipping special message type`, {
+  // Skip if it's an automated message, bot response, or forwarded message
+  if (options.isAutomated || options.isBotResponse || options.isResponseToUser) {
+    console.log(`[${timestamp}] [${debugId}] [Message-Debug] Skipping automated/bot message`, {
       isAutomated: options.isAutomated,
       isBotResponse: options.isBotResponse,
-      isResponseToUser: options.isResponseToUser,
-      isManualIntervention: options.isManualIntervention
+      isResponseToUser: options.isResponseToUser
     });
     return originalSendMessage(chatId, content, options);
   }
@@ -441,7 +440,6 @@ function sendAutomatedMessage(chatId, content, options = {}) {
 
 // Make it available globally
 global.sendMessage = sendAutomatedMessage;
-global.originalSendMessage = originalSendMessage;
 
 // Message processing
 // Handle voice messages
@@ -458,18 +456,7 @@ client.on('message', async (message) => {
 
   // Skip messages from self
   if (message.fromMe) {
-    // Check if this is a manual intervention message
-    const isManualMessage = message._data?.isManualIntervention;
-    
-    if (isManualMessage) {
-      console.log('[Message-Event] Manual intervention message detected, processing for chat history only');
-      // Only add to chat history, don't trigger AI response
-      if (global.chatHandler) {
-        global.chatHandler.addMessage(message.to, 'assistant', message.body, 'whatsapp');
-      }
-    } else {
-      console.log('[Message-Event] Skipping regular message from self');
-    }
+    console.log('[Message-Event] Skipping message from self');
     return;
   }
   
