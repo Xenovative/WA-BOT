@@ -1,11 +1,11 @@
-const ChatHandler = require('./handlers/chatHandler');
+const chatHandler = require('./handlers/chatHandler');
 const http = require('http');
 
 async function testChatHandler() {
   try {
-    // Create a new instance of ChatHandler
-    console.log('Creating ChatHandler instance...');
-    const chatHandler = new ChatHandler();
+    // Use the singleton instance
+    console.log('Getting ChatHandler instance...');
+    // No need to create a new instance, use the existing one
     
     // Wait a moment for initialization
     await new Promise(resolve => setTimeout(resolve, 1000));
