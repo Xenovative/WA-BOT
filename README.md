@@ -1,26 +1,64 @@
-# WhatsApp LLM Bot
+<div align="center">
+  <h1>WhatsXENO</h1>
+  <p>
+    <strong>Next-Gen Multi-Platform AI Assistant</strong>
+  </p>
+  <p>
+    <a href="#features">Features</a> •
+    <a href="#quick-start">Quick Start</a> •
+    <a href="#documentation">Documentation</a>
+  </p>
+  
+  [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+  [![Node.js](https://img.shields.io/badge/Node.js-18+-green.svg)](https://nodejs.org/)
+  [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](http://makeapullrequest.com)
+</div>
 
-A WhatsApp chatbot powered by various LLM providers (OpenAI, OpenRouter, Ollama) using the unofficial WhatsApp Web API.
+## 🤖 About WhatsXENO
 
-## Features
+WhatsXENO is a powerful, multi-platform AI assistant that brings the power of large language models to your favorite messaging platforms. With support for WhatsApp, Telegram, and more, it offers a seamless AI experience across all your devices.
 
-- WhatsApp integration using whatsapp-web.js (unofficial API)
-- Support for multiple LLM providers:
+### 🌟 Key Highlights
+- **Multi-Platform**: Works on WhatsApp, Telegram, and more
+- **AI-Powered**: Advanced language understanding with state-of-the-art models
+- **Voice-Enabled**: Send and receive voice messages with automatic transcription
+- **Private & Secure**: Your data stays yours - no shady data collection
+- **Open Source**: Transparent, community-driven development
+
+<a id="features"></a>
+## 🚀 Features
+
+### Multi-Platform Support
+- **WhatsApp** integration using whatsapp-web.js (unofficial API)
+- **Telegram** bot integration with full feature parity
+
+### AI Capabilities
+- Multiple LLM provider support:
   - OpenAI (GPT models)
   - OpenRouter (access to multiple AI models)
   - Ollama (run models locally)
-- Conversation history for contextual responses
-- Command system to control the bot
+- Voice message transcription (supports Whisper and Ollama Whisper)
+- Conversation history with context awareness
+- RAG (Retrieval-Augmented Generation) for knowledge base integration
+
+### User Experience
+- Cross-platform command system
 - Easy switching between different providers and models
 - Configurable trigger words for group chat activation
+- Rate limiting and user blocking capabilities
+- Web-based management console
 
-## Prerequisites
+<a id="quick-start"></a>
+## ⚡ Quick Start
+
+### Prerequisites
 
 - Node.js 18 or higher
 - For Ollama: Local Ollama instance running (optional)
-- API keys for OpenAI and/or OpenRouter (depending on which providers you want to use)
+- API keys for your chosen providers (OpenAI, OpenRouter, Telegram Bot Token)
+- (Optional) Whisper API access for voice transcription
 
-## Installation
+### Installation
 
 1. Clone this repository
 2. Install dependencies:
@@ -33,13 +71,14 @@ A WhatsApp chatbot powered by various LLM providers (OpenAI, OpenRouter, Ollama)
    ```
 4. Edit the `.env` file with your preferred settings and API keys
 
-## Configuration
+### Configuration
 
 Edit the `.env` file to configure your bot:
 
 ```
-# WhatsApp Web Configuration
+# Platform Configuration
 WA_RESTART_ON_AUTH_FAILURE=true
+TELEGRAM_BOT_TOKEN=your_telegram_bot_token
 
 # LLM Provider Selection ('openai', 'openrouter', 'ollama')
 LLM_PROVIDER=openai
@@ -55,26 +94,57 @@ OPENROUTER_MODEL=openai/gpt-3.5-turbo
 # Ollama Configuration
 OLLAMA_BASE_URL=http://localhost:11434
 OLLAMA_MODEL=mannix/llama3.1-8b-abliterated:latest
+
+# Voice Message Configuration
+ENABLE_VOICE_MESSAGES=true
+WHISPER_MODEL=whisper-1  # or 'large-v2' for local Whisper
+MAX_VOICE_DURATION=120  # seconds
+
+# Rate Limiting
+RATE_LIMIT_WINDOW=86400000  # 24 hours in milliseconds
 ```
 
-## Usage
+## 💻 Usage
 
-Start the bot:
+### Starting the Bot
 
-```
+```bash
+# Start the bot
 npm start
+
+# For development with auto-restart
+npm run dev
 ```
 
-The first time you run the bot, you'll need to authenticate with WhatsApp by scanning a QR code that will appear in the console.
+### Platform-Specific Setup
+
+#### WhatsApp
+On first run, scan the QR code that appears in the console to authenticate with WhatsApp Web.
+
+#### Telegram
+1. Create a bot using [@BotFather](https://t.me/botfather) on Telegram
+2. Copy the bot token and add it to your `.env` file
+3. The bot will automatically start responding to messages
 
 ### Available Commands
 
-Send these commands in a WhatsApp chat to control the bot:
+Send these commands in any chat to control the bot:
 
-- `!help` - Show help and current settings
+#### Basic Commands
+- `/start` - Start the bot and show welcome message
+- `/help` - Show help and available commands
+- `/status` - Check bot status and current settings
+
+#### Chat Management
 - `!clear` - Clear conversation history
 - `!provider [name]` - Get or set LLM provider (openai, openrouter, ollama)
 - `!model [name]` - Get or set model for current provider
+
+#### Voice Messages
+Simply send a voice message and the bot will:
+1. Transcribe it using Whisper
+2. Process the text as a normal message
+3. Respond with both the transcription and response
 
 ### Web Management Console
 

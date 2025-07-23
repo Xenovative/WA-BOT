@@ -789,7 +789,7 @@ app.post('/api/profile/delete', (req, res) => {
 
 app.get('/api/chats', (req, res) => {
   try {
-    const chatHandler = require('./handlers/chatHandler');
+    const chatHandler = global.chatHandler || require('./handlers/chatHandler');
     const { limit = 20, offset = 0, sort = 'desc' } = req.query;
     
     // Check if getAllChats method exists
@@ -842,7 +842,7 @@ app.get('/api/chats', (req, res) => {
 app.get('/api/chats/:chatId', (req, res) => {
   try {
     console.log(`[DEBUG] Received request for chat ID: ${req.params.chatId}`);
-    const chatHandler = require('./handlers/chatHandler');
+    const chatHandler = global.chatHandler || require('./handlers/chatHandler');
     const chatId = req.params.chatId;
     
     if (!chatId) {
@@ -887,7 +887,7 @@ app.get('/api/chats/:chatId', (req, res) => {
 
 app.delete('/api/chats/:chatId', (req, res) => {
   try {
-    const chatHandler = require('./handlers/chatHandler');
+    const chatHandler = global.chatHandler || require('./handlers/chatHandler');
     const chatId = req.params.chatId;
     
     if (!chatId) {

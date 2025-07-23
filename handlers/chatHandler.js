@@ -42,23 +42,31 @@ class ChatHandler {
   addMessage(chatId, role, content, platform) {
     const platformChatId = platform ? this.getPlatformChatId(platform, chatId) : chatId;
     
+    console.log(`[ChatHandler] Adding ${role} message to chat ${platformChatId}`);
+    
     if (!this.conversations.has(platformChatId)) {
+      console.log(`[ChatHandler] Creating new conversation for chat ${platformChatId}`);
       this.conversations.set(platformChatId, []);
     }
     
     const conversation = this.conversations.get(platformChatId);
     const timestamp = new Date().toISOString();
-    conversation.push({ 
+    
+    const message = { 
       role, 
       content, 
       timestamp 
-    });
+    };
     
-    // Keep full conversation history
-    // No trimming of history anymore
+    conversation.push(message);
+    console.log(`[ChatHandler] Added message to chat ${platformChatId}, total messages: ${conversation.length}`);
     
-    // Persist to disk
-    this.saveConversations();
+    // Persist to disk immediately
+    try {
+      this.saveConversations();
+    } catch (error) {
+      console.error(`[ChatHandler] Failed to save conversations after adding message:`, error);
+    }
   }
 
   /**
@@ -202,14 +210,24 @@ class ChatHandler {
 
   // Save conversations to disk
   saveConversations() {
+    console.log(`[ChatHandler] Saving ${this.conversations.size} conversations to disk`);
+    
+    // Ensure chat history directory exists
+    if (!fs.existsSync(this.chatHistoryDir)) {
+      fs.mkdirSync(this.chatHistoryDir, { recursive: true });
+    }
+    
     // Save each chat to its own file
     this.conversations.forEach((messages, chatId) => {
       try {
         const chatFile = this.getChatFilePath(chatId);
-        // Save in the original array format
-        fs.writeFileSync(chatFile, JSON.stringify(messages, null, 2));
+        const jsonContent = JSON.stringify(messages, null, 2);
+        
+        // Write to file with error handling
+        fs.writeFileSync(chatFile, jsonContent, 'utf8');
+        console.log(`[ChatHandler] Saved ${messages.length} messages for chat ${chatId}`);
       } catch (error) {
-        console.error(`Error saving chat history for ${chatId}:`, error);
+        console.error(`[ChatHandler] Error saving chat history for ${chatId}:`, error);
       }
     });
     
@@ -333,57 +351,72 @@ class ChatHandler {
       // Ensure chat history directory exists
       if (!fs.existsSync(this.chatHistoryDir)) {
         fs.mkdirSync(this.chatHistoryDir, { recursive: true });
+        console.log('[ChatHandler] Created chat history directory');
+        return; // No existing chats to load
       }
       
-      // Check if index file exists
-      if (!fs.existsSync(this.storageFile)) {
-        console.log('Chat index not found, generating from existing chat files...');
-        this.updateChatIndex();
-      }
+      // Load all existing chat files directly
+      const chatFiles = fs.readdirSync(this.chatHistoryDir).filter(
+        file => file.endsWith('.json') && file !== 'chats.json'
+      );
       
-      // Load the index
-      if (fs.existsSync(this.storageFile)) {
-        const data = JSON.parse(fs.readFileSync(this.storageFile, 'utf8'));
-        if (Array.isArray(data)) {
-          // Load all chat files
-          const chatFiles = fs.readdirSync(this.chatHistoryDir).filter(
-            file => file.endsWith('.json') && file !== 'chats.json'
-          );
+      console.log(`[ChatHandler] Found ${chatFiles.length} chat files to load`);
+      
+      // Load each chat file and populate conversations map
+      chatFiles.forEach(file => {
+        try {
+          const chatId = path.basename(file, '.json');
+          const filePath = path.join(this.chatHistoryDir, file);
+          const fileContent = fs.readFileSync(filePath, 'utf8');
           
-          // Process each chat file
-          chatFiles.forEach(file => {
-            try {
-              const chatId = path.basename(file, '.json');
-              // Initialize empty array for each chat
+          try {
+            const messages = JSON.parse(fileContent);
+            if (Array.isArray(messages)) {
+              // Store messages in memory
+              this.conversations.set(chatId, messages);
+              console.log(`[ChatHandler] Loaded ${messages.length} messages for chat ${chatId}`);
+            } else {
+              console.warn(`[ChatHandler] Invalid format in ${file}, initializing empty array`);
               this.conversations.set(chatId, []);
-            } catch (err) {
-              console.error(`Error processing chat file ${file}:`, err);
             }
-          });
-          
-          console.log(`Loaded ${chatFiles.length} chat references from disk`);
+          } catch (parseError) {
+            console.error(`[ChatHandler] Error parsing ${file}:`, parseError);
+            this.conversations.set(chatId, []);
+          }
+        } catch (err) {
+          console.error(`[ChatHandler] Error processing chat file ${file}:`, err);
         }
-      } else {
-        console.log('No chat index file found after generation attempt');
-      }
-    } catch (error) {
-      console.error('Error loading chat index:', error);
-      // Try to regenerate index on error
+      });
+      
+      // Update the index file to reflect current state
       this.updateChatIndex();
+      
+      console.log(`[ChatHandler] Successfully loaded ${this.conversations.size} conversations from disk`);
+    } catch (error) {
+      console.error('[ChatHandler] Error loading conversations:', error);
     }
   }
 }
 
-// Create a test chat if none exist
+// Create and export the chat handler instance
 const chatHandler = new ChatHandler();
 
-// Check if we have any chats, if not create a sample one
-if (chatHandler.getAllChats().length === 0) {
-  console.log('[ChatHandler] No chats found, creating a sample chat');
-  const chatId = 'sample-chat-' + Date.now();
-  chatHandler.addMessage(chatId, 'user', 'Hello, this is a test message');
-  chatHandler.addMessage(chatId, 'assistant', 'Hi there! This is a sample response to your test message.');
-  console.log(`[ChatHandler] Created sample chat with ID: ${chatId}`);
-}
+// Initialize sample chat only if no chats exist and this is not a restart
+setImmediate(() => {
+  try {
+    const existingChats = chatHandler.getAllChats();
+    if (existingChats.length === 0) {
+      console.log('[ChatHandler] No existing chats found, creating a sample chat');
+      const chatId = 'sample-chat-' + Date.now();
+      chatHandler.addMessage(chatId, 'user', 'Hello, this is a test message');
+      chatHandler.addMessage(chatId, 'assistant', 'Hi there! This is a sample response to your test message.');
+      console.log(`[ChatHandler] Created sample chat with ID: ${chatId}`);
+    } else {
+      console.log(`[ChatHandler] Found ${existingChats.length} existing chats, skipping sample creation`);
+    }
+  } catch (error) {
+    console.error('[ChatHandler] Error during initialization:', error);
+  }
+});
 
 module.exports = chatHandler;
