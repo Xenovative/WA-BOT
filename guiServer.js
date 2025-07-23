@@ -851,15 +851,14 @@ app.post('/api/chats/send-manual', async (req, res) => {
       throw new Error('Unsupported chat format');
     }
     
-    // Format the chat ID to match frontend display format
-    const formattedPlatform = platform.charAt(0).toUpperCase() + platform.slice(1);
-    const historyChatId = `${formattedPlatform}: ${cleanNumber}`;
-    console.log(`[API] Adding to chat history with formatted ID: ${historyChatId}`);
+    // Use the same format as existing chat history files
+    const historyChatId = `${platform}_${cleanNumber}`.toLowerCase();
+    console.log(`[API] Adding to chat history with ID: ${historyChatId}`);
     
-    // Add to chat history with the formatted ID
-    chatHandler.addMessage(historyChatId, 'assistant', message, platform);
+    // Add to chat history with the consistent ID format
+    chatHandler.addMessage(cleanNumber, 'assistant', message, platform);
     
-    console.log(`[API] Manual message sent via ${platform} to ${sendToId}`);
+    console.log(`[API] Manual message sent via ${platform} to ${sendToId} (stored as ${historyChatId})`);
     
     // Store AI response preference for this chat (optional feature for future)
     // This could be stored in a database or configuration file

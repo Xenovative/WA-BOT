@@ -30,15 +30,11 @@ class ChatHandler {
   getPlatformChatId(platform, chatId) {
     if (!platform || !chatId) return chatId;
     
-    // If chatId already has platform prefix, return as is
-    if (chatId.startsWith(platform + ':') || 
-        chatId.startsWith(platform.charAt(0).toUpperCase() + platform.slice(1) + ':')) {
-      return chatId;
-    }
+    // Remove any existing platform prefix
+    const cleanId = chatId.replace(/^(whatsapp|telegram)[:_]?/i, '');
     
-    // Otherwise, add platform prefix with proper formatting
-    const formattedPlatform = platform.charAt(0).toUpperCase() + platform.slice(1);
-    return `${formattedPlatform}: ${chatId}`;
+    // Return in the format: whatsapp_12345678
+    return `${platform.toLowerCase()}_${cleanId}`;
   }
 
   /**
