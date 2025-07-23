@@ -268,6 +268,9 @@ app.post('/api/workflow/send-message', express.json(), async (req, res) => {
     const isInternalRequest = req.headers['x-internal-request'] === 'true';
     console.log(`Received send-message request: ${isInternalRequest ? '[INTERNAL]' : ''}`, req.body);
     
+    // Track if we've already added this message to chat history
+    let messageAddedToHistory = false;
+    
     // Support both chatId and recipient parameters for compatibility
     const chatId = req.body.chatId || req.body.recipient;
     // Support both message and text parameters for compatibility
@@ -295,13 +298,19 @@ app.post('/api/workflow/send-message', express.json(), async (req, res) => {
       // Get the workflow name or ID for the chat history
       const workflowName = req.body.workflowName || req.body.workflowId || 'workflow';
       
-      // Add message to chat history before sending
-      if (global.chatHandler) {
+      // Check if we should skip adding to chat history (for manual intervention)
+      const skipChatHistory = req.body.skipChatHistory === true;
+      
+      // Add message to chat history before sending, but only if not skipped
+      if (global.chatHandler && !skipChatHistory && (!isInternalRequest || !messageAddedToHistory)) {
         const displayContent = messageContent || `[${mediaType.toUpperCase()}] ${caption || mediaUrl}`;
         global.chatHandler.addMessage(chatId, 'assistant', displayContent);
+        messageAddedToHistory = true;
         console.log(`[Workflow: ${workflowName}] Added message to chat history for ${chatId}`);
-      } else {
+      } else if (!global.chatHandler) {
         console.warn('Chat handler not available, message not saved to history');
+      } else {
+        console.log(`[Workflow: ${workflowName}] Skipping chat history entry for ${chatId} (${skipChatHistory ? 'explicitly skipped' : 'already added'})`);
       }
       
       // Send media if URL is provided
@@ -808,7 +817,10 @@ app.post('/api/profile/delete', (req, res) => {
 // Send manual message via bot
 app.post('/api/chats/send-manual', async (req, res) => {
   try {
-    const { chatId, message, aiResponseEnabled } = req.body;
+    let { chatId, message, aiResponseEnabled } = req.body;
+    
+    // Normalize the chat ID
+    chatId = normalizeChatId(chatId);
     
     if (!chatId || !message) {
       return res.status(400).json({
@@ -841,10 +853,14 @@ app.post('/api/chats/send-manual', async (req, res) => {
         throw new Error('Telegram bot not available');
       }
     } else if (chatId.includes('@c.us') || chatId.includes('_c.us')) {
-      // WhatsApp chat - normalize chat ID format
-      const normalizedChatId = chatId.replace('_c.us', '@c.us');
+      // WhatsApp chat - chatId is already normalized by now
       
-      // Use the internal workflow API to send the message
+      // First add message to chat history
+      const chatHandler = global.chatHandler || require('./handlers/chatHandler');
+      chatHandler.addMessage(chatId, 'assistant', message, 'whatsapp');
+      console.log(`[API] Added manual message to chat history for ${chatId}`);
+      
+      // Then use the internal workflow API to send the message
       // This avoids double processing and ensures consistent behavior
       const internalResponse = await fetch('http://localhost:3000/api/workflow/send-message', {
         method: 'POST',
@@ -853,9 +869,10 @@ app.post('/api/chats/send-manual', async (req, res) => {
           'X-Internal-Request': 'true' // Mark as internal to avoid loops
         },
         body: JSON.stringify({
-          chatId: normalizedChatId,
+          chatId: chatId,
           message: message,
-          workflowName: 'manual-intervention'
+          workflowName: 'manual-intervention',
+          skipChatHistory: true // Signal to workflow API to skip adding to chat history
         })
       });
       
@@ -864,7 +881,7 @@ app.post('/api/chats/send-manual', async (req, res) => {
         throw new Error(errorData.error || 'Failed to send message via internal API');
       }
       
-      console.log(`[API] Manual message sent via WhatsApp to ${normalizedChatId}`);
+      console.log(`[API] Manual message sent via WhatsApp to ${chatId}`);
     } else {
       throw new Error('Unknown chat platform');
     }
@@ -911,22 +928,22 @@ app.get('/api/chats/recent', (req, res) => {
 // Get all chats with pagination and sorting
 app.get('/api/chats', (req, res) => {
   try {
+    console.log('[DEBUG] Getting all chats');
     const chatHandler = global.chatHandler || require('./handlers/chatHandler');
+    const chats = chatHandler.getAllChats().map(chat => {
+      // Normalize chat IDs in the response
+      if (chat.id) {
+        chat.id = normalizeChatId(chat.id);
+      }
+      return chat;
+    });
+    
     const { limit = 20, offset = 0, sort = 'desc' } = req.query;
     
     // Check if getAllChats method exists
     if (typeof chatHandler.getAllChats !== 'function') {
       console.warn('getAllChats method not found in chatHandler');
       return res.json([]);
-    }
-    
-    // Get all chats (already sorted and paginated by the handler)
-    let chats = chatHandler.getAllChats();
-    
-    // Ensure chats is an array
-    if (!Array.isArray(chats)) {
-      console.warn('getAllChats did not return an array');
-      chats = [];
     }
     
     // Sort chats by timestamp if not already sorted
@@ -961,12 +978,25 @@ app.get('/api/chats', (req, res) => {
   }
 });
 
-app.get('/api/chats/:chatId', (req, res) => {
+// Helper function to normalize chat IDs
+function normalizeChatId(chatId) {
+  if (!chatId) return chatId;
+  
+  // Normalize WhatsApp chat IDs to use @c.us format consistently
+  if (typeof chatId === 'string' && chatId.includes('_c.us')) {
+    return chatId.replace('_c.us', '@c.us');
+  }
+  return chatId;
+}
+
+app.get('/api/chats/:chatId', async (req, res) => {
   try {
-    console.log(`[DEBUG] Received request for chat ID: ${req.params.chatId}`);
-    const chatHandler = global.chatHandler || require('./handlers/chatHandler');
-    const chatId = req.params.chatId;
+    let chatId = req.params.chatId;
+    // Normalize the chat ID
+    chatId = normalizeChatId(chatId);
+    console.log('[DEBUG] Received request for chat ID:', chatId);
     
+    const chatHandler = global.chatHandler || require('./handlers/chatHandler');
     if (!chatId) {
       console.log('[DEBUG] No chat ID provided');
       return res.status(400).json({ error: 'Chat ID is required' });
@@ -1010,7 +1040,10 @@ app.get('/api/chats/:chatId', (req, res) => {
 app.delete('/api/chats/:chatId', (req, res) => {
   try {
     const chatHandler = global.chatHandler || require('./handlers/chatHandler');
-    const chatId = req.params.chatId;
+    let chatId = req.params.chatId;
+    
+    // Normalize the chat ID
+    chatId = normalizeChatId(chatId);
     
     if (!chatId) {
       return res.status(400).json({ error: 'Chat ID is required' });

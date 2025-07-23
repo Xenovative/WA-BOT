@@ -29,6 +29,12 @@ class ChatHandler {
    */
   getPlatformChatId(platform, chatId) {
     if (!platform || !chatId) return chatId;
+    
+    // Normalize WhatsApp chat IDs to use @c.us format consistently
+    if (platform === 'whatsapp' && chatId.includes('_c.us')) {
+      chatId = chatId.replace('_c.us', '@c.us');
+    }
+    
     return `${platform}:${chatId}`;
   }
 
