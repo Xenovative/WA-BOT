@@ -372,6 +372,30 @@ class ChatHandler {
       return [];
     }
   }
+  
+  /**
+   * Get the most recent chats
+   * @param {number} limit - Maximum number of chats to return
+   * @returns {Array} Array of most recent chat objects
+   */
+  getRecentChats(limit = 5) {
+    try {
+      const allChats = this.getAllChats();
+      
+      // Sort by timestamp in descending order (newest first)
+      const sortedChats = [...allChats].sort((a, b) => {
+        const timeA = new Date(a.timestamp || 0).getTime();
+        const timeB = new Date(b.timestamp || 0).getTime();
+        return timeB - timeA;
+      });
+      
+      // Return the most recent chats up to the limit
+      return sortedChats.slice(0, limit);
+    } catch (error) {
+      console.error('[ChatHandler] Error getting recent chats:', error);
+      return [];
+    }
+  }
 
   loadConversations() {
     try {

@@ -787,6 +787,31 @@ app.post('/api/profile/delete', (req, res) => {
   }
 });
 
+// Get recent chats
+app.get('/api/chats/recent', (req, res) => {
+  try {
+    const chatHandler = global.chatHandler || require('./handlers/chatHandler');
+    const limit = parseInt(req.query.limit) || 5; // Default to 5 most recent chats
+    
+    console.log(`[API] Getting ${limit} most recent chats`);
+    const recentChats = chatHandler.getRecentChats(limit);
+    
+    res.json({
+      success: true,
+      data: recentChats,
+      total: recentChats.length,
+      limit: limit
+    });
+  } catch (error) {
+    console.error('Error getting recent chats:', error);
+    res.status(500).json({ 
+      error: 'Failed to load recent chats',
+      details: error.message 
+    });
+  }
+});
+
+// Get all chats with pagination and sorting
 app.get('/api/chats', (req, res) => {
   try {
     const chatHandler = global.chatHandler || require('./handlers/chatHandler');
