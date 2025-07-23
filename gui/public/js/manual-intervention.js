@@ -1,8 +1,10 @@
 // ===== MANUAL INTERVENTION FEATURES =====
 
-// Global variables for manual intervention
-let currentChatId = null;
-let aiResponseEnabled = true;
+// Global variables for manual intervention (using namespace to avoid conflicts)
+window.ManualIntervention = window.ManualIntervention || {
+  currentChatId: null,
+  aiResponseEnabled: true
+};
 
 /**
  * Initialize manual intervention features when DOM is loaded
@@ -80,7 +82,7 @@ function initializeManualIntervention() {
   if (aiToggle) {
     console.log('Found AI toggle, adding event listener');
     aiToggle.addEventListener('change', function() {
-      aiResponseEnabled = this.checked;
+      window.ManualIntervention.aiResponseEnabled = this.checked;
       updateAIResponseStatus();
     });
   } else {
@@ -92,8 +94,8 @@ function initializeManualIntervention() {
   if (refreshBtn) {
     console.log('Found refresh button, adding event listener');
     refreshBtn.addEventListener('click', function() {
-      if (currentChatId) {
-        viewChat(currentChatId);
+      if (window.ManualIntervention.currentChatId) {
+        viewChat(window.ManualIntervention.currentChatId);
       }
     });
   } else {
@@ -125,7 +127,7 @@ async function sendManualMessage() {
     return;
   }
   
-  if (!currentChatId) {
+  if (!window.ManualIntervention.currentChatId) {
     showToast('No chat selected', 'error');
     return;
   }
@@ -142,9 +144,9 @@ async function sendManualMessage() {
         'Content-Type': 'application/json'
       },
       body: JSON.stringify({
-        chatId: currentChatId,
+        chatId: window.ManualIntervention.currentChatId,
         message: message,
-        aiResponseEnabled: aiResponseEnabled
+        aiResponseEnabled: window.ManualIntervention.aiResponseEnabled
       })
     });
     
@@ -162,8 +164,8 @@ async function sendManualMessage() {
     
     // Refresh the chat view after a short delay to show the new message
     setTimeout(() => {
-      if (currentChatId) {
-        viewChat(currentChatId);
+      if (window.ManualIntervention.currentChatId) {
+        viewChat(window.ManualIntervention.currentChatId);
       }
     }, 1000);
     
@@ -188,17 +190,17 @@ function updateAIResponseStatus() {
   if (label) {
     const icon = label.querySelector('i');
     if (icon) {
-      icon.className = aiResponseEnabled ? 'bi bi-robot me-1' : 'bi bi-robot me-1 text-muted';
+      icon.className = window.ManualIntervention.aiResponseEnabled ? 'bi bi-robot me-1' : 'bi bi-robot me-1 text-muted';
     }
     
     // Update label text
-    const labelText = aiResponseEnabled ? 'AI Auto-Response' : 'AI Auto-Response (Disabled)';
+    const labelText = window.ManualIntervention.aiResponseEnabled ? 'AI Auto-Response' : 'AI Auto-Response (Disabled)';
     label.innerHTML = `<i class="${icon ? icon.className : 'bi bi-robot me-1'}"></i> ${labelText}`;
   }
   
   // Show toast notification
-  const status = aiResponseEnabled ? 'enabled' : 'disabled';
-  showToast(`AI auto-response ${status}`, aiResponseEnabled ? 'success' : 'warning');
+  const status = window.ManualIntervention.aiResponseEnabled ? 'enabled' : 'disabled';
+  showToast(`AI auto-response ${status}`, window.ManualIntervention.aiResponseEnabled ? 'success' : 'warning');
 }
 
 /**
@@ -358,7 +360,7 @@ function escapeHtml(text) {
  * Set current chat ID for manual intervention
  */
 function setCurrentChatId(chatId) {
-  currentChatId = chatId;
+  window.ManualIntervention.currentChatId = chatId;
   console.log(`Manual intervention enabled for chat: ${chatId}`);
 }
 
