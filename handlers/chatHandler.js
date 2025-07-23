@@ -346,6 +346,33 @@ class ChatHandler {
   }
   
   // Load conversations from disk
+  /**
+   * Get all chats with their metadata
+   * @returns {Array} Array of chat objects with id, preview, timestamp, and messageCount
+   */
+  getAllChats() {
+    try {
+      // Ensure the index is up to date
+      this.updateChatIndex();
+      
+      // Read the index file
+      if (fs.existsSync(this.storageFile)) {
+        const fileContent = fs.readFileSync(this.storageFile, 'utf8');
+        try {
+          const chats = JSON.parse(fileContent);
+          return Array.isArray(chats) ? chats : [];
+        } catch (error) {
+          console.error('[ChatHandler] Error parsing chat index:', error);
+          return [];
+        }
+      }
+      return [];
+    } catch (error) {
+      console.error('[ChatHandler] Error getting all chats:', error);
+      return [];
+    }
+  }
+
   loadConversations() {
     try {
       // Ensure chat history directory exists
