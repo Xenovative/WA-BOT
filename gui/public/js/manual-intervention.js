@@ -6,19 +6,12 @@ window.ManualIntervention = window.ManualIntervention || {
   aiResponseEnabled: true
 };
 
-/**
- * Initialize manual intervention features when DOM is loaded
- */
-document.addEventListener('DOMContentLoaded', function() {
-  console.log('Manual intervention script loaded');
-  initializeManualIntervention();
-});
-
-// Also initialize when the script loads (in case DOM is already ready)
+// Initialize when the script loads
 if (document.readyState === 'loading') {
   document.addEventListener('DOMContentLoaded', initializeManualIntervention);
 } else {
-  initializeManualIntervention();
+  // DOM already loaded, initialize immediately
+  setTimeout(initializeManualIntervention, 0);
 }
 
 // Set up mutation observer to handle dynamically added content

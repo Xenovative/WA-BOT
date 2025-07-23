@@ -832,14 +832,17 @@ app.post('/api/chats/send-manual', async (req, res) => {
       if (global.whatsappClient && global.whatsappClient.client) {
         const whatsappClient = global.whatsappClient.client;
         
+        // Ensure consistent chat ID format (replace _ with @)
+        const formattedChatId = chatId.replace('_', '@');
+        
         // Send message via WhatsApp client
-        await whatsappClient.sendMessage(chatId, message);
+        await whatsappClient.sendMessage(formattedChatId, message);
         
         // Add message to chat history
         const chatHandler = global.chatHandler || require('./handlers/chatHandler');
         chatHandler.addMessage(chatId, 'assistant', message, 'whatsapp');
         
-        console.log(`[API] Manual message sent via WhatsApp to ${chatId}`);
+        console.log(`[API] Manual message sent via WhatsApp to ${formattedChatId}`);
       } else {
         throw new Error('WhatsApp client not available');
       }
