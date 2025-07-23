@@ -851,9 +851,10 @@ app.post('/api/chats/send-manual', async (req, res) => {
       throw new Error('Unsupported chat format');
     }
     
-    // Add message to chat history using consistent format: platform:number
-    chatHandler.addMessage(cleanNumber, 'assistant', message, platform);
-    console.log(`[API] Manual message sent via ${platform} to ${sendToId} (stored as ${platform}:${cleanNumber})`);
+    // Add message to chat history using the original chat ID format that matches existing messages
+    // This ensures it gets saved in the same chat history file
+    chatHandler.addMessage(chatId, 'assistant', message, platform);
+    console.log(`[API] Manual message sent via ${platform} to ${sendToId} (stored with ID: ${chatId})`);
     
     // Store AI response preference for this chat (optional feature for future)
     // This could be stored in a database or configuration file
@@ -993,30 +994,46 @@ app.get('/api/chats/:chatId', (req, res) => {
   }
 });
 
-app.delete('/api/chats/:chatId', (req, res) => {
+app.delete('/api/chats/:chatId', async (req, res) => {
   try {
     const chatHandler = global.chatHandler || require('./handlers/chatHandler');
-    const chatId = req.params.chatId;
+    let chatId = req.params.chatId;
     
     if (!chatId) {
       return res.status(400).json({ error: 'Chat ID is required' });
     }
     
-    // Check if chat exists
-    const chatExists = chatHandler.getAllChats().some(chat => chat.id === chatId);
+    console.log(`[API] Deleting chat: ${chatId}`);
+    
+    // Try to find the exact chat ID in all possible formats
+    const allChats = chatHandler.getAllChats();
+    console.log(`[API] Available chats:`, allChats.map(c => c.id));
+    
+    // Check if chat exists (case insensitive and handle different formats)
+    const chatExists = allChats.some(chat => 
+      chat.id === chatId || 
+      chat.id.toLowerCase() === chatId.toLowerCase() ||
+      chat.id.replace(/[ _]/g, '') === chatId.replace(/[ _]/g, '')
+    );
+    
     if (!chatExists) {
-      return res.status(404).json({ error: 'Chat not found' });
+      console.log(`[API] Chat not found: ${chatId}`);
+      return res.status(404).json({ 
+        error: 'Chat not found',
+        details: `No chat found with ID: ${chatId}`
+      });
     }
     
     // Delete the chat
-    chatHandler.deleteChat(chatId);
+    await chatHandler.deleteChat(chatId);
+    console.log(`[API] Successfully deleted chat: ${chatId}`);
     
     res.json({ 
       success: true,
-      message: `Chat ${chatId} deleted successfully`
+      message: `Chat deleted successfully`
     });
   } catch (error) {
-    console.error(`Error deleting chat ${req.params.chatId}:`, error);
+    console.error(`[API] Error deleting chat ${req.params.chatId}:`, error);
     res.status(500).json({ 
       error: `Failed to delete chat ${req.params.chatId}`,
       details: error.message 
