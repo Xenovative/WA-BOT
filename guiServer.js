@@ -810,37 +810,43 @@ app.post('/api/chats/send-manual', async (req, res) => {
     // Get the appropriate bot handler based on chat ID
     let botHandler = null;
     
-    if (chatId.includes('telegram_')) {
+    const chatHandler = global.chatHandler || require('./handlers/chatHandler');
+    let platform = null;
+    let cleanChatId = chatId;
+    
+    if (chatId.startsWith('telegram_')) {
       // Telegram chat
+      platform = 'telegram';
+      cleanChatId = chatId.replace('telegram_', '');
+      
       if (global.telegramBot) {
-        const telegramBot = global.telegramBot;
-        const telegramChatId = chatId.replace('telegram_', '');
-        
         // Send message via Telegram bot
-        await telegramBot.sendMessage(telegramChatId, message);
+        await global.telegramBot.sendMessage(cleanChatId, message);
         
-        // Add message to chat history
-        const chatHandler = global.chatHandler || require('./handlers/chatHandler');
-        chatHandler.addMessage(chatId, 'assistant', message, 'telegram');
+        // Add message to chat history with platform prefix
+        chatHandler.addMessage(cleanChatId, 'assistant', message, platform);
         
-        console.log(`[API] Manual message sent via Telegram to ${telegramChatId}`);
+        console.log(`[API] Manual message sent via Telegram to ${cleanChatId}`);
       } else {
         throw new Error('Telegram bot not available');
       }
     } else if (chatId.includes('@c.us') || chatId.includes('_c.us')) {
       // WhatsApp chat
-      if (global.whatsappClient && global.whatsappClient.client) {
+      platform = 'whatsapp';
+      
+      if (global.whatsappClient?.client) {
         const whatsappClient = global.whatsappClient.client;
         
-        // Ensure consistent chat ID format (replace _ with @)
+        // Format chat ID for sending (ensure @c.us format)
         const formattedChatId = chatId.replace('_', '@');
         
         // Send message via WhatsApp client
         await whatsappClient.sendMessage(formattedChatId, message);
         
-        // Add message to chat history
-        const chatHandler = global.chatHandler || require('./handlers/chatHandler');
-        chatHandler.addMessage(chatId, 'assistant', message, 'whatsapp');
+        // Add message to chat history with platform prefix
+        // Use the clean chat ID without platform prefix (ChatHandler will add it)
+        const cleanChatId = formattedChatId.replace('@c.us', '');
+        chatHandler.addMessage(cleanChatId, 'assistant', message, platform);
         
         console.log(`[API] Manual message sent via WhatsApp to ${formattedChatId}`);
       } else {
