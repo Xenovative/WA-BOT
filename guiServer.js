@@ -796,12 +796,8 @@ app.get('/api/chats/recent', (req, res) => {
     console.log(`[API] Getting ${limit} most recent chats`);
     const recentChats = chatHandler.getRecentChats(limit);
     
-    res.json({
-      success: true,
-      data: recentChats,
-      total: recentChats.length,
-      limit: limit
-    });
+    // Return the array of chats - already formatted by getRecentChats
+    res.json(recentChats);
   } catch (error) {
     console.error('Error getting recent chats:', error);
     res.status(500).json({ 

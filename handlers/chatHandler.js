@@ -374,9 +374,9 @@ class ChatHandler {
   }
   
   /**
-   * Get the most recent chats
+   * Get the most recent chats with all required fields
    * @param {number} limit - Maximum number of chats to return
-   * @returns {Array} Array of most recent chat objects
+   * @returns {Array} Array of most recent chat objects with all required fields
    */
   getRecentChats(limit = 5) {
     try {
@@ -389,8 +389,18 @@ class ChatHandler {
         return timeB - timeA;
       });
       
-      // Return the most recent chats up to the limit
-      return sortedChats.slice(0, limit);
+      // Get the most recent chats and ensure they have all required fields
+      return sortedChats.slice(0, limit).map(chat => ({
+        id: chat.id,
+        name: chat.id,  // Using ID as name if not available
+        lastMessage: chat.preview || 'No messages',
+        timestamp: chat.timestamp || new Date().toISOString(),
+        // Include any other fields that might be needed
+        messageCount: chat.messageCount || 0,
+        preview: chat.preview || '',
+        // Include the actual messages if available
+        messages: this.conversations.get(chat.id) || []
+      }));
     } catch (error) {
       console.error('[ChatHandler] Error getting recent chats:', error);
       return [];
