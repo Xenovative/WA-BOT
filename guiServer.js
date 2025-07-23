@@ -813,11 +813,11 @@ app.post('/api/chats/send-manual', async (req, res) => {
     if (chatId.includes('telegram_')) {
       // Telegram chat
       if (global.telegramBot) {
-        botHandler = global.telegramBot;
+        const telegramBot = global.telegramBot;
         const telegramChatId = chatId.replace('telegram_', '');
         
         // Send message via Telegram bot
-        await botHandler.sendMessage(telegramChatId, message);
+        await telegramBot.sendMessage(telegramChatId, message);
         
         // Add message to chat history
         const chatHandler = global.chatHandler || require('./handlers/chatHandler');
@@ -830,10 +830,10 @@ app.post('/api/chats/send-manual', async (req, res) => {
     } else if (chatId.includes('@c.us') || chatId.includes('_c.us')) {
       // WhatsApp chat
       if (global.whatsappClient) {
-        botHandler = global.whatsappClient;
+        const client = global.whatsappClient;
         
-        // Send message via WhatsApp bot
-        await botHandler.sendMessage(chatId, message);
+        // Send message via WhatsApp client
+        await client.sendMessage(chatId, message);
         
         // Add message to chat history
         const chatHandler = global.chatHandler || require('./handlers/chatHandler');
