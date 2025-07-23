@@ -3,6 +3,7 @@ require('dotenv').config();
 
 const { MessageMedia } = require('whatsapp-web.js');
 const express = require('express');
+const fetch = require('node-fetch');
 const path = require('path');
 const http = require('http');
 const fs = require('fs');
@@ -263,7 +264,9 @@ app.post('/api/telegram/set-token', express.json(), async (req, res) => {
 // API endpoint for workflows to send WhatsApp messages
 app.post('/api/workflow/send-message', express.json(), async (req, res) => {
   try {
-    console.log('Received send-message request:', req.body);
+    // Check if this is an internal request from our manual intervention API
+    const isInternalRequest = req.headers['x-internal-request'] === 'true';
+    console.log(`Received send-message request: ${isInternalRequest ? '[INTERNAL]' : ''}`, req.body);
     
     // Support both chatId and recipient parameters for compatibility
     const chatId = req.body.chatId || req.body.recipient;
@@ -349,7 +352,17 @@ app.post('/api/workflow/send-message', express.json(), async (req, res) => {
       } 
       // Otherwise send text message
       else {
-        await whatsapp.client.sendMessage(chatId, messageContent);
+        // Check if this is a manual intervention message
+        const isManualIntervention = isInternalRequest && req.body.workflowName === 'manual-intervention';
+        
+        // Add metadata to mark manual intervention messages
+        const options = {};
+        if (isManualIntervention) {
+          options.isManualIntervention = true;
+          console.log(`Sending manual intervention message to ${chatId}`);
+        }
+        
+        await whatsapp.client.sendMessage(chatId, messageContent, options);
         console.log(`Message sent to ${chatId}: ${messageContent.substring(0, 50)}${messageContent.length > 50 ? '...' : ''}`);
       }
       
@@ -831,30 +844,27 @@ app.post('/api/chats/send-manual', async (req, res) => {
       // WhatsApp chat - normalize chat ID format
       const normalizedChatId = chatId.replace('_c.us', '@c.us');
       
-      if (global.originalSendMessage) {
-        // Track this as a manual message to prevent double processing
-        if (!global.manualMessages) {
-          global.manualMessages = new Set();
-        }
-        const messageId = `${normalizedChatId}_${Date.now()}_${message.substring(0, 20)}`;
-        global.manualMessages.add(messageId);
-        
-        // Use the original sendMessage to avoid triggering automated responses
-        await global.originalSendMessage(normalizedChatId, message);
-        
-        // Add message to chat history using normalized chat ID
-        const chatHandler = global.chatHandler || require('./handlers/chatHandler');
-        chatHandler.addMessage(normalizedChatId, 'assistant', message, 'whatsapp');
-        
-        console.log(`[API] Manual message sent via WhatsApp to ${normalizedChatId}`);
-        
-        // Clean up the tracking after a delay
-        setTimeout(() => {
-          global.manualMessages.delete(messageId);
-        }, 5000);
-      } else {
-        throw new Error('WhatsApp client not available');
+      // Use the internal workflow API to send the message
+      // This avoids double processing and ensures consistent behavior
+      const internalResponse = await fetch('http://localhost:3000/api/workflow/send-message', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Internal-Request': 'true' // Mark as internal to avoid loops
+        },
+        body: JSON.stringify({
+          chatId: normalizedChatId,
+          message: message,
+          workflowName: 'manual-intervention'
+        })
+      });
+      
+      if (!internalResponse.ok) {
+        const errorData = await internalResponse.json();
+        throw new Error(errorData.error || 'Failed to send message via internal API');
       }
+      
+      console.log(`[API] Manual message sent via WhatsApp to ${normalizedChatId}`);
     } else {
       throw new Error('Unknown chat platform');
     }

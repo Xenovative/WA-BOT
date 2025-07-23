@@ -457,7 +457,18 @@ client.on('message', async (message) => {
 
   // Skip messages from self
   if (message.fromMe) {
-    console.log('[Message-Event] Skipping message from self');
+    // Check if this is a manual intervention message
+    const isManualMessage = message._data?.isManualIntervention;
+    
+    if (isManualMessage) {
+      console.log('[Message-Event] Manual intervention message detected, processing for chat history only');
+      // Only add to chat history, don't trigger AI response
+      if (global.chatHandler) {
+        global.chatHandler.addMessage(message.to, 'assistant', message.body, 'whatsapp');
+      }
+    } else {
+      console.log('[Message-Event] Skipping regular message from self');
+    }
     return;
   }
   
