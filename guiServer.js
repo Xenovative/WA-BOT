@@ -787,6 +787,80 @@ app.post('/api/profile/delete', (req, res) => {
   }
 });
 
+// Send manual message via bot
+app.post('/api/chats/send-manual', async (req, res) => {
+  try {
+    const { chatId, message, aiResponseEnabled } = req.body;
+    
+    if (!chatId || !message) {
+      return res.status(400).json({
+        success: false,
+        error: 'Chat ID and message are required'
+      });
+    }
+    
+    console.log(`[API] Sending manual message to chat ${chatId}:`, message.substring(0, 50) + '...');
+    console.log(`[API] AI auto-response: ${aiResponseEnabled ? 'enabled' : 'disabled'}`);
+    
+    // Get the appropriate bot handler based on chat ID
+    let botHandler = null;
+    
+    if (chatId.includes('telegram_')) {
+      // Telegram chat
+      if (global.telegramBot) {
+        botHandler = global.telegramBot;
+        const telegramChatId = chatId.replace('telegram_', '');
+        
+        // Send message via Telegram bot
+        await botHandler.sendMessage(telegramChatId, message);
+        
+        // Add message to chat history
+        const chatHandler = global.chatHandler || require('./handlers/chatHandler');
+        chatHandler.addMessage(chatId, 'assistant', message, 'telegram');
+        
+        console.log(`[API] Manual message sent via Telegram to ${telegramChatId}`);
+      } else {
+        throw new Error('Telegram bot not available');
+      }
+    } else if (chatId.includes('@c.us') || chatId.includes('_c.us')) {
+      // WhatsApp chat
+      if (global.whatsappClient) {
+        botHandler = global.whatsappClient;
+        
+        // Send message via WhatsApp bot
+        await botHandler.sendMessage(chatId, message);
+        
+        // Add message to chat history
+        const chatHandler = global.chatHandler || require('./handlers/chatHandler');
+        chatHandler.addMessage(chatId, 'assistant', message, 'whatsapp');
+        
+        console.log(`[API] Manual message sent via WhatsApp to ${chatId}`);
+      } else {
+        throw new Error('WhatsApp client not available');
+      }
+    } else {
+      throw new Error('Unknown chat platform');
+    }
+    
+    // Store AI response preference for this chat (optional feature for future)
+    // This could be stored in a database or configuration file
+    
+    res.json({
+      success: true,
+      message: 'Message sent successfully',
+      chatId: chatId,
+      aiResponseEnabled: aiResponseEnabled
+    });
+    
+  } catch (error) {
+    console.error('Error sending manual message:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message || 'Failed to send message'
+    });
+  }
+});
+
 // Get recent chats
 app.get('/api/chats/recent', (req, res) => {
   try {
