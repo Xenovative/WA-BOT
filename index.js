@@ -440,6 +440,7 @@ function sendAutomatedMessage(chatId, content, options = {}) {
 
 // Make it available globally
 global.sendMessage = sendAutomatedMessage;
+global.originalSendMessage = originalSendMessage;
 
 // Message processing
 // Handle voice messages
