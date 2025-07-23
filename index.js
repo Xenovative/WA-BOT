@@ -1047,13 +1047,18 @@ client.on('message', async (message) => {
         }
       }
       
+      // Format the chat ID to match the expected format in chatHandler
+      const cleanChatId = chatId.includes('@g.us') ? chatId.split('@')[0] : chatId;
+      const formattedChatId = `whatsapp_${cleanChatId}`;
+      
       // Send response back as automated message with appropriate flags
       await sendAutomatedMessage(message.from, response, {
         isCommandResponse: message.isCommand,
         isReplyToBot: message.isReplyToBot,
         isBotResponse: true,    // Explicitly mark as bot response
         isAutomated: true,      // Mark as automated
-        isResponseToUser: true  // Mark as response to user
+        isResponseToUser: true, // Mark as response to user
+        chatId: formattedChatId // Include formatted chat ID in options
       });
       console.log('[Group Chat] Response sent successfully');
     } catch (error) {
@@ -1157,8 +1162,12 @@ client.on('message', async (message) => {
         response = await currentLLMClient.generateResponse(messageText, messages, settings.parameters);
       }
       
+      // Format the chat ID to match the expected format in chatHandler
+      const cleanChatId = chatId.includes('@c.us') ? chatId.split('@')[0] : chatId;
+      const formattedChatId = `whatsapp_${cleanChatId}`;
+      
       // Add assistant response to chat history with platform identifier
-      chatHandler.addMessage(chatId, 'assistant', response, 'whatsapp');
+      chatHandler.addMessage(formattedChatId, 'assistant', response, 'whatsapp');
       
       // Add citations if RAG was used and citations are enabled
       const showCitations = process.env.KB_SHOW_CITATIONS === 'true';
@@ -1170,11 +1179,20 @@ client.on('message', async (message) => {
       }
     }
     
-    // Send response
+    // Send response with proper chat ID format
     if (message && typeof message.reply === 'function') {
+      // Use reply with the original message to maintain thread context
       await message.reply(response);
+    } else if (message) {
+      // Fallback to sendMessage if reply is not available
+      await sendAutomatedMessage(chatId, response, {
+        isBotResponse: true,
+        isAutomated: true,
+        isResponseToUser: true,
+        chatId: formattedChatId
+      });
     } else {
-      console.error('Invalid message object, cannot send reply:', message);
+      console.error('Invalid message object, cannot send reply');
     }
   } catch (error) {
     console.error('Error processing message:', error);
