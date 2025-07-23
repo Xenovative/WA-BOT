@@ -1121,11 +1121,11 @@ client.on('message', async (message) => {
       response = await commandHandler.processCommand(messageText, chatId, message.from);
       updateLLMClient(); // Update LLM client if provider/model changed
     } else {
-      // Add user message to chat history
-      chatHandler.addMessage(chatId, 'user', messageText);
+      // Add user message to chat history with platform identifier
+      chatHandler.addMessage(chatId, 'user', messageText, 'whatsapp');
       
-      // Get conversation history
-      const conversation = chatHandler.getConversation(chatId);
+      // Get conversation history with platform identifier
+      const conversation = chatHandler.getConversation(chatId, 'whatsapp');
       
       // Get current settings
       const settings = commandHandler.getCurrentSettings();
@@ -1157,8 +1157,8 @@ client.on('message', async (message) => {
         response = await currentLLMClient.generateResponse(messageText, messages, settings.parameters);
       }
       
-      // Add assistant response to chat history
-      chatHandler.addMessage(chatId, 'assistant', response);
+      // Add assistant response to chat history with platform identifier
+      chatHandler.addMessage(chatId, 'assistant', response, 'whatsapp');
       
       // Add citations if RAG was used and citations are enabled
       const showCitations = process.env.KB_SHOW_CITATIONS === 'true';
