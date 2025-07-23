@@ -829,11 +829,22 @@ app.post('/api/chats/send-manual', async (req, res) => {
       }
     } else if (chatId.includes('@c.us') || chatId.includes('_c.us')) {
       // WhatsApp chat
-      if (global.whatsappClient && global.whatsappClient.client) {
-        const whatsappClient = global.whatsappClient.client;
+      if (global.sendMessage) {
+        // Use the global sendMessage function with proper options
+        await global.sendMessage(chatId, message);
         
-        // Send message via WhatsApp client
-        await whatsappClient.sendMessage(chatId, message);
+        // Add message to chat history
+        const chatHandler = global.chatHandler || require('./handlers/chatHandler');
+        chatHandler.addMessage(chatId, 'assistant', message, 'whatsapp');
+        
+        console.log(`[API] Manual message sent via WhatsApp to ${chatId}`);
+      } else if (global.whatsappClient && global.whatsappClient.client) {
+        // Fallback to direct client with proper options
+        const whatsappClient = global.whatsappClient.client;
+        await whatsappClient.sendMessage(chatId, message, { 
+          isAutomated: true,
+          isBotResponse: true 
+        });
         
         // Add message to chat history
         const chatHandler = global.chatHandler || require('./handlers/chatHandler');
