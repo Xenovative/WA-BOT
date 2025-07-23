@@ -811,50 +811,49 @@ app.post('/api/chats/send-manual', async (req, res) => {
     let botHandler = null;
     
     const chatHandler = global.chatHandler || require('./handlers/chatHandler');
-    let platform = null;
-    let cleanChatId = chatId;
     
-    if (chatId.startsWith('telegram_')) {
-      // Telegram chat
+    // Parse the chat ID to extract platform and clean number
+    let platform, cleanNumber, sendToId;
+    
+    if (chatId.startsWith('telegram:')) {
+      // Format: telegram:12345678
       platform = 'telegram';
-      cleanChatId = chatId.replace('telegram_', '');
+      cleanNumber = chatId.split(':')[1];
+      sendToId = cleanNumber; // Telegram just needs the number
       
-      if (global.telegramBot) {
-        // Send message via Telegram bot
-        await global.telegramBot.sendMessage(cleanChatId, message);
-        
-        // Add message to chat history with platform prefix
-        chatHandler.addMessage(cleanChatId, 'assistant', message, platform);
-        
-        console.log(`[API] Manual message sent via Telegram to ${cleanChatId}`);
-      } else {
+      if (!global.telegramBot) {
         throw new Error('Telegram bot not available');
       }
-    } else if (chatId.includes('@c.us') || chatId.includes('_c.us')) {
-      // WhatsApp chat
+      
+      // Send message via Telegram bot
+      await global.telegramBot.sendMessage(sendToId, message);
+      
+    } else if (chatId.startsWith('whatsapp:') || chatId.includes('@c.us') || chatId.includes('_c.us')) {
+      // Format: whatsapp:85290897701 or 85290897701@c.us or 85290897701_c.us
       platform = 'whatsapp';
       
-      if (global.whatsappClient?.client) {
-        const whatsappClient = global.whatsappClient.client;
+      // Extract clean number (remove whatsapp: prefix and any @c.us or _c.us suffix)
+      cleanNumber = chatId
+        .replace('whatsapp:', '')
+        .replace(/[ _]?c\.us$/, '')
+        .replace('@', '');
         
-        // Format chat ID for sending (ensure @c.us format)
-        const formattedChatId = chatId.replace('_', '@');
-        
-        // Send message via WhatsApp client
-        await whatsappClient.sendMessage(formattedChatId, message);
-        
-        // Add message to chat history with platform prefix
-        // Use the clean chat ID without platform prefix (ChatHandler will add it)
-        const cleanChatId = formattedChatId.replace('@c.us', '');
-        chatHandler.addMessage(cleanChatId, 'assistant', message, platform);
-        
-        console.log(`[API] Manual message sent via WhatsApp to ${formattedChatId}`);
-      } else {
+      sendToId = `${cleanNumber}@c.us`; // WhatsApp needs @c.us suffix
+      
+      if (!global.whatsappClient?.client) {
         throw new Error('WhatsApp client not available');
       }
+      
+      // Send message via WhatsApp client
+      await global.whatsappClient.client.sendMessage(sendToId, message);
+      
     } else {
-      throw new Error('Unknown chat platform');
+      throw new Error('Unsupported chat format');
     }
+    
+    // Add message to chat history using consistent format: platform:number
+    chatHandler.addMessage(cleanNumber, 'assistant', message, platform);
+    console.log(`[API] Manual message sent via ${platform} to ${sendToId} (stored as ${platform}:${cleanNumber})`);
     
     // Store AI response preference for this chat (optional feature for future)
     // This could be stored in a database or configuration file
