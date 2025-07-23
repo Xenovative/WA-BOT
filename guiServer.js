@@ -97,8 +97,13 @@ const upload = multer({
 // Create uploads directory if it doesn't exist
 fs.mkdirSync('uploads', { recursive: true });
 
-// Serve static files from the public directory
-app.use(express.static(path.join(__dirname, 'gui/public')));
+// Serve static files from the gui/public directory
+app.use(express.static(path.join(__dirname, 'gui', 'public')));
+
+// Serve test page for manual intervention
+app.get('/test-manual-intervention', (req, res) => {
+  res.sendFile(path.join(__dirname, 'test-manual-intervention.html'));
+});
 app.use(express.json());
 
 // Get workflow manager instance
