@@ -29,7 +29,16 @@ class ChatHandler {
    */
   getPlatformChatId(platform, chatId) {
     if (!platform || !chatId) return chatId;
-    return `${platform}:${chatId}`;
+    
+    // If chatId already has platform prefix, return as is
+    if (chatId.startsWith(platform + ':') || 
+        chatId.startsWith(platform.charAt(0).toUpperCase() + platform.slice(1) + ':')) {
+      return chatId;
+    }
+    
+    // Otherwise, add platform prefix with proper formatting
+    const formattedPlatform = platform.charAt(0).toUpperCase() + platform.slice(1);
+    return `${formattedPlatform}: ${chatId}`;
   }
 
   /**
