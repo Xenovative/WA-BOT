@@ -217,15 +217,15 @@ class ChatHandler {
       
       // Format the chat ID for storage consistently
       if (chatId.startsWith('chat_')) {
-        formattedChatId = chatId;
+        formattedChatId = chatId.substring(5); // Remove 'chat_'
       } else if (chatId.match(/^(whatsapp|telegram)_/i)) {
-        formattedChatId = `chat_${chatId}`;
+        formattedChatId = chatId;
       } else if (platform) {
         const cleanId = chatId
           .replace(/[@].*$/, '')           // Remove everything after @ (like @c.us)
           .replace(/[^a-z0-9]/gi, '_')     // Replace special chars with underscore
           .toLowerCase();
-        formattedChatId = `chat_${platform.toLowerCase()}_${cleanId}`;
+        formattedChatId = `${platform.toLowerCase()}_${cleanId}`;
       } else {
         const cleanId = chatId
           .replace(/[@].*$/, '')
@@ -233,10 +233,10 @@ class ChatHandler {
           .toLowerCase();
         
         if (cleanId === '' || cleanId === 'chat' || cleanId === '_') {
-          formattedChatId = `chat_unknown_${Date.now()}`;
+          formattedChatId = `unknown_${Date.now()}`;
           console.warn(`[ChatHandler] Problematic chat ID "${chatId}" normalized to ${formattedChatId}`);
         } else {
-          formattedChatId = `chat_${cleanId}`;
+          formattedChatId = cleanId;
         }
       }
       
@@ -357,15 +357,15 @@ class ChatHandler {
     console.log(`[ChatHandler] Loading chat ${chatId} from disk`);
     
     try {
-      // Format the chat ID consistently
+      // Format the chat ID consistently (remove chat_ prefix)
       let formattedChatId;
       
       if (chatId.startsWith('chat_')) {
-        formattedChatId = chatId;
+        formattedChatId = chatId.substring(5);
       } else if (chatId.match(/^(whatsapp|telegram)_/i)) {
-        formattedChatId = `chat_${chatId}`;
+        formattedChatId = chatId;
       } else {
-        formattedChatId = `chat_${chatId}`;
+        formattedChatId = chatId;
       }
       
       // Get the file path for this chat
@@ -418,15 +418,15 @@ class ChatHandler {
     // Format the chat ID consistently for lookup
     let formattedChatId;
     
-    // First, check if this is a chat ID with chat_ prefix
+    // First, check if this is a chat ID with chat_ prefix and remove it
     if (chatId.startsWith('chat_')) {
-      formattedChatId = chatId;
-      console.log(`[ChatHandler] Using chat ID with chat_ prefix: ${formattedChatId}`);
+      formattedChatId = chatId.substring(5);
+      console.log(`[ChatHandler] Removed chat_ prefix: ${chatId} -> ${formattedChatId}`);
     } 
     // Check if it's a platform-prefixed ID without chat_ prefix (like 'whatsapp_123')
     else if (chatId.match(/^(whatsapp|telegram)_/i)) {
-      formattedChatId = `chat_${chatId}`;
-      console.log(`[ChatHandler] Added chat_ prefix to platform ID: ${formattedChatId}`);
+      formattedChatId = chatId;
+      console.log(`[ChatHandler] Using platform ID as-is: ${formattedChatId}`);
     }
     // Handle other formats with platform info
     else if (platform) {
@@ -435,7 +435,7 @@ class ChatHandler {
         .replace(/[@].*$/, '')           // Remove everything after @ (like @c.us)
         .replace(/[^a-z0-9]/gi, '_')     // Replace special chars with underscore
         .toLowerCase();
-      formattedChatId = `chat_${platform.toLowerCase()}_${cleanId}`;
+      formattedChatId = `${platform.toLowerCase()}_${cleanId}`;
       console.log(`[ChatHandler] Normalized chat ID with platform: ${formattedChatId}`);
     }
     // No platform info available
@@ -447,12 +447,12 @@ class ChatHandler {
       
       // Prevent problematic file names
       if (cleanId === '' || cleanId === 'chat' || cleanId === '_') {
-        formattedChatId = `chat_unknown_${Date.now()}`;
+        formattedChatId = `unknown_${Date.now()}`;
         console.warn(`[ChatHandler] Problematic chat ID "${chatId}" normalized to ${formattedChatId}`);
       } else {
-        formattedChatId = `chat_${cleanId}`;
+        formattedChatId = cleanId;
       }
-      console.log(`[ChatHandler] Added chat_ prefix to generic ID: ${formattedChatId}`);
+      console.log(`[ChatHandler] Using generic ID: ${formattedChatId}`);
     }
     
     // Log the mapping for debugging
@@ -495,13 +495,13 @@ class ChatHandler {
    */
   clearConversation(chatId) {
     try {
-      // Format the chat ID consistently
+      // Format the chat ID consistently (remove chat_ prefix)
       let formattedChatId;
       
       if (chatId.startsWith('chat_')) {
-        formattedChatId = chatId;
+        formattedChatId = chatId.substring(5);
       } else if (chatId.match(/^(whatsapp|telegram)_/i)) {
-        formattedChatId = `chat_${chatId}`;
+        formattedChatId = chatId;
       } else {
         const cleanId = chatId
           .replace(/[@].*$/, '')
@@ -510,10 +510,10 @@ class ChatHandler {
         
         // Prevent problematic file names
         if (cleanId === '' || cleanId === 'chat' || cleanId === '_') {
-          formattedChatId = `chat_unknown_${Date.now()}`;
+          formattedChatId = `unknown_${Date.now()}`;
           console.warn(`[ChatHandler] Problematic chat ID "${chatId}" normalized to ${formattedChatId}`);
         } else {
-          formattedChatId = `chat_${cleanId}`;
+          formattedChatId = cleanId;
         }
       }
       
@@ -769,11 +769,11 @@ class ChatHandler {
     // Save each chat to its own file
     conversationsToSave.forEach((messages, chatId) => {
       try {
-        // Ensure chat ID is properly formatted with chat_ prefix
+        // Use chat ID as-is for file naming (no chat_ prefix)
         let formattedChatId = chatId;
-        if (!formattedChatId.startsWith('chat_')) {
-          formattedChatId = `chat_${chatId}`;
-          console.log(`[ChatHandler] Formatted chat ID for saving: ${chatId} -> ${formattedChatId}`);
+        if (formattedChatId.startsWith('chat_')) {
+          formattedChatId = formattedChatId.substring(5);
+          console.log(`[ChatHandler] Removed chat_ prefix for saving: ${chatId} -> ${formattedChatId}`);
         }
         
         // Get the proper file path for this chat
@@ -1177,7 +1177,30 @@ class ChatHandler {
    * @returns {boolean} True if chat is blocked
    */
   isChatBlocked(chatId) {
-    return this.blockedChats.has(chatId);
+    // Check direct match first
+    if (this.blockedChats.has(chatId)) {
+      return true;
+    }
+    
+    // Handle format mismatch between message handlers and UI
+    // Message handlers use: whatsapp_123456, telegram_123456
+    // UI/Database uses: chat_whatsapp_123456, chat_telegram_123456
+    
+    let alternativeId;
+    if (chatId.startsWith('chat_')) {
+      // Remove chat_ prefix: chat_whatsapp_123456 -> whatsapp_123456
+      alternativeId = chatId.substring(5);
+    } else {
+      // Add chat_ prefix: whatsapp_123456 -> chat_whatsapp_123456
+      alternativeId = `chat_${chatId}`;
+    }
+    
+    const isBlocked = this.blockedChats.has(alternativeId);
+    if (isBlocked) {
+      console.log(`[ChatHandler] Found blocked chat with alternative format: ${chatId} -> ${alternativeId}`);
+    }
+    
+    return isBlocked;
   }
 
   /**
