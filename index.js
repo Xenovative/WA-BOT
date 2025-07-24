@@ -40,11 +40,60 @@ global.chatHandler = chatHandler;
 global.workflowManager = workflowManager;
 
 // Add fallback methods to chatHandler if they don't exist (for compatibility with running instance)
+if (!chatHandler.addMessage || !chatHandler.getConversation || !chatHandler.getAllChats) {
+  console.log('[Compatibility] Adding fallback methods and loading existing chat data');
+  
+  // Initialize conversations map and load existing data
+  if (!chatHandler.conversations) {
+    chatHandler.conversations = new Map();
+    
+    // Try to load existing chat files
+    const chatHistoryDir = path.join(__dirname, 'chat_history');
+    if (fs.existsSync(chatHistoryDir)) {
+      console.log('[Compatibility] Loading existing chat files...');
+      
+      const files = fs.readdirSync(chatHistoryDir);
+      let loadedCount = 0;
+      
+      for (const file of files) {
+        if (file.endsWith('.json') && file !== 'chats.json' && file !== 'blocked_chats.json') {
+          try {
+            const filePath = path.join(chatHistoryDir, file);
+            const data = JSON.parse(fs.readFileSync(filePath, 'utf8'));
+            
+            if (Array.isArray(data) && data.length > 0) {
+              // Extract chat ID from filename
+              let chatId = file.replace('.json', '');
+              
+              // Convert old format IDs to native format if possible
+              if (chatId.startsWith('chat_whatsapp_')) {
+                chatId = chatId.replace('chat_whatsapp_', '') + '@c.us';
+              } else if (chatId.startsWith('chat_telegram_')) {
+                chatId = chatId.replace('chat_telegram_', '');
+              } else if (chatId.startsWith('whatsapp_')) {
+                chatId = chatId.replace('whatsapp_', '') + '@c.us';
+              } else if (chatId.startsWith('telegram_')) {
+                chatId = chatId.replace('telegram_', '');
+              }
+              
+              chatHandler.conversations.set(chatId, data);
+              loadedCount++;
+              console.log(`[Compatibility] Loaded ${data.length} messages for chat ${chatId}`);
+            }
+          } catch (error) {
+            console.error(`[Compatibility] Failed to load chat file ${file}:`, error.message);
+          }
+        }
+      }
+      
+      console.log(`[Compatibility] Loaded ${loadedCount} chat files`);
+    }
+  }
+}
+
 if (!chatHandler.addMessage) {
-  console.log('[Compatibility] Adding fallback addMessage method');
   chatHandler.addMessage = function(chatId, roleOrMessage, content, platform) {
-    console.log(`[Fallback] addMessage called for ${chatId} but method not available`);
-    // Try to save to a simple structure if possible
+    console.log(`[Fallback] addMessage called for ${chatId}`);
     if (!this.conversations) this.conversations = new Map();
     if (!this.conversations.has(chatId)) this.conversations.set(chatId, []);
     
@@ -60,18 +109,16 @@ if (!chatHandler.addMessage) {
 }
 
 if (!chatHandler.getConversation) {
-  console.log('[Compatibility] Adding fallback getConversation method');
   chatHandler.getConversation = function(chatId, platform) {
-    console.log(`[Fallback] getConversation called for ${chatId} but method not available`);
+    console.log(`[Fallback] getConversation called for ${chatId}`);
     if (!this.conversations) this.conversations = new Map();
     return this.conversations.get(chatId) || [];
   };
 }
 
 if (!chatHandler.getAllChats) {
-  console.log('[Compatibility] Adding fallback getAllChats method');
   chatHandler.getAllChats = function() {
-    console.log('[Fallback] getAllChats called but method not available');
+    console.log('[Fallback] getAllChats called');
     if (!this.conversations) return [];
     const chats = [];
     this.conversations.forEach((messages, chatId) => {
