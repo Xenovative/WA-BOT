@@ -295,14 +295,11 @@ class TelegramBotService {
       // Send typing indicator
       await this.bot.sendChatAction(chatId, 'typing');
       
-      // Format the chat ID for consistency
-      const formattedChatId = `telegram_${chatId}`;
-      
       // Add user message to chat history with platform identifier
       chatHandler.addMessage(formattedChatId, 'user', cleanMessageText, 'telegram');
       
       // Get conversation history with platform identifier
-      const conversation = chatHandler.getConversation(chatId, 'telegram');
+      const conversation = chatHandler.getConversation(formattedChatId, 'telegram');
       
       // Get current settings
       const settings = commandHandler.getCurrentSettings();
@@ -340,9 +337,6 @@ class TelegramBotService {
         // For other providers, we pass parameters in the standard way
         response = await currentLLMClient.generateResponse(cleanMessageText, messages, settings.parameters);
       }
-      
-      // Format the chat ID for consistency
-      const formattedChatId = `telegram_${chatId}`;
       
       // Add assistant response to chat history with platform identifier
       chatHandler.addMessage(formattedChatId, 'assistant', response, 'telegram');
