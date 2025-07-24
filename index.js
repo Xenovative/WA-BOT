@@ -39,6 +39,62 @@ if (process.env.TELEGRAM_BOT_TOKEN) {
 global.chatHandler = chatHandler;
 global.workflowManager = workflowManager;
 
+// Add fallback methods to chatHandler if they don't exist (for compatibility with running instance)
+if (!chatHandler.addMessage) {
+  console.log('[Compatibility] Adding fallback addMessage method');
+  chatHandler.addMessage = function(chatId, roleOrMessage, content, platform) {
+    console.log(`[Fallback] addMessage called for ${chatId} but method not available`);
+    // Try to save to a simple structure if possible
+    if (!this.conversations) this.conversations = new Map();
+    if (!this.conversations.has(chatId)) this.conversations.set(chatId, []);
+    
+    let message;
+    if (typeof roleOrMessage === 'object') {
+      message = roleOrMessage;
+    } else {
+      message = { role: roleOrMessage, content, timestamp: new Date().toISOString() };
+    }
+    
+    this.conversations.get(chatId).push(message);
+  };
+}
+
+if (!chatHandler.getConversation) {
+  console.log('[Compatibility] Adding fallback getConversation method');
+  chatHandler.getConversation = function(chatId, platform) {
+    console.log(`[Fallback] getConversation called for ${chatId} but method not available`);
+    if (!this.conversations) this.conversations = new Map();
+    return this.conversations.get(chatId) || [];
+  };
+}
+
+if (!chatHandler.getAllChats) {
+  console.log('[Compatibility] Adding fallback getAllChats method');
+  chatHandler.getAllChats = function() {
+    console.log('[Fallback] getAllChats called but method not available');
+    if (!this.conversations) return [];
+    const chats = [];
+    this.conversations.forEach((messages, chatId) => {
+      const lastMessage = messages.length > 0 ? messages[messages.length - 1] : null;
+      chats.push({
+        id: chatId,
+        preview: lastMessage?.content?.substring(0, 100) || '',
+        timestamp: lastMessage?.timestamp || new Date().toISOString(),
+        messageCount: messages.length
+      });
+    });
+    return chats.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+  };
+}
+
+if (!chatHandler.isChatBlocked) {
+  console.log('[Compatibility] Adding fallback isChatBlocked method');
+  chatHandler.isChatBlocked = function(chatId) {
+    console.log(`[Fallback] isChatBlocked called for ${chatId} but method not available, returning false`);
+    return false; // Default to not blocked
+  };
+}
+
 // Flag to track if shutdown is in progress
 let isShuttingDown = false;
 
@@ -998,13 +1054,7 @@ client.on('message', async (message) => {
       const nativeChatId = chatId; // WhatsApp native format: '1234567890@g.us'
       
       // Check if this chat is blocked from AI responses
-      let isChatBlocked = false;
-      if (typeof chatHandler.isChatBlocked === 'function') {
-        isChatBlocked = chatHandler.isChatBlocked(nativeChatId);
-      } else {
-        console.log('[Group Chat] isChatBlocked method not available, assuming chat is not blocked');
-        isChatBlocked = false;
-      }
+      const isChatBlocked = chatHandler.isChatBlocked(nativeChatId);
       console.log(`[Group Chat] Chat ${nativeChatId} blocked status: ${isChatBlocked}`);
       
       // Check if message is a command
@@ -1143,13 +1193,7 @@ client.on('message', async (message) => {
     const nativeChatId = chatId; // WhatsApp native format: '1234567890@c.us'
     
     // Check if this chat is blocked from AI responses
-    let isChatBlocked = false;
-    if (typeof chatHandler.isChatBlocked === 'function') {
-      isChatBlocked = chatHandler.isChatBlocked(nativeChatId);
-    } else {
-      console.log('[Direct] isChatBlocked method not available, assuming chat is not blocked');
-      isChatBlocked = false;
-    }
+    const isChatBlocked = chatHandler.isChatBlocked(nativeChatId);
     console.log(`[Direct] Chat ${nativeChatId} blocked status: ${isChatBlocked}`);
     
     // Check if message is a command
