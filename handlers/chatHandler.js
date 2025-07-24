@@ -11,24 +11,10 @@ class ChatHandler {
     // Directory to store chat history
     this.chatHistoryDir = path.join(__dirname, '../chat_history');
     this.storageFile = path.join(this.chatHistoryDir, 'chats.json');
-    this._chatIndex = [];
-    this._lastIndexUpdate = 0;
-    this._indexUpdateInProgress = false;
     
     // Ensure chat history directory exists
     if (!fs.existsSync(this.chatHistoryDir)) {
       fs.mkdirSync(this.chatHistoryDir, { recursive: true });
-    }
-    
-    // Load existing index if it exists
-    if (fs.existsSync(this.storageFile)) {
-      try {
-        const fileContent = fs.readFileSync(this.storageFile, 'utf8');
-        this._chatIndex = JSON.parse(fileContent);
-        this._lastIndexUpdate = Date.now();
-      } catch (e) {
-        console.error('Error loading chat index:', e);
-      }
     }
     
     // Migrate any existing chat files to the new format
@@ -36,9 +22,6 @@ class ChatHandler {
     
     // Load conversations from disk
     this.loadConversations();
-    
-    // Initial index update in the background
-    setImmediate(() => this.updateChatIndex());
   }
   
   /**
@@ -205,22 +188,34 @@ class ChatHandler {
    * Get conversation history for a chat
    * @param {string} chatId - The chat ID to get conversation for
    * @param {string} [platform] - Platform identifier ('telegram', 'whatsapp', etc.)
+   * @param {boolean} [forceReload=false] - Whether to force reload from disk
    * @returns {Array} Array of message objects
    */
-  getConversation(chatId, platform) {
+  getConversation(chatId, platform, forceReload = false) {
     const platformChatId = platform ? this.getPlatformChatId(platform, chatId) : chatId;
-    console.log(`[ChatHandler] Getting conversation for chat ID: ${chatId}`);
+    console.log(`[ChatHandler] Getting conversation for chat ID: ${platformChatId}`);
+    
     if (!chatId) {
       console.log('[ChatHandler] No chat ID provided, returning empty array');
       return [];
     }
     
-    // Always load from disk to ensure we have the most up-to-date messages
-    const messages = this.loadChat(platformChatId);
-    console.log(`[ChatHandler] Loaded ${messages.length} messages for chat ${chatId} from disk`);
+    // First check if we have this conversation in memory
+    if (!forceReload && this.conversations.has(platformChatId)) {
+      const cachedMessages = this.conversations.get(platformChatId);
+      console.log(`[ChatHandler] Using cached conversation with ${cachedMessages.length} messages for ${platformChatId}`);
+      return cachedMessages;
+    }
     
-    // Return the loaded messages (or empty array if none found)
-    return messages;
+    // If not in memory or force reload requested, load from disk
+    try {
+      const messages = this.loadChat(platformChatId);
+      console.log(`[ChatHandler] Loaded ${messages.length} messages for chat ${platformChatId} from disk`);
+      return messages;
+    } catch (error) {
+      console.error(`[ChatHandler] Error loading conversation for ${platformChatId}:`, error);
+      return [];
+    }
   }
 
   /**
@@ -469,90 +464,76 @@ class ChatHandler {
     this.updateChatIndex();
   }
   
-  /**
-   * Update the main chat index file
-   * @returns {Promise<void>}
-   */
-  async updateChatIndex() {
-    // Prevent concurrent updates
-    if (this._indexUpdateInProgress) {
-      return;
-    }
+  // Update the main chat index file
+  updateChatIndex() {
+    const chats = [];
     
-    this._indexUpdateInProgress = true;
-    
-    try {
-      const startTime = Date.now();
-      console.log('[ChatHandler] Starting chat index update...');
+    // Read all chat files
+    if (fs.existsSync(this.chatHistoryDir)) {
+      const files = fs.readdirSync(this.chatHistoryDir).filter(
+        file => file.endsWith('.json') && file !== 'chats.json'
+      );
       
-      // Process in chunks to avoid blocking
-      const chatFiles = fs.readdirSync(this.chatHistoryDir)
-        .filter(file => file.endsWith('.json') && file !== 'chats.json');
+      console.log(`[ChatHandler] Found ${files.length} chat files to index`);
       
-      const chatIndex = [];
-      const BATCH_SIZE = 10;
-      
-      // Process files in batches
-      for (let i = 0; i < chatFiles.length; i += BATCH_SIZE) {
-        const batch = chatFiles.slice(i, i + BATCH_SIZE);
-        await Promise.all(batch.map(async (file) => {
+      files.forEach(file => {
+        try {
+          const filePath = path.join(this.chatHistoryDir, file);
+          const fileContent = fs.readFileSync(filePath, 'utf8');
+          
           try {
-            const chatId = path.basename(file, '.json');
-            const filePath = path.join(this.chatHistoryDir, file);
-            const fileContent = fs.readFileSync(filePath, 'utf8');
             const messages = JSON.parse(fileContent);
             
-            if (Array.isArray(messages) && messages.length > 0) {
-              const lastMessage = messages[messages.length - 1];
-              chatIndex.push({
+            if (Array.isArray(messages)) {
+              const chatId = path.basename(file, '.json');
+              
+              // Even if there are no messages, we still want to track the chat
+              const lastMessage = messages.length > 0 ? messages[messages.length - 1] : { content: '', timestamp: new Date().toISOString() };
+              
+              chats.push({
                 id: chatId,
-                preview: lastMessage.content.substring(0, 100),
+                preview: lastMessage.content?.substring(0, 100) || '',
                 timestamp: lastMessage.timestamp || new Date().toISOString(),
                 messageCount: messages.length
               });
             }
-          } catch (error) {
-            console.error(`Error processing chat file ${file}:`, error);
+          } catch (parseError) {
+            console.error(`Error parsing JSON for chat file ${file}:`, parseError);
           }
-        }));
-        
-        // Small delay between batches to prevent blocking
-        if (i + BATCH_SIZE < chatFiles.length) {
-          await new Promise(resolve => setTimeout(resolve, 10));
-        }
-      }
-      
-      // Sort by timestamp (newest first)
-      chatIndex.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
-      
-      // Update cache
-      this._chatIndex = chatIndex;
-      this._lastIndexUpdate = Date.now();
-      
-      // Save to file in the background
-      fs.writeFile(this.storageFile, JSON.stringify(chatIndex, null, 2), (err) => {
-        if (err) {
-          console.error('Error saving chat index:', err);
-        } else {
-          console.log(`[ChatHandler] Chat index updated in ${Date.now() - startTime}ms`);
+        } catch (error) {
+          console.error(`Error reading chat file ${file}:`, error);
         }
       });
       
-      return chatIndex;
+      console.log(`[ChatHandler] Successfully indexed ${chats.length} chats`);
       
-    } catch (error) {
-      console.error('Error updating chat index:', error);
-      return [];
-    } finally {
-      this._indexUpdateInProgress = false;
+      // Sort by timestamp, newest first
+      chats.sort((a, b) => {
+        const timeA = typeof a.timestamp === 'number' ? a.timestamp : new Date(a.timestamp).getTime();
+        const timeB = typeof b.timestamp === 'number' ? b.timestamp : new Date(b.timestamp).getTime();
+        return timeB - timeA;
+      });
+      
+      // Save the index
+      fs.writeFileSync(this.storageFile, JSON.stringify(chats, null, 2));
+      console.log(`[ChatHandler] Saved chat index with ${chats.length} entries`);
     }
   }
   
-  // Load a single chat's messages with validation and deduplication
+  /**
+   * Load a single chat's messages with validation and deduplication
+   * @param {string} chatId - The chat ID to load
+   * @returns {Array} Array of validated and deduplicated messages
+   */
   loadChat(chatId) {
     if (!chatId) {
       console.warn('[ChatHandler] Cannot load chat: No chat ID provided');
       return [];
+    }
+
+    // Check if we already have this chat in memory
+    if (this.conversations.has(chatId)) {
+      return this.conversations.get(chatId);
     }
 
     // If chatId doesn't start with 'chat_', try with and without the prefix
@@ -564,14 +545,10 @@ class ChatHandler {
     
     for (const currentChatId of chatIdsToTry) {
       try {
-        console.log(`[ChatHandler] Attempting to load chat: ${currentChatId}`);
         const chatFile = this.getChatFilePath(currentChatId);
-        console.log(`[ChatHandler] Chat file path: ${chatFile}`);
         
         if (fs.existsSync(chatFile)) {
-          console.log(`[ChatHandler] Chat file exists for ${currentChatId}`);
           const fileContent = fs.readFileSync(chatFile, 'utf8');
-          console.log(`[ChatHandler] Read ${fileContent.length} bytes from chat file`);
           
           try {
             let messages = [];
@@ -582,13 +559,10 @@ class ChatHandler {
                        (Array.isArray(parsed?.messages) ? parsed.messages : []);
             } catch (e) {
               console.error(`[ChatHandler] Error parsing JSON for chat ${currentChatId}:`, e);
-              console.error(`[ChatHandler] File content sample: ${fileContent.substring(0, 100)}...`);
               continue; // Try next chat ID
             }
             
-            console.log(`[ChatHandler] Found ${messages.length} raw messages for chat ${currentChatId}`);
-            
-            // Process and validate messages
+            // Process and validate messages (only log if there are issues)
             const validMessages = messages
               .filter(msg => {
                 const isValid = msg && 
@@ -597,8 +571,8 @@ class ChatHandler {
                               typeof msg.content === 'string' &&
                               msg.content.trim() !== '';
                 
-                if (!isValid) {
-                  console.warn(`[ChatHandler] Filtered out invalid message in ${currentChatId}:`, msg);
+                if (!isValid && msg) {
+                  console.warn(`[ChatHandler] Filtered invalid message in ${currentChatId}`);
                 }
                 
                 return isValid;
@@ -611,36 +585,37 @@ class ChatHandler {
                   : (msg.timestamp || new Date().toISOString())
               }));
             
-            // Deduplicate messages by timestamp and content
-            const messageMap = new Map();
-            validMessages.forEach(msg => {
-              const key = `${msg.timestamp}_${msg.content}`;
-              if (!messageMap.has(key)) {
-                messageMap.set(key, msg);
-              } else {
-                console.log(`[ChatHandler] Removed duplicate message in ${currentChatId}:`, msg.content.substring(0, 50) + '...');
+            // Only deduplicate if needed (performance optimization)
+            let uniqueMessages = validMessages;
+            if (validMessages.length !== messages.length) {
+              // Deduplicate messages by timestamp and content
+              const messageMap = new Map();
+              validMessages.forEach(msg => {
+                const key = `${msg.timestamp}_${msg.content}`;
+                if (!messageMap.has(key)) {
+                  messageMap.set(key, msg);
+                }
+              });
+              
+              uniqueMessages = Array.from(messageMap.values())
+                .sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
+              
+              // If we had to clean up the messages, save them back
+              if (uniqueMessages.length !== messages.length) {
+                console.log(`[ChatHandler] Cleaned up messages for ${currentChatId}: ${messages.length} -> ${uniqueMessages.length}`);
+                // Schedule save for later to avoid blocking
+                setTimeout(() => this.saveConversations(), 0);
               }
-            });
-            
-            const uniqueMessages = Array.from(messageMap.values())
-              .sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
-            
-            console.log(`[ChatHandler] Processed to ${uniqueMessages.length} valid, unique messages`);
+            }
             
             // Update in-memory cache with the original chatId
             this.conversations.set(chatId, uniqueMessages);
-            
-            // If we had to clean up the messages, save them back
-            if (uniqueMessages.length !== messages.length) {
-              console.log(`[ChatHandler] Cleaned up messages for ${currentChatId}: ${messages.length} -> ${uniqueMessages.length}`);
-              this.saveConversations();
-            }
             
             return uniqueMessages;
             
           } catch (error) {
             lastError = error;
-            console.error(`[ChatHandler] Error processing messages for chat ${currentChatId}:`, error);
+            console.error(`[ChatHandler] Error processing messages for ${currentChatId}:`, error);
             continue; // Try next chat ID
           }
         }
@@ -664,15 +639,21 @@ class ChatHandler {
    */
   getAllChats() {
     try {
-      // Only update index if it's older than 30 seconds and not currently updating
-      const now = Date.now();
-      if (!this._indexUpdateInProgress && now - this._lastIndexUpdate > 30000) {
-        // Update index in the background
-        this.updateChatIndex().catch(console.error);
-      }
+      // Ensure the index is up to date
+      this.updateChatIndex();
       
-      // Return cached index
-      return Array.isArray(this._chatIndex) ? this._chatIndex : [];
+      // Read the index file
+      if (fs.existsSync(this.storageFile)) {
+        const fileContent = fs.readFileSync(this.storageFile, 'utf8');
+        try {
+          const chats = JSON.parse(fileContent);
+          return Array.isArray(chats) ? chats : [];
+        } catch (error) {
+          console.error('[ChatHandler] Error parsing chat index:', error);
+          return [];
+        }
+      }
+      return [];
     } catch (error) {
       console.error('[ChatHandler] Error getting all chats:', error);
       return [];

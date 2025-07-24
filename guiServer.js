@@ -977,31 +977,37 @@ app.get('/api/chats', (req, res) => {
 
 app.get('/api/chats/:chatId', (req, res) => {
   try {
-    console.log(`[DEBUG] Received request for chat ID: ${req.params.chatId}`);
+    const start = Date.now();
     const chatHandler = global.chatHandler || require('./handlers/chatHandler');
     const chatId = req.params.chatId;
     
     if (!chatId) {
-      console.log('[DEBUG] No chat ID provided');
       return res.status(400).json({ error: 'Chat ID is required' });
     }
     
-    console.log(`[DEBUG] Getting conversation for chat ID: ${chatId}`);
-    const messages = chatHandler.getConversation(chatId);
-    console.log(`[DEBUG] Retrieved ${messages ? messages.length : 0} messages for chat ID: ${chatId}`);
-    console.log('[DEBUG] First few messages:', messages.slice(0, 2));
+    // Get conversation from memory cache when possible
+    const forceReload = req.query.reload === 'true';
+    const messages = chatHandler.getConversation(chatId, null, forceReload);
     
-    // Get chat metadata
-    console.log(`[DEBUG] Getting chat metadata for ID: ${chatId}`);
-    const allChats = chatHandler.getAllChats();
-    console.log(`[DEBUG] Found ${allChats.length} total chats`);
+    // Get chat metadata efficiently
+    let chatInfo;
+    try {
+      // Try to find in existing chats first
+      const allChats = chatHandler.getAllChats();
+      chatInfo = allChats.find(chat => chat.id === chatId);
+    } catch (err) {
+      // Fallback if getAllChats fails
+      console.warn(`[API] Couldn't get metadata for chat ${chatId}:`, err.message);
+    }
     
-    const chatInfo = allChats.find(chat => chat.id === chatId) || {
-      id: chatId,
-      messageCount: messages.length,
-      timestamp: messages.length > 0 ? messages[messages.length - 1].timestamp : new Date().toISOString()
-    };
-    console.log('[DEBUG] Chat info:', chatInfo);
+    // If no metadata found, create basic info
+    if (!chatInfo) {
+      chatInfo = {
+        id: chatId,
+        messageCount: messages.length,
+        timestamp: messages.length > 0 ? messages[messages.length - 1].timestamp : new Date().toISOString()
+      };
+    }
     
     const response = {
       success: true,
@@ -1009,11 +1015,13 @@ app.get('/api/chats/:chatId', (req, res) => {
       ...chatInfo,
       conversation: messages
     };
-    console.log('[DEBUG] Sending response with conversation length:', messages.length);
+    
+    const elapsed = Date.now() - start;
+    console.log(`[API] Chat ${chatId} loaded with ${messages.length} messages in ${elapsed}ms`);
     
     res.json(response);
   } catch (error) {
-    console.error(`Error getting chat ${req.params.chatId}:`, error);
+    console.error(`[API] Error getting chat ${req.params.chatId}:`, error);
     res.status(500).json({ 
       error: `Failed to load chat ${req.params.chatId}`,
       details: error.message 
