@@ -815,10 +815,13 @@ app.post('/api/chats/send-manual', async (req, res) => {
     // Parse the chat ID to extract platform and clean number
     let platform, cleanNumber, sendToId;
     
-    if (chatId.startsWith('telegram:')) {
-      // Format: telegram:12345678
+    // Normalize the chat ID for processing
+    const normalizedChatId = chatId.startsWith('chat_') ? chatId : `chat_${chatId}`;
+    
+    if (normalizedChatId.startsWith('chat_telegram_')) {
+      // Format: chat_telegram_12345678
       platform = 'telegram';
-      cleanNumber = chatId.split(':')[1];
+      cleanNumber = normalizedChatId.replace(/^chat_telegram_/, '');
       sendToId = cleanNumber; // Telegram just needs the number
       
       if (!global.telegramBot) {
@@ -828,16 +831,15 @@ app.post('/api/chats/send-manual', async (req, res) => {
       // Send message via Telegram bot
       await global.telegramBot.sendMessage(sendToId, message);
       
-    } else if (chatId.startsWith('whatsapp:') || chatId.includes('@c.us') || chatId.includes('_c.us')) {
-      // Format: whatsapp:85290897701 or 85290897701@c.us or 85290897701_c.us or whatsapp_85290897701
+    } else if (normalizedChatId.startsWith('chat_whatsapp_') || normalizedChatId.startsWith('chat_')) {
+      // Format: chat_whatsapp_12345678 or chat_12345678
       platform = 'whatsapp';
       
-      // Extract clean number (remove whatsapp: or whatsapp_ prefix and any @c.us or _c.us suffix)
-      cleanNumber = chatId
-        .replace(/^whatsapp[:_]?/i, '')  // Remove 'whatsapp:' or 'whatsapp_'
-        .replace(/[ _]?c\.us$/, '')     // Remove any _c.us or @c.us suffix
-        .replace('@', '');               // Remove any @ in the middle
-        
+      // Extract the number part, handling both formats
+      cleanNumber = normalizedChatId.startsWith('chat_whatsapp_')
+        ? normalizedChatId.replace(/^chat_whatsapp_/, '')
+        : normalizedChatId.replace(/^chat_/, '');
+      
       // For sending, we need the format number@c.us
       sendToId = `${cleanNumber}@c.us`;
       
@@ -847,30 +849,33 @@ app.post('/api/chats/send-manual', async (req, res) => {
       
       console.log(`[API] Sending WhatsApp message to ${sendToId}`);
       
-      // Send message via WhatsApp client
-      await global.whatsappClient.client.sendMessage(sendToId, message);
-      
-    } else {
-      throw new Error('Unsupported chat format');
-    }
-    
-    // Use the same format as existing chat history files
-    const historyChatId = `${platform}_${cleanNumber}`.toLowerCase();
-    console.log(`[API] Adding to chat history with ID: ${historyChatId}`);
-    
-    // Add to chat history with the consistent ID format
-    chatHandler.addMessage(historyChatId, 'assistant', message, platform);
-    
-    console.log(`[API] Manual message sent via ${platform} to ${sendToId} (stored as ${historyChatId})`);
-    
-    // Store AI response preference for this chat (optional feature for future)
-    // This could be stored in a database or configuration file
-    
-    res.json({
-      success: true,
-      message: 'Message sent successfully',
-      chatId: chatId,
-      aiResponseEnabled: aiResponseEnabled
+      try {
+        // Send message via WhatsApp client
+        await global.whatsappClient.client.sendMessage(sendToId, message);
+        
+        // Use the same format as existing chat history files
+        const historyChatId = `chat_${platform}_${cleanNumber}`.toLowerCase();
+        console.log(`[API] Adding to chat history with ID: ${historyChatId}`);
+        
+        // Add to chat history with the consistent ID format
+        chatHandler.addMessage(historyChatId, 'assistant', message, platform);
+        
+        console.log(`[API] Manual message sent via ${platform} to ${sendToId} (stored as ${historyChatId})`);
+        
+        // Store AI response preference for this chat (optional feature for future)
+        // This could be stored in a database or configuration file
+        
+        return res.json({
+          success: true,
+          message: 'Message sent successfully',
+          chatId: historyChatId,
+          aiResponseEnabled: aiResponseEnabled
+        });
+        
+      } catch (error) {
+        console.error(`[API] Error sending WhatsApp message:`, error);
+        throw new Error(`Failed to send message: ${error.message}`);
+      }
     });
     
   } catch (error) {
