@@ -985,16 +985,36 @@ app.get('/api/chats/:chatId', (req, res) => {
       return res.status(400).json({ error: 'Chat ID is required' });
     }
     
+    console.log(`[API] Retrieving chat with ID: ${chatId}`);
+    
+    // Extract platform from chat ID if present
+    let platform = null;
+    if (chatId.startsWith('chat_')) {
+      const parts = chatId.split('_');
+      if (parts.length >= 3) {
+        platform = parts[1]; // whatsapp or telegram
+      }
+    } else if (chatId.match(/^(whatsapp|telegram)[:._-]/i)) {
+      platform = chatId.match(/^(whatsapp|telegram)/i)[1].toLowerCase();
+    }
+    
+    console.log(`[API] Detected platform: ${platform || 'unknown'} for chat ${chatId}`);
+    
     // Get conversation from memory cache when possible
     const forceReload = req.query.reload === 'true';
-    const messages = chatHandler.getConversation(chatId, null, forceReload);
+    const messages = chatHandler.getConversation(chatId, platform, forceReload);
     
     // Get chat metadata efficiently
     let chatInfo;
     try {
       // Try to find in existing chats first
       const allChats = chatHandler.getAllChats();
-      chatInfo = allChats.find(chat => chat.id === chatId);
+      // Match by ID or normalized ID
+      chatInfo = allChats.find(chat => {
+        return chat.id === chatId || 
+               (chat.id.startsWith('chat_') && chat.id.includes(chatId)) || 
+               (chatId.startsWith('chat_') && chatId.includes(chat.id));
+      });
     } catch (err) {
       // Fallback if getAllChats fails
       console.warn(`[API] Couldn't get metadata for chat ${chatId}:`, err.message);

@@ -192,8 +192,21 @@ class ChatHandler {
    * @returns {Array} Array of message objects
    */
   getConversation(chatId, platform, forceReload = false) {
-    const platformChatId = platform ? this.getPlatformChatId(platform, chatId) : chatId;
-    console.log(`[ChatHandler] Getting conversation for chat ID: ${platformChatId}`);
+    // If chatId already has a platform prefix, don't add another one
+    let platformChatId;
+    if (chatId.match(/^(whatsapp|telegram)[:._-]/i) || chatId.startsWith('chat_')) {
+      // Already has platform info, use as is
+      platformChatId = chatId;
+      console.log(`[ChatHandler] Using existing platform info in chat ID: ${platformChatId}`);
+    } else if (platform) {
+      // Add platform prefix
+      platformChatId = this.getPlatformChatId(platform, chatId);
+      console.log(`[ChatHandler] Added platform prefix to chat ID: ${platformChatId}`);
+    } else {
+      // No platform info available
+      platformChatId = chatId;
+      console.log(`[ChatHandler] No platform info for chat ID: ${platformChatId}`);
+    }
     
     if (!chatId) {
       console.log('[ChatHandler] No chat ID provided, returning empty array');
@@ -349,13 +362,22 @@ class ChatHandler {
     // For non-chat_ prefixed IDs, normalize the ID
     let normalizedId = chatId.toString().trim();
     
-    // Remove common WhatsApp/Telegram suffixes and prefixes
+    // Extract platform prefix if present (whatsapp, telegram, etc.)
+    let platform = '';
+    const platformMatch = normalizedId.match(/^(whatsapp|telegram)[:._-]?/i);
+    if (platformMatch) {
+      platform = platformMatch[1].toLowerCase() + '_';
+      normalizedId = normalizedId.replace(/^(whatsapp|telegram)[:._-]?/i, '');
+    }
+    
+    // Remove WhatsApp/Telegram suffixes
     normalizedId = normalizedId
-      .replace(/^whatsapp[:._-]?/i, '')  // Remove whatsapp: or whatsapp_ prefix
-      .replace(/^telegram[:._-]?/i, '')  // Remove telegram: or telegram_ prefix
-      .replace(/[@_].*$/, '')           // Remove everything after @ or _ (like @c.us)
-      .replace(/[^a-z0-9]/gi, '_')      // Replace special chars with underscore
+      .replace(/[@].*$/, '')           // Remove everything after @ (like @c.us)
+      .replace(/[^a-z0-9]/gi, '_')     // Replace special chars with underscore
       .toLowerCase();
+      
+    // Add platform prefix back to maintain uniqueness between platforms
+    normalizedId = platform + normalizedId;
     
     // Ensure we have a valid filename
     if (!normalizedId) {
@@ -380,12 +402,9 @@ class ChatHandler {
           ? file.slice(5, -5)
           : '';
           
-        // Check if this file might be the same chat
-        return baseId && (
-          baseId === normalizedId ||
-          baseId.startsWith(normalizedId) ||
-          normalizedId.startsWith(baseId)
-        );
+        // Check if this file might be the same chat - EXACT MATCH ONLY
+        // This prevents chats from different platforms being merged
+        return baseId && baseId === normalizedId;
       });
       
       // If we found matching files, use the first one
