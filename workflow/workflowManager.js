@@ -1011,8 +1011,12 @@ class WorkflowManager extends EventEmitter {
    */
   async saveWorkflowState() {
     try {
+      // Convert Set to Array for JSON serialization
+      const blockedChatsArray = Array.from(this.blockedChats);
+      
       const state = {
         enabledWorkflows: this.enabledWorkflows,
+        blockedChats: blockedChatsArray,
         lastUpdated: new Date().toISOString()
       };
       
@@ -1058,6 +1062,13 @@ class WorkflowManager extends EventEmitter {
         this.enabledWorkflows = state.enabledWorkflows;
         console.log(`[WorkflowManager] Loaded workflow state: ${this.enabledWorkflows.length} enabled workflows`);
         console.log(`[WorkflowManager] Enabled workflows: ${JSON.stringify(this.enabledWorkflows)}`);
+        
+        // Load blocked chats if available
+        if (Array.isArray(state.blockedChats)) {
+          this.blockedChats = new Set(state.blockedChats);
+          console.log(`[WorkflowManager] Loaded ${this.blockedChats.size} blocked chats`);
+        }
+        
         return true;
       } else {
         console.log(`[WorkflowManager] Invalid workflow state format: ${JSON.stringify(state)}`);
@@ -1246,7 +1257,7 @@ class WorkflowManager extends EventEmitter {
     console.log(`[WorkflowManager] Blocked chat: ${normalizedChatId}`);
     
     // Save state to persist blocked status
-    this.saveState().catch(err => {
+    this.saveWorkflowState().catch(err => {
       console.error('[WorkflowManager] Error saving blocked chat state:', err);
     });
     
@@ -1274,7 +1285,7 @@ class WorkflowManager extends EventEmitter {
       console.log(`[WorkflowManager] Unblocked chat: ${normalizedChatId}`);
       
       // Save state to persist changes
-      this.saveState().catch(err => {
+      this.saveWorkflowState().catch(err => {
         console.error('[WorkflowManager] Error saving unblocked chat state:', err);
       });
     } else {

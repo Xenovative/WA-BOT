@@ -35,8 +35,9 @@ if (process.env.TELEGRAM_BOT_TOKEN) {
   }
 }
 
-// Make chatHandler globally available for workflow messages
+// Make chatHandler and workflowManager globally available
 global.chatHandler = chatHandler;
+global.workflowManager = workflowManager;
 
 // Flag to track if shutdown is in progress
 let isShuttingDown = false;

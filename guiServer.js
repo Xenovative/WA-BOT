@@ -987,7 +987,8 @@ app.post('/api/chats/block', express.json(), (req, res) => {
     console.log(`[API] Blocking AI responses for chat: ${chatId}`);
     
     // Get the workflow manager to handle blocking
-    const workflowManager = global.workflowManager || require('./workflow/workflowManager');
+    const WorkflowManager = require('./workflow/workflowManager');
+    const workflowManager = global.workflowManager || (global.workflowManager = new WorkflowManager());
     
     // Add to blocked chats list
     workflowManager.blockChat(chatId);
@@ -1011,7 +1012,8 @@ app.post('/api/chats/unblock', express.json(), (req, res) => {
     console.log(`[API] Unblocking AI responses for chat: ${chatId}`);
     
     // Get the workflow manager to handle unblocking
-    const workflowManager = global.workflowManager || require('./workflow/workflowManager');
+    const WorkflowManager = require('./workflow/workflowManager');
+    const workflowManager = global.workflowManager || (global.workflowManager = new WorkflowManager());
     
     // Remove from blocked chats list
     workflowManager.unblockChat(chatId);
@@ -1033,7 +1035,8 @@ app.get('/api/chats/:chatId/blocked', (req, res) => {
     }
     
     // Get the workflow manager to check blocked status
-    const workflowManager = global.workflowManager || require('./workflow/workflowManager');
+    const WorkflowManager = require('./workflow/workflowManager');
+    const workflowManager = global.workflowManager || (global.workflowManager = new WorkflowManager());
     
     // Check if chat is in blocked list
     const isBlocked = workflowManager.isChatBlocked(chatId);
