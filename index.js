@@ -994,29 +994,28 @@ client.on('message', async (message) => {
       
       let response;
       
-      // Format the chat ID to match the expected format in chatHandler
-      const cleanChatId = chatId.includes('@g.us') ? chatId.split('@')[0] : chatId;
-      const formattedChatId = `whatsapp_${cleanChatId}`;
+      // Use native chat ID directly
+      const nativeChatId = chatId; // WhatsApp native format: '1234567890@g.us'
       
       // Check if this chat is blocked from AI responses
-      const isChatBlocked = chatHandler.isChatBlocked(formattedChatId);
-      console.log(`[Group Chat] Chat ${formattedChatId} blocked status: ${isChatBlocked}`);
+      const isChatBlocked = chatHandler.isChatBlocked(nativeChatId);
+      console.log(`[Group Chat] Chat ${nativeChatId} blocked status: ${isChatBlocked}`);
       
       // Check if message is a command
       if (commandHandler.isCommand(cleanMessageText)) {
         response = await commandHandler.processCommand(cleanMessageText, chatId, message.author || message.from);
         updateLLMClient(); // Update LLM client if provider/model changed
       } else if (isChatBlocked) {
-        console.log(`[Group Chat] Skipping AI response for blocked chat: ${formattedChatId}`);
+        console.log(`[Group Chat] Skipping AI response for blocked chat: ${nativeChatId}`);
         // Still save user message to chat history even when AI is blocked
-        chatHandler.addMessage(chatId, 'user', cleanMessageText, 'whatsapp');
+        chatHandler.addMessage(nativeChatId, 'user', cleanMessageText);
         return; // Skip AI response generation for blocked chats
       } else {
-        // Add user message to chat history with platform identifier
-        chatHandler.addMessage(chatId, 'user', cleanMessageText, 'whatsapp');
+        // Add user message to chat history
+        chatHandler.addMessage(nativeChatId, 'user', cleanMessageText);
         
-        // Get conversation history with platform identifier
-        const conversation = chatHandler.getConversation(chatId, 'whatsapp');
+        // Get conversation history
+        const conversation = chatHandler.getConversation(nativeChatId);
         
         // Get current settings
         const settings = commandHandler.getCurrentSettings();
@@ -1048,8 +1047,8 @@ client.on('message', async (message) => {
           response = await currentLLMClient.generateResponse(cleanMessageText, messages, settings.parameters);
         }
         
-        // Add assistant response to chat history with platform identifier
-        chatHandler.addMessage(chatId, 'assistant', response, 'whatsapp');
+        // Add assistant response to chat history
+        chatHandler.addMessage(nativeChatId, 'assistant', response);
         
         // Add citations if RAG was used and citations are enabled
         const showCitations = process.env.KB_SHOW_CITATIONS === 'true';
@@ -1134,29 +1133,28 @@ client.on('message', async (message) => {
     
     let response;
     
-    // Format the chat ID to match the expected format in workflowManager
-    const cleanChatId = chatId.includes('@c.us') ? chatId.split('@')[0] : chatId;
-    const formattedChatId = `whatsapp_${cleanChatId}`;
+    // Use native chat ID directly
+    const nativeChatId = chatId; // WhatsApp native format: '1234567890@c.us'
     
     // Check if this chat is blocked from AI responses
-    const isChatBlocked = chatHandler.isChatBlocked(formattedChatId);
-    console.log(`[Direct] Chat ${formattedChatId} blocked status: ${isChatBlocked}`);
+    const isChatBlocked = chatHandler.isChatBlocked(nativeChatId);
+    console.log(`[Direct] Chat ${nativeChatId} blocked status: ${isChatBlocked}`);
     
     // Check if message is a command
     if (commandHandler.isCommand(messageText)) {
       response = await commandHandler.processCommand(messageText, chatId, message.from);
       updateLLMClient(); // Update LLM client if provider/model changed
     } else if (isChatBlocked) {
-      console.log(`[Direct] Skipping AI response for blocked chat: ${formattedChatId}`);
+      console.log(`[Direct] Skipping AI response for blocked chat: ${nativeChatId}`);
       // Still save user message to chat history even when AI is blocked
-      chatHandler.addMessage(chatId, 'user', messageText, 'whatsapp');
+      chatHandler.addMessage(nativeChatId, 'user', messageText);
       return; // Skip AI response generation for blocked chats
     } else {
-      // Add user message to chat history with platform identifier
-      chatHandler.addMessage(chatId, 'user', messageText, 'whatsapp');
+      // Add user message to chat history
+      chatHandler.addMessage(nativeChatId, 'user', messageText);
       
-      // Get conversation history with platform identifier
-      const conversation = chatHandler.getConversation(chatId, 'whatsapp');
+      // Get conversation history
+      const conversation = chatHandler.getConversation(nativeChatId);
       
       // Get current settings
       const settings = commandHandler.getCurrentSettings();
@@ -1188,11 +1186,8 @@ client.on('message', async (message) => {
         response = await currentLLMClient.generateResponse(messageText, messages, settings.parameters);
       }
       
-      // Format the chat ID to match the expected format in chatHandler
-      // Already defined above
-      
-      // Add assistant response to chat history with platform identifier
-      chatHandler.addMessage(formattedChatId, 'assistant', response, 'whatsapp');
+      // Add assistant response to chat history
+      chatHandler.addMessage(nativeChatId, 'assistant', response);
       
       // Add citations if RAG was used and citations are enabled
       const showCitations = process.env.KB_SHOW_CITATIONS === 'true';

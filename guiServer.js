@@ -1256,11 +1256,21 @@ app.post('/api/manual-message', express.json(), async (req, res) => {
     console.log(`[Manual Message] Sending to ${chatId}: ${message}`);
     console.log(`[Manual Message] Suppress AI: ${suppressAiResponse}`);
     
-    // Determine platform from chat ID
+    // Determine platform from native chat ID format
     let platform = 'whatsapp'; // default
-    if (chatId.startsWith('telegram_')) {
+    let actualChatId = chatId;
+    
+    // WhatsApp native format: '1234567890@c.us' or '1234567890@g.us'
+    // Telegram native format: '1234567890' (numeric only)
+    if (chatId.includes('@')) {
+      platform = 'whatsapp';
+      actualChatId = chatId; // Use as-is for WhatsApp
+    } else if (/^\d+$/.test(chatId)) {
       platform = 'telegram';
+      actualChatId = chatId; // Use as-is for Telegram
     }
+    
+    console.log(`[Manual Message] Detected platform: ${platform} for chat ID: ${chatId}`);
     
     // Get the appropriate client
     let success = false;
@@ -1270,8 +1280,6 @@ app.post('/api/manual-message', express.json(), async (req, res) => {
       const client = global.whatsappClient;
       if (client && client.info && client.info.wid) {
         try {
-          // Extract actual WhatsApp ID (remove 'whatsapp_' prefix if present)
-          const actualChatId = chatId.replace('whatsapp_', '');
           await client.sendMessage(actualChatId, message);
           success = true;
           console.log(`[Manual Message] WhatsApp message sent successfully to ${actualChatId}`);
@@ -1286,8 +1294,6 @@ app.post('/api/manual-message', express.json(), async (req, res) => {
       const telegramBot = global.telegramBot;
       if (telegramBot) {
         try {
-          // Extract actual Telegram chat ID (remove 'telegram_' prefix)
-          const actualChatId = chatId.replace('telegram_', '');
           await telegramBot.sendMessage(actualChatId, message);
           success = true;
           console.log(`[Manual Message] Telegram message sent successfully to ${actualChatId}`);
