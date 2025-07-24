@@ -11,10 +11,24 @@ class ChatHandler {
     // Directory to store chat history
     this.chatHistoryDir = path.join(__dirname, '../chat_history');
     this.storageFile = path.join(this.chatHistoryDir, 'chats.json');
+    this._chatIndex = [];
+    this._lastIndexUpdate = 0;
+    this._indexUpdateInProgress = false;
     
     // Ensure chat history directory exists
     if (!fs.existsSync(this.chatHistoryDir)) {
       fs.mkdirSync(this.chatHistoryDir, { recursive: true });
+    }
+    
+    // Load existing index if it exists
+    if (fs.existsSync(this.storageFile)) {
+      try {
+        const fileContent = fs.readFileSync(this.storageFile, 'utf8');
+        this._chatIndex = JSON.parse(fileContent);
+        this._lastIndexUpdate = Date.now();
+      } catch (e) {
+        console.error('Error loading chat index:', e);
+      }
     }
     
     // Migrate any existing chat files to the new format
@@ -22,6 +36,9 @@ class ChatHandler {
     
     // Load conversations from disk
     this.loadConversations();
+    
+    // Initial index update in the background
+    setImmediate(() => this.updateChatIndex());
   }
   
   /**
@@ -452,59 +469,82 @@ class ChatHandler {
     this.updateChatIndex();
   }
   
-  // Update the main chat index file
-  updateChatIndex() {
-    const chats = [];
+  /**
+   * Update the main chat index file
+   * @returns {Promise<void>}
+   */
+  async updateChatIndex() {
+    // Prevent concurrent updates
+    if (this._indexUpdateInProgress) {
+      return;
+    }
     
-    // Read all chat files
-    if (fs.existsSync(this.chatHistoryDir)) {
-      const files = fs.readdirSync(this.chatHistoryDir).filter(
-        file => file.endsWith('.json') && file !== 'chats.json'
-      );
+    this._indexUpdateInProgress = true;
+    
+    try {
+      const startTime = Date.now();
+      console.log('[ChatHandler] Starting chat index update...');
       
-      console.log(`[ChatHandler] Found ${files.length} chat files to index`);
+      // Process in chunks to avoid blocking
+      const chatFiles = fs.readdirSync(this.chatHistoryDir)
+        .filter(file => file.endsWith('.json') && file !== 'chats.json');
       
-      files.forEach(file => {
-        try {
-          const filePath = path.join(this.chatHistoryDir, file);
-          const fileContent = fs.readFileSync(filePath, 'utf8');
-          
+      const chatIndex = [];
+      const BATCH_SIZE = 10;
+      
+      // Process files in batches
+      for (let i = 0; i < chatFiles.length; i += BATCH_SIZE) {
+        const batch = chatFiles.slice(i, i + BATCH_SIZE);
+        await Promise.all(batch.map(async (file) => {
           try {
+            const chatId = path.basename(file, '.json');
+            const filePath = path.join(this.chatHistoryDir, file);
+            const fileContent = fs.readFileSync(filePath, 'utf8');
             const messages = JSON.parse(fileContent);
             
-            if (Array.isArray(messages)) {
-              const chatId = path.basename(file, '.json');
-              
-              // Even if there are no messages, we still want to track the chat
-              const lastMessage = messages.length > 0 ? messages[messages.length - 1] : { content: '', timestamp: new Date().toISOString() };
-              
-              chats.push({
+            if (Array.isArray(messages) && messages.length > 0) {
+              const lastMessage = messages[messages.length - 1];
+              chatIndex.push({
                 id: chatId,
-                preview: lastMessage.content?.substring(0, 100) || '',
+                preview: lastMessage.content.substring(0, 100),
                 timestamp: lastMessage.timestamp || new Date().toISOString(),
                 messageCount: messages.length
               });
             }
-          } catch (parseError) {
-            console.error(`Error parsing JSON for chat file ${file}:`, parseError);
+          } catch (error) {
+            console.error(`Error processing chat file ${file}:`, error);
           }
-        } catch (error) {
-          console.error(`Error reading chat file ${file}:`, error);
+        }));
+        
+        // Small delay between batches to prevent blocking
+        if (i + BATCH_SIZE < chatFiles.length) {
+          await new Promise(resolve => setTimeout(resolve, 10));
+        }
+      }
+      
+      // Sort by timestamp (newest first)
+      chatIndex.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+      
+      // Update cache
+      this._chatIndex = chatIndex;
+      this._lastIndexUpdate = Date.now();
+      
+      // Save to file in the background
+      fs.writeFile(this.storageFile, JSON.stringify(chatIndex, null, 2), (err) => {
+        if (err) {
+          console.error('Error saving chat index:', err);
+        } else {
+          console.log(`[ChatHandler] Chat index updated in ${Date.now() - startTime}ms`);
         }
       });
       
-      console.log(`[ChatHandler] Successfully indexed ${chats.length} chats`);
+      return chatIndex;
       
-      // Sort by timestamp, newest first
-      chats.sort((a, b) => {
-        const timeA = typeof a.timestamp === 'number' ? a.timestamp : new Date(a.timestamp).getTime();
-        const timeB = typeof b.timestamp === 'number' ? b.timestamp : new Date(b.timestamp).getTime();
-        return timeB - timeA;
-      });
-      
-      // Save the index
-      fs.writeFileSync(this.storageFile, JSON.stringify(chats, null, 2));
-      console.log(`[ChatHandler] Saved chat index with ${chats.length} entries`);
+    } catch (error) {
+      console.error('Error updating chat index:', error);
+      return [];
+    } finally {
+      this._indexUpdateInProgress = false;
     }
   }
   
@@ -624,21 +664,15 @@ class ChatHandler {
    */
   getAllChats() {
     try {
-      // Ensure the index is up to date
-      this.updateChatIndex();
-      
-      // Read the index file
-      if (fs.existsSync(this.storageFile)) {
-        const fileContent = fs.readFileSync(this.storageFile, 'utf8');
-        try {
-          const chats = JSON.parse(fileContent);
-          return Array.isArray(chats) ? chats : [];
-        } catch (error) {
-          console.error('[ChatHandler] Error parsing chat index:', error);
-          return [];
-        }
+      // Only update index if it's older than 30 seconds and not currently updating
+      const now = Date.now();
+      if (!this._indexUpdateInProgress && now - this._lastIndexUpdate > 30000) {
+        // Update index in the background
+        this.updateChatIndex().catch(console.error);
       }
-      return [];
+      
+      // Return cached index
+      return Array.isArray(this._chatIndex) ? this._chatIndex : [];
     } catch (error) {
       console.error('[ChatHandler] Error getting all chats:', error);
       return [];
