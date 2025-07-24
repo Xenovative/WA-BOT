@@ -140,25 +140,16 @@ class ChatHandler {
   getPlatformChatId(platform, chatId) {
     if (!platform || !chatId) return chatId;
     
-    // Check if chatId already has a platform prefix
-    if (chatId.match(/^(whatsapp|telegram)[:_]/i)) {
-      // Already has a platform prefix, normalize it
-      const parts = chatId.split(/[:_]/);
-      if (parts.length >= 2) {
-        return `${platform.toLowerCase()}_${parts[1]}`;
-      }
+    // If already starts with chat_, use as is
+    if (chatId.startsWith('chat_')) {
+      return chatId;
     }
     
-    // Remove any existing platform prefix to avoid duplication
+    // Remove any existing platform prefix
     const cleanId = chatId.replace(/^(whatsapp|telegram)[:_]?/i, '');
     
-    // Remove WhatsApp/Telegram suffixes
-    const normalizedId = cleanId
-      .replace(/[@].*$/, '')           // Remove everything after @ (like @c.us)
-      .replace(/[^a-z0-9]/gi, '_');    // Replace special chars with underscore
-    
-    // Return in the format: whatsapp_12345678
-    return `${platform.toLowerCase()}_${normalizedId}`;
+    // Return in the format: chat_whatsapp_12345678 to match workflowManager format
+    return `chat_${platform.toLowerCase()}_${cleanId}`;
   }
 
   /**
@@ -169,10 +160,10 @@ class ChatHandler {
    * @param {string} [platform] - Platform identifier ('telegram', 'whatsapp', etc.)
    */
   addMessage(chatId, role, content, platform) {
-    // Always normalize the chat ID to ensure consistency
+    // Ensure we have a properly formatted chat ID that matches workflowManager format
     const platformChatId = platform ? this.getPlatformChatId(platform, chatId) : chatId;
     
-    console.log(`[ChatHandler] Adding ${role} message to chat ${platformChatId} (original: ${chatId})`);
+    console.log(`[ChatHandler] Adding ${role} message to chat ${platformChatId}`);
     
     if (!this.conversations.has(platformChatId)) {
       console.log(`[ChatHandler] Creating new conversation for chat ${platformChatId}`);
@@ -207,30 +198,30 @@ class ChatHandler {
    * @returns {Array} Array of message objects
    */
   getConversation(chatId, platform, forceReload = false) {
-    // If no chatId provided, return empty array
-    if (!chatId) {
-      console.log('[ChatHandler] No chat ID provided, returning empty array');
-      return [];
-    }
-    
-    // Always normalize the chat ID consistently
+    // Ensure we have a properly formatted chat ID that matches workflowManager format
     let platformChatId;
-    if (platform) {
-      // Always use the platform-specific normalization
+    if (chatId.startsWith('chat_')) {
+      // Already has the correct prefix, use as is
+      platformChatId = chatId;
+      console.log(`[ChatHandler] Using existing chat ID format: ${platformChatId}`);
+    } else if (chatId.match(/^(whatsapp|telegram)[:._-]/i)) {
+      // Has platform prefix but not chat_ prefix
+      const match = chatId.match(/^(whatsapp|telegram)[:._-]?(.*)/i);
+      if (match) {
+        platformChatId = `chat_${match[1].toLowerCase()}_${match[2]}`;
+        console.log(`[ChatHandler] Reformatted chat ID to: ${platformChatId}`);
+      } else {
+        platformChatId = chatId;
+      }
+    } else if (platform) {
+      // Add platform prefix in the correct format
       platformChatId = this.getPlatformChatId(platform, chatId);
-      console.log(`[ChatHandler] Normalized chat ID with platform: ${platformChatId}`);
-    } else if (chatId.match(/^(whatsapp|telegram)[:._-]/i) || chatId.startsWith('chat_')) {
-      // Already has platform info, use as is
-      platformChatId = chatId;
-      console.log(`[ChatHandler] Using existing platform info in chat ID: ${platformChatId}`);
+      console.log(`[ChatHandler] Added platform prefix to chat ID: ${platformChatId}`);
     } else {
-      // No platform info available
-      platformChatId = chatId;
-      console.log(`[ChatHandler] No platform info for chat ID: ${platformChatId}`);
+      // No platform info available, add generic chat_ prefix
+      platformChatId = `chat_${chatId}`;
+      console.log(`[ChatHandler] Added generic prefix to chat ID: ${platformChatId}`);
     }
-    
-    // Log the mapping for debugging
-    console.log(`[ChatHandler] Chat ID mapping: ${chatId} -> ${platformChatId}`);
     
     if (!chatId) {
       console.log('[ChatHandler] No chat ID provided, returning empty array');
@@ -361,86 +352,79 @@ class ChatHandler {
       return path.join(this.chatHistoryDir, 'invalid_chat.json');
     }
     
+    // Format the chat ID consistently with workflowManager
+    let formattedChatId;
+    
     // If chatId already starts with 'chat_', use it as is
     if (chatId.startsWith('chat_')) {
-      const filePath = path.join(this.chatHistoryDir, `${chatId}.json`);
-      
-      // If file exists, return it
-      if (fs.existsSync(filePath)) {
-        return filePath;
+      formattedChatId = chatId;
+    } else if (chatId.match(/^(whatsapp|telegram)[:._-]/i)) {
+      // Has platform prefix but not chat_ prefix
+      const match = chatId.match(/^(whatsapp|telegram)[:._-]?(.*)/i);
+      if (match) {
+        const platform = match[1].toLowerCase();
+        let id = match[2]
+          .replace(/[@].*$/, '')           // Remove everything after @ (like @c.us)
+          .replace(/[^a-z0-9]/gi, '_')     // Replace special chars with underscore
+          .toLowerCase();
+        formattedChatId = `chat_${platform}_${id}`;
+      } else {
+        formattedChatId = `chat_${chatId}`;
       }
-      
-      // Otherwise, extract the ID part after 'chat_'
-      const idPart = chatId.slice(5); // Remove 'chat_'
-      if (idPart) {
-        const altPath = path.join(this.chatHistoryDir, `chat_${idPart}.json`);
-        if (fs.existsSync(altPath)) {
-          return altPath;
-        }
-      }
-      
-      // If no existing file, return the original path
+    } else {
+      // No platform info, add generic chat_ prefix
+      formattedChatId = `chat_${chatId}`;
+    }
+    
+    // Create the file path with the formatted chat ID
+    const filePath = path.join(this.chatHistoryDir, `${formattedChatId}.json`);
+    
+    // If the file exists with this exact name, return it
+    if (fs.existsSync(filePath)) {
       return filePath;
     }
     
-    // For non-chat_ prefixed IDs, normalize the ID
-    let normalizedId = chatId.toString().trim();
-    
-    // Extract platform prefix if present (whatsapp, telegram, etc.)
-    let platform = '';
-    const platformMatch = normalizedId.match(/^(whatsapp|telegram)[:._-]?/i);
-    if (platformMatch) {
-      platform = platformMatch[1].toLowerCase() + '_';
-      normalizedId = normalizedId.replace(/^(whatsapp|telegram)[:._-]?/i, '');
-    }
-    
-    // Remove WhatsApp/Telegram suffixes
-    normalizedId = normalizedId
-      .replace(/[@].*$/, '')           // Remove everything after @ (like @c.us)
-      .replace(/[^a-z0-9]/gi, '_')     // Replace special chars with underscore
-      .toLowerCase();
-      
-    // Add platform prefix back to maintain uniqueness between platforms
-    normalizedId = platform + normalizedId;
-    
-    // Log the normalization for debugging
-    console.log(`[ChatHandler] Normalized chat ID: ${chatId} -> ${normalizedId}`);
-    
-    // Ensure we have a valid filename
-    if (!normalizedId) {
-      console.error(`[ChatHandler] Invalid chatId after normalization: ${chatId}`);
-      return path.join(this.chatHistoryDir, 'invalid_chat.json');
-    }
-    
-    // Always use the normalized ID for the filename
-    const filename = `chat_${normalizedId}.json`;
-    const filePath = path.join(this.chatHistoryDir, filename);
-    
-    // Check for any existing files that might be the same chat
+    // Check for any existing files that might be the same chat with different formatting
     if (fs.existsSync(this.chatHistoryDir)) {
       const files = fs.readdirSync(this.chatHistoryDir);
       
-      // Look for files that might be the same chat but with different formatting
-      const possibleMatches = files.filter(file => {
-        if (file === filename) return false; // Skip exact match
-        
-        // Extract base ID from filename (remove 'chat_' and '.json')
-        const baseId = file.startsWith('chat_') && file.endsWith('.json')
-          ? file.slice(5, -5)
-          : '';
-          
-        // Check if this file might be the same chat - EXACT MATCH ONLY
-        // This prevents chats from different platforms being merged
-        return baseId && baseId === normalizedId;
-      });
+      // Extract the platform and ID parts from the formatted chat ID
+      let platformPart = '';
+      let idPart = '';
       
-      // If we found matching files, use the first one
-      if (possibleMatches.length > 0) {
-        console.log(`[ChatHandler] Found ${possibleMatches.length} possible matches for chat ${chatId}, using ${possibleMatches[0]}`);
-        return path.join(this.chatHistoryDir, possibleMatches[0]);
+      if (formattedChatId.startsWith('chat_')) {
+        const parts = formattedChatId.slice(5).split('_');
+        if (parts.length > 1 && (parts[0] === 'whatsapp' || parts[0] === 'telegram')) {
+          platformPart = parts[0];
+          idPart = parts.slice(1).join('_');
+        } else {
+          idPart = formattedChatId.slice(5);
+        }
+      } else {
+        idPart = formattedChatId;
+      }
+      
+      // Look for files that might be the same chat but with different formatting
+      for (const file of files) {
+        if (!file.endsWith('.json') || file === 'chats.json') continue;
+        
+        const fileName = file.slice(0, -5); // Remove .json extension
+        
+        // Check for exact match with platform
+        if (platformPart && fileName === `chat_${platformPart}_${idPart}`) {
+          console.log(`[ChatHandler] Found exact match with platform for ${formattedChatId}: ${file}`);
+          return path.join(this.chatHistoryDir, file);
+        }
+        
+        // Check for match with just the ID part
+        if (fileName === `chat_${idPart}`) {
+          console.log(`[ChatHandler] Found match with ID for ${formattedChatId}: ${file}`);
+          return path.join(this.chatHistoryDir, file);
+        }
       }
     }
     
+    // If no existing file found, return the path with the formatted chat ID
     return filePath;
   }
 
@@ -581,206 +565,86 @@ class ChatHandler {
     if (this.conversations.has(chatId)) {
       return this.conversations.get(chatId);
     }
-
-    // If chatId doesn't start with 'chat_', try with and without the prefix
-    const chatIdsToTry = chatId.startsWith('chat_') 
-      ? [chatId] 
-      : [chatId, `chat_${chatId}`];
-
-    let lastError = null;
     
-    for (const currentChatId of chatIdsToTry) {
-      try {
-        const chatFile = this.getChatFilePath(currentChatId);
-        
-        if (fs.existsSync(chatFile)) {
-          const fileContent = fs.readFileSync(chatFile, 'utf8');
-          
-          try {
-            let messages = [];
-            try {
-              const parsed = JSON.parse(fileContent);
-              // Handle both array and object with messages property
-              messages = Array.isArray(parsed) ? parsed : 
-                       (Array.isArray(parsed?.messages) ? parsed.messages : []);
-            } catch (e) {
-              console.error(`[ChatHandler] Error parsing JSON for chat ${currentChatId}:`, e);
-              continue; // Try next chat ID
-            }
-            
-            // Process and validate messages (only log if there are issues)
-            const validMessages = messages
-              .filter(msg => {
-                const isValid = msg && 
-                              typeof msg === 'object' && 
-                              typeof msg.role === 'string' && 
-                              typeof msg.content === 'string' &&
-                              msg.content.trim() !== '';
-                
-                if (!isValid && msg) {
-                  console.warn(`[ChatHandler] Filtered invalid message in ${currentChatId}`);
-                }
-                
-                return isValid;
-              })
-              .map(msg => ({
-                role: msg.role,
-                content: msg.content.trim(),
-                timestamp: typeof msg.timestamp === 'number' 
-                  ? new Date(msg.timestamp).toISOString() 
-                  : (msg.timestamp || new Date().toISOString())
-              }));
-            
-            // Only deduplicate if needed (performance optimization)
-            let uniqueMessages = validMessages;
-            if (validMessages.length !== messages.length) {
-              // Deduplicate messages by timestamp and content
-              const messageMap = new Map();
-              validMessages.forEach(msg => {
-                const key = `${msg.timestamp}_${msg.content}`;
-                if (!messageMap.has(key)) {
-                  messageMap.set(key, msg);
-                }
-              });
-              
-              uniqueMessages = Array.from(messageMap.values())
-                .sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
-              
-              // If we had to clean up the messages, save them back
-              if (uniqueMessages.length !== messages.length) {
-                console.log(`[ChatHandler] Cleaned up messages for ${currentChatId}: ${messages.length} -> ${uniqueMessages.length}`);
-                // Schedule save for later to avoid blocking
-                setTimeout(() => this.saveConversations(), 0);
-              }
-            }
-            
-            // Update in-memory cache with the original chatId
-            this.conversations.set(chatId, uniqueMessages);
-            
-            return uniqueMessages;
-            
-          } catch (error) {
-            lastError = error;
-            console.error(`[ChatHandler] Error processing messages for ${currentChatId}:`, error);
-            continue; // Try next chat ID
-          }
-        }
-      } catch (error) {
-        lastError = error;
-        console.error(`[ChatHandler] Error loading chat ${currentChatId}:`, error);
-        continue; // Try next chat ID
+    // Format the chat ID consistently
+    let formattedChatId;
+    if (chatId.startsWith('chat_')) {
+      formattedChatId = chatId;
+    } else if (chatId.match(/^(whatsapp|telegram)[:._-]/i)) {
+      const match = chatId.match(/^(whatsapp|telegram)[:._-]?(.*)/i);
+      if (match) {
+        formattedChatId = `chat_${match[1].toLowerCase()}_${match[2]}`;
+      } else {
+        formattedChatId = `chat_${chatId}`;
       }
-    }
-    
-    // If we get here, no chat file was found
-    console.log(`[ChatHandler] Chat file does not exist for any of: ${chatIdsToTry.join(', ')}, creating new chat`);
-    this.conversations.set(chatId, []);
+    } else {
+
+/**
+ * Load a single chat's messages with validation and deduplication
+ * @param {string} chatId - The chat ID to load
+ * @returns {Array} Array of validated and deduplicated messages
+ */
+loadChat(chatId) {
+  if (!chatId) {
+    console.warn('[ChatHandler] Cannot load chat: No chat ID provided');
     return [];
-  }
-  
-  // Load conversations from disk
-  /**
-   * Get all chats with their metadata
-   * @returns {Array} Array of chat objects with id, preview, timestamp, and messageCount
-   */
-  getAllChats() {
-    try {
-      // Ensure the index is up to date
-      this.updateChatIndex();
-      
-      // Read the index file
-      if (fs.existsSync(this.storageFile)) {
-        const fileContent = fs.readFileSync(this.storageFile, 'utf8');
-        try {
-          const chats = JSON.parse(fileContent);
-          return Array.isArray(chats) ? chats : [];
-        } catch (error) {
-          console.error('[ChatHandler] Error parsing chat index:', error);
-          return [];
-        }
-      }
-      return [];
-    } catch (error) {
-      console.error('[ChatHandler] Error getting all chats:', error);
-      return [];
-    }
-  }
-  
-  /**
-   * Get the most recent chats with all required fields
-   * @param {number} limit - Maximum number of chats to return
-   * @returns {Array} Array of most recent chat objects with all required fields
-   */
-  getRecentChats(limit = 5) {
-    try {
-      const allChats = this.getAllChats();
-      
-      // Sort by timestamp in descending order (newest first)
-      const sortedChats = [...allChats].sort((a, b) => {
-        const timeA = new Date(a.timestamp || 0).getTime();
-        const timeB = new Date(b.timestamp || 0).getTime();
-        return timeB - timeA;
-      });
-      
-      // Get the most recent chats and ensure they have all required fields
-      return sortedChats.slice(0, limit).map(chat => ({
-        id: chat.id,
-        name: chat.id,  // Using ID as name if not available
-        lastMessage: chat.preview || 'No messages',
-        timestamp: chat.timestamp || new Date().toISOString(),
-        // Include any other fields that might be needed
-        messageCount: chat.messageCount || 0,
-        preview: chat.preview || '',
-        // Include the actual messages if available
-        messages: this.conversations.get(chat.id) || []
-      }));
-    } catch (error) {
-      console.error('[ChatHandler] Error getting recent chats:', error);
-      return [];
-    }
-  }
+const sortedChats = [...allChats].sort((a, b) => {
+  const timeA = new Date(a.timestamp || 0).getTime();
+  const timeB = new Date(b.timestamp || 0).getTime();
+  return timeB - timeA;
+});
 
-  loadConversations() {
-    try {
-      // Ensure chat history directory exists
-      if (!fs.existsSync(this.chatHistoryDir)) {
-        fs.mkdirSync(this.chatHistoryDir, { recursive: true });
-        console.log('[ChatHandler] Created chat history directory');
-        return; // No existing chats to load
-      }
-      
-      // Load all existing chat files directly
-      const chatFiles = fs.readdirSync(this.chatHistoryDir).filter(
-        file => file.endsWith('.json') && file !== 'chats.json'
-      );
-      
-      console.log(`[ChatHandler] Found ${chatFiles.length} chat files to load`);
-      
-      // Clear existing conversations to avoid duplicates
-      this.conversations.clear();
-      
-      // Load each chat file and populate conversations map
-      chatFiles.forEach(file => {
-        try {
-          // Keep the original chat ID from the filename without modifications
-          const chatId = path.basename(file, '.json');
-          const filePath = path.join(this.chatHistoryDir, file);
-          const fileContent = fs.readFileSync(filePath, 'utf8');
-          
-          try {
-            const messages = JSON.parse(fileContent);
-            if (Array.isArray(messages)) {
-              // Store messages in memory using the exact chat ID from the filename
-              this.conversations.set(chatId, messages);
-              console.log(`[ChatHandler] Loaded ${messages.length} messages for chat ${chatId}`);
-            } else {
-              console.warn(`[ChatHandler] Invalid format in ${file}, initializing empty array`);
-              this.conversations.set(chatId, []);
-            }
-          } catch (parseError) {
-            console.error(`[ChatHandler] Error parsing ${file}:`, parseError);
-            this.conversations.set(chatId, []);
-          }
+// Get the most recent chats and ensure they have all required fields
+return sortedChats.slice(0, limit).map(chat => ({
+  id: chat.id,
+  name: chat.id,  // Using ID as name if not available
+  lastMessage: chat.preview || 'No messages',
+  timestamp: chat.timestamp || new Date().toISOString(),
+  // Include any other fields that might be needed
+  messageCount: chat.messageCount || 0,
+  preview: chat.preview || '',
+  // Include the actual messages if available
+  messages: this.conversations.get(chat.id) || []
+}));
+} catch (error) {
+console.error('[ChatHandler] Error getting recent chats:', error);
+return [];
+}
+}
+
+loadConversations() {
+try {
+// Ensure chat history directory exists
+if (!fs.existsSync(this.chatHistoryDir)) {
+  fs.mkdirSync(this.chatHistoryDir, { recursive: true });
+  console.log('[ChatHandler] Created chat history directory');
+  return; // No existing chats to load
+}
+
+// Load all existing chat files directly
+const chatFiles = fs.readdirSync(this.chatHistoryDir).filter(
+  file => file.endsWith('.json') && file !== 'chats.json'
+);
+
+console.log(`[ChatHandler] Found ${chatFiles.length} chat files to load`);
+
+// Load each chat file and populate conversations map
+chatFiles.forEach(file => {
+try {
+  const chatId = path.basename(file, '.json');
+  const formattedChatId = `chat_${chatId}`;
+  const filePath = path.join(this.chatHistoryDir, file);
+  const fileContent = fs.readFileSync(filePath, 'utf8');
+
+  try {
+    const messages = JSON.parse(fileContent);
+    if (Array.isArray(messages)) {
+      // Store messages in memory
+      this.conversations.set(formattedChatId, messages);
+      console.log(`[ChatHandler] Loaded ${messages.length} messages for chat ${formattedChatId}`);
+    } else {
+      console.warn(`[ChatHandler] Invalid format in ${file}, initializing empty array`);
+      this.conversations.set(formattedChatId, []);
         } catch (err) {
           console.error(`[ChatHandler] Error processing chat file ${file}:`, err);
         }

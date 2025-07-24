@@ -994,10 +994,21 @@ client.on('message', async (message) => {
       
       let response;
       
+      // Format the chat ID to match the expected format in workflowManager
+      const cleanChatId = chatId.includes('@g.us') ? chatId.split('@')[0] : chatId;
+      const formattedChatId = `whatsapp_${cleanChatId}`;
+      
+      // Check if this chat is blocked from AI responses
+      const isChatBlocked = workflowManager.isChatBlocked(formattedChatId);
+      console.log(`[Group Chat] Chat ${formattedChatId} blocked status: ${isChatBlocked}`);
+      
       // Check if message is a command
       if (commandHandler.isCommand(cleanMessageText)) {
         response = await commandHandler.processCommand(cleanMessageText, chatId, message.author || message.from);
         updateLLMClient(); // Update LLM client if provider/model changed
+      } else if (isChatBlocked) {
+        console.log(`[Group Chat] Skipping AI response for blocked chat: ${formattedChatId}`);
+        return; // Skip AI response generation for blocked chats
       } else {
         // Add user message to chat history with platform identifier
         chatHandler.addMessage(chatId, 'user', cleanMessageText, 'whatsapp');
@@ -1049,8 +1060,7 @@ client.on('message', async (message) => {
       }
       
       // Format the chat ID to match the expected format in chatHandler
-      const cleanChatId = chatId.includes('@g.us') ? chatId.split('@')[0] : chatId;
-      const formattedChatId = `whatsapp_${cleanChatId}`;
+      // Already defined above
       
       // Send response back as automated message with appropriate flags
       await sendAutomatedMessage(message.from, response, {
@@ -1122,10 +1132,21 @@ client.on('message', async (message) => {
     
     let response;
     
+    // Format the chat ID to match the expected format in workflowManager
+    const cleanChatId = chatId.includes('@c.us') ? chatId.split('@')[0] : chatId;
+    const formattedChatId = `whatsapp_${cleanChatId}`;
+    
+    // Check if this chat is blocked from AI responses
+    const isChatBlocked = workflowManager.isChatBlocked(formattedChatId);
+    console.log(`[Direct] Chat ${formattedChatId} blocked status: ${isChatBlocked}`);
+    
     // Check if message is a command
     if (commandHandler.isCommand(messageText)) {
       response = await commandHandler.processCommand(messageText, chatId, message.from);
       updateLLMClient(); // Update LLM client if provider/model changed
+    } else if (isChatBlocked) {
+      console.log(`[Direct] Skipping AI response for blocked chat: ${formattedChatId}`);
+      return; // Skip AI response generation for blocked chats
     } else {
       // Add user message to chat history with platform identifier
       chatHandler.addMessage(chatId, 'user', messageText, 'whatsapp');
@@ -1164,8 +1185,7 @@ client.on('message', async (message) => {
       }
       
       // Format the chat ID to match the expected format in chatHandler
-      const cleanChatId = chatId.includes('@c.us') ? chatId.split('@')[0] : chatId;
-      const formattedChatId = `whatsapp_${cleanChatId}`;
+      // Already defined above
       
       // Add assistant response to chat history with platform identifier
       chatHandler.addMessage(formattedChatId, 'assistant', response, 'whatsapp');
