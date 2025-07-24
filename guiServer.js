@@ -857,6 +857,22 @@ app.post('/api/chats/send-manual', async (req, res) => {
         
         // Send message via Telegram bot
         await global.telegramBot.sendMessage(sendToId, message);
+        
+        // If AI response should be suppressed, temporarily block the chat
+        if (!aiResponseEnabled) {  // aiResponseEnabled=false means suppress AI
+          const chatHandler = global.chatHandler || require('./handlers/chatHandler');
+          if (chatHandler.blockChat) {
+            // Add a 30-second temporary block to prevent AI response
+            setTimeout(() => {
+              if (chatHandler.unblockChat) {
+                chatHandler.unblockChat(sendToId);
+                console.log(`[API] Temporary block removed for Telegram chat ${sendToId}`);
+              }
+            }, 30000);
+            chatHandler.blockChat(sendToId);
+            console.log(`[API] Temporarily blocked Telegram chat ${sendToId} for 30s`);
+          }
+        }
       } else if (platform === 'whatsapp') {
         // For sending, we need the format number@c.us
         sendToId = `${cleanNumber}@c.us`;
@@ -867,19 +883,29 @@ app.post('/api/chats/send-manual', async (req, res) => {
         
         console.log(`[API] Sending WhatsApp message to ${sendToId}`);
         
-        // Send message via WhatsApp client
-        await global.whatsappClient.client.sendMessage(sendToId, message);
+        // Send message via WhatsApp client with suppressAiResponse option
+        const sendOptions = {
+          isManual: true,
+          suppressAiResponse: !aiResponseEnabled  // Invert because aiResponseEnabled=false means suppress AI
+        };
+        
+        await global.whatsappClient.client.sendMessage(sendToId, message, sendOptions);
       }
     } else {
       throw new Error(`Unsupported chat format: ${chatId}. Expected formats: chat_whatsapp_12345, chat_telegram_12345, whatsapp:12345, 12345@c.us`);
     }
     
-    // Use the same format as existing chat history files
-    const historyChatId = `${platform}_${cleanNumber}`.toLowerCase();
-    console.log(`[API] Adding to chat history with ID: ${historyChatId}`);
+    // Use native chat ID format for chat history
+    const historyChatId = platform === 'whatsapp' ? `${cleanNumber}@c.us` : cleanNumber;
+    console.log(`[API] Adding to chat history with ID: ${historyChatId} (native format)`);
     
-    // Add to chat history with the consistent ID format
-    chatHandler.addMessage(historyChatId, 'assistant', message, platform);
+    // Add to chat history with native ID format
+    chatHandler.addMessage(historyChatId, {
+      role: 'assistant',
+      content: message,
+      timestamp: new Date().toISOString(),
+      isManual: true
+    });
     
     console.log(`[API] Manual message sent via ${platform} to ${sendToId} (stored as ${historyChatId})`);
     
@@ -1332,7 +1358,13 @@ app.post('/api/manual-message', express.json(), async (req, res) => {
       const client = global.whatsappClient;
       if (client && client.info && client.info.wid) {
         try {
-          await client.sendMessage(actualChatId, message);
+          // Send message with options to indicate it's a manual message
+          const sendOptions = {
+            isManual: true,
+            suppressAiResponse: suppressAiResponse === true
+          };
+          
+          await client.sendMessage(actualChatId, message, sendOptions);
           success = true;
           console.log(`[Manual Message] WhatsApp message sent successfully to ${actualChatId}`);
         } catch (err) {
@@ -1346,9 +1378,27 @@ app.post('/api/manual-message', express.json(), async (req, res) => {
       const telegramBot = global.telegramBot;
       if (telegramBot) {
         try {
+          // For Telegram, we need to handle suppression differently
+          // since telegramBot.sendMessage doesn't accept custom options
           await telegramBot.sendMessage(actualChatId, message);
           success = true;
           console.log(`[Manual Message] Telegram message sent successfully to ${actualChatId}`);
+          
+          // If AI response should be suppressed, temporarily block the chat
+          if (suppressAiResponse === true) {
+            const chatHandler = global.chatHandler || require('./handlers/chatHandler');
+            if (chatHandler.blockChat) {
+              // Add a 30-second temporary block to prevent AI response
+              setTimeout(() => {
+                if (chatHandler.unblockChat) {
+                  chatHandler.unblockChat(actualChatId);
+                  console.log(`[Manual Message] Temporary block removed for Telegram chat ${actualChatId}`);
+                }
+              }, 30000);
+              chatHandler.blockChat(actualChatId);
+              console.log(`[Manual Message] Temporarily blocked Telegram chat ${actualChatId} for 30s`);
+            }
+          }
         } catch (err) {
           error = `Telegram error: ${err.message}`;
           console.error('[Manual Message] Telegram send error:', err);

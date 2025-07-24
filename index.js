@@ -463,18 +463,18 @@ client.sendMessage = async function(chatId, content, options = {}) {
   console.log(`[Manual-Block] Manual message from bot ${botNumber} to ${chatId}`);
   
   try {
-    // Only process direct messages
-    if (!isGroup) {
+    // Only process direct messages and check if AI response should be suppressed
+    if (!isGroup && options.suppressAiResponse === true) {
       const cleanChatId = chatId.split('@')[0];
       
-      console.log(`[Manual-Block] Adding temp block for manual message to ${cleanChatId}`);
+      console.log(`[Manual-Block] Adding temp block for manual message to ${cleanChatId} (AI suppressed)`);
       
-      // Add a 5-minute temporary block for manual messages
+      // Add a 5-minute temporary block for manual messages when AI is suppressed
       const blockDuration = 5 * 60 * 1000; // 5 minutes
       const success = blocklist.addTempBlock(
         cleanChatId, 
         blockDuration, 
-        'manual - admin message sent',
+        'manual - admin message sent (AI suppressed)',
         true  // Mark as manual block
       );
       
