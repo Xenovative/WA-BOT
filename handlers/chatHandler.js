@@ -45,8 +45,10 @@ class ChatHandler {
     console.log(`[ChatHandler] Adding ${role} message to chat ${platformChatId}`);
     
     if (!this.conversations.has(platformChatId)) {
-      console.log(`[ChatHandler] Creating new conversation for chat ${platformChatId}`);
-      this.conversations.set(platformChatId, []);
+      console.log(`[ChatHandler] Loading existing conversation for chat ${platformChatId}`);
+      // Load existing messages from disk before creating new conversation
+      const existingMessages = this.loadChat(platformChatId);
+      this.conversations.set(platformChatId, existingMessages);
     }
     
     const conversation = this.conversations.get(platformChatId);
