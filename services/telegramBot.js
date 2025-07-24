@@ -257,7 +257,13 @@ class TelegramBotService {
       const nativeChatId = String(chatId); // Telegram native format: '1234567890'
       
       // Check if this chat is blocked from AI responses
-      const isChatBlocked = chatHandler.isChatBlocked(nativeChatId);
+      let isChatBlocked = false;
+      if (typeof chatHandler.isChatBlocked === 'function') {
+        isChatBlocked = chatHandler.isChatBlocked(nativeChatId);
+      } else {
+        console.log('[Telegram] isChatBlocked method not available, assuming chat is not blocked');
+        isChatBlocked = false;
+      }
       console.log(`[Telegram] Chat ${nativeChatId} blocked status: ${isChatBlocked}`);
       
       // If chat is blocked from AI responses, skip processing unless it's a command

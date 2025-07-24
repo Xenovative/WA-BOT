@@ -998,7 +998,13 @@ client.on('message', async (message) => {
       const nativeChatId = chatId; // WhatsApp native format: '1234567890@g.us'
       
       // Check if this chat is blocked from AI responses
-      const isChatBlocked = chatHandler.isChatBlocked(nativeChatId);
+      let isChatBlocked = false;
+      if (typeof chatHandler.isChatBlocked === 'function') {
+        isChatBlocked = chatHandler.isChatBlocked(nativeChatId);
+      } else {
+        console.log('[Group Chat] isChatBlocked method not available, assuming chat is not blocked');
+        isChatBlocked = false;
+      }
       console.log(`[Group Chat] Chat ${nativeChatId} blocked status: ${isChatBlocked}`);
       
       // Check if message is a command
@@ -1137,7 +1143,13 @@ client.on('message', async (message) => {
     const nativeChatId = chatId; // WhatsApp native format: '1234567890@c.us'
     
     // Check if this chat is blocked from AI responses
-    const isChatBlocked = chatHandler.isChatBlocked(nativeChatId);
+    let isChatBlocked = false;
+    if (typeof chatHandler.isChatBlocked === 'function') {
+      isChatBlocked = chatHandler.isChatBlocked(nativeChatId);
+    } else {
+      console.log('[Direct] isChatBlocked method not available, assuming chat is not blocked');
+      isChatBlocked = false;
+    }
     console.log(`[Direct] Chat ${nativeChatId} blocked status: ${isChatBlocked}`);
     
     // Check if message is a command
