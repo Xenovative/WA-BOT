@@ -140,7 +140,22 @@ class ChatHandler {
   getPlatformChatId(platform, chatId) {
     if (!platform || !chatId) return chatId;
     
-    // Check if chatId already has a platform prefix
+    // Check if chatId already has a chat_ prefix
+    if (chatId.startsWith('chat_')) {
+      // Extract the actual ID part after chat_
+      const idPart = chatId.substring(5); // Remove 'chat_'
+      
+      // Check if the remaining part already has a platform prefix
+      if (idPart.match(/^(whatsapp|telegram)[:_]/i)) {
+        // Already has platform prefix after chat_, return as is
+        return idPart;
+      } else {
+        // Has chat_ prefix but no platform prefix, add platform
+        return `${platform.toLowerCase()}_${idPart}`;
+      }
+    }
+    
+    // Check if chatId already has a platform prefix without chat_
     if (chatId.match(/^(whatsapp|telegram)[:_]/i)) {
       // Already has a platform prefix, normalize it
       const parts = chatId.split(/[:_]/);
@@ -215,11 +230,26 @@ class ChatHandler {
     
     // Always normalize the chat ID consistently
     let platformChatId;
-    if (platform) {
-      // Always use the platform-specific normalization
+    
+    // Handle chat_ prefix specially
+    if (chatId.startsWith('chat_')) {
+      // For chat IDs with chat_ prefix, we need to handle them differently
+      const idPart = chatId.substring(5); // Remove 'chat_'
+      
+      if (platform) {
+        // If platform is provided, use it to normalize the ID part after chat_
+        platformChatId = this.getPlatformChatId(platform, idPart);
+      } else {
+        // If no platform provided but ID starts with chat_, use the ID part directly
+        platformChatId = idPart;
+      }
+      
+      console.log(`[ChatHandler] Normalized chat ID from chat_ prefix: ${chatId} -> ${platformChatId}`);
+    } else if (platform) {
+      // For IDs without chat_ prefix but with platform provided
       platformChatId = this.getPlatformChatId(platform, chatId);
       console.log(`[ChatHandler] Normalized chat ID with platform: ${platformChatId}`);
-    } else if (chatId.match(/^(whatsapp|telegram)[:._-]/i) || chatId.startsWith('chat_')) {
+    } else if (chatId.match(/^(whatsapp|telegram)[:._-]/i)) {
       // Already has platform info, use as is
       platformChatId = chatId;
       console.log(`[ChatHandler] Using existing platform info in chat ID: ${platformChatId}`);

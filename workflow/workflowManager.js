@@ -1319,17 +1319,33 @@ class WorkflowManager extends EventEmitter {
   normalizeChatId(chatId) {
     if (!chatId) return '';
     
-    // If already starts with chat_, use as is
+    // If already starts with chat_, extract the part after it
     if (chatId.startsWith('chat_')) {
-      return chatId;
+      const idPart = chatId.substring(5); // Remove 'chat_'
+      
+      // Check if the part after chat_ already has a platform prefix
+      if (idPart.match(/^(whatsapp|telegram)_/i)) {
+        // Already has proper format (chat_whatsapp_123456), return as is
+        return chatId;
+      } else {
+        // Has chat_ prefix but no platform, treat as raw ID
+        chatId = idPart;
+      }
     }
     
-    // Extract platform prefix if present
+    // Handle platform-prefixed IDs without chat_ prefix
+    if (chatId.match(/^(whatsapp|telegram)_/i)) {
+      // Already has proper platform prefix format (whatsapp_123456)
+      // Just add chat_ prefix
+      return `chat_${chatId}`;
+    }
+    
+    // Extract platform prefix if present in other formats
     let platform = '';
-    const platformMatch = chatId.match(/^(whatsapp|telegram)[:._-]?/i);
+    const platformMatch = chatId.match(/^(whatsapp|telegram)[:.-]?/i);
     if (platformMatch) {
       platform = platformMatch[1].toLowerCase();
-      chatId = chatId.replace(/^(whatsapp|telegram)[:._-]?/i, '');
+      chatId = chatId.replace(/^(whatsapp|telegram)[:.-]?/i, '');
     }
     
     // Clean up the ID
