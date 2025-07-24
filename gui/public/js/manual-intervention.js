@@ -88,7 +88,8 @@ function initializeManualIntervention() {
     console.log('Found refresh button, adding event listener');
     refreshBtn.addEventListener('click', function() {
       if (window.ManualIntervention.currentChatId) {
-        viewChat(window.ManualIntervention.currentChatId);
+        // Force reload when refresh button is clicked
+        viewChat(window.ManualIntervention.currentChatId, true);
       }
     });
   } else {
@@ -205,23 +206,48 @@ function setupViewChatListeners() {
   console.log(`Found ${viewButtons.length} view chat buttons`);
   
   viewButtons.forEach(button => {
+    // Remove existing event listeners to prevent duplicates
+    button.removeEventListener('click', handleChatButtonClick);
+    
     const chatId = button.getAttribute('data-chat-id');
     if (chatId) {
-      button.addEventListener('click', function(e) {
-        e.preventDefault();
-        viewChat(chatId);
-      });
+      // Add new event listener
+      button.addEventListener('click', handleChatButtonClick);
     }
   });
 }
 
 /**
+ * Handle click on chat button
+ * @param {Event} e - Click event
+ */
+function handleChatButtonClick(e) {
+  e.preventDefault();
+  const chatId = this.getAttribute('data-chat-id');
+  if (chatId) {
+    viewChat(chatId);
+  }
+}
+
+/**
  * View chat messages in a modal
  * @param {string} chatId - The ID of the chat to view
+ * @param {boolean} forceReload - Whether to force reload from server
  */
-async function viewChat(chatId) {
+async function viewChat(chatId, forceReload = false) {
   try {
-    console.log(`Opening chat: ${chatId}`);
+    console.log(`Opening chat: ${chatId}${forceReload ? ' (forced reload)' : ''}`);
+    
+    // Check if we're switching chats
+    const isSwitchingChats = window.ManualIntervention.currentChatId !== null && 
+                           window.ManualIntervention.currentChatId !== chatId;
+    
+    // Always force reload when switching between chats
+    if (isSwitchingChats) {
+      forceReload = true;
+      console.log('Switching chats - forcing reload');
+    }
+    
     setCurrentChatId(chatId);
     
     // Get modal elements
@@ -249,8 +275,12 @@ async function viewChat(chatId) {
     const modal = new bootstrap.Modal(chatModal);
     modal.show();
     
-    // Fetch chat messages
-    const response = await fetch(`/api/chats/${encodeURIComponent(chatId)}`);
+    // Fetch chat messages with reload parameter if needed
+    const url = forceReload ? 
+      `/api/chats/${encodeURIComponent(chatId)}?reload=true` : 
+      `/api/chats/${encodeURIComponent(chatId)}`;
+      
+    const response = await fetch(url);
     if (!response.ok) {
       throw new Error(`Failed to fetch chat: ${response.statusText}`);
     }
@@ -351,6 +381,7 @@ function escapeHtml(text) {
 
 /**
  * Set current chat ID for manual intervention
+ * @param {string} chatId - The chat ID to set as current
  */
 function setCurrentChatId(chatId) {
   window.ManualIntervention.currentChatId = chatId;
