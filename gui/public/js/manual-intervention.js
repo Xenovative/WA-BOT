@@ -74,16 +74,10 @@ function initializeManualIntervention() {
   const aiToggle = document.getElementById('aiResponseToggle');
   if (aiToggle) {
     console.log('Found AI toggle, adding event listener');
-    // Set initial state from global variable
-    aiToggle.checked = window.ManualIntervention.aiResponseEnabled;
-    
     aiToggle.addEventListener('change', function() {
       window.ManualIntervention.aiResponseEnabled = this.checked;
-      updateAIResponseStatus();
+      updateAIResponseStatus(this.checked);
     });
-    
-    // Update UI to match current state
-    updateAIResponseStatus();
   } else {
     console.warn('AI response toggle not found');
   }
@@ -106,43 +100,6 @@ function initializeManualIntervention() {
   setupViewChatListeners();
   
   console.log('Manual intervention initialization complete');
-}
-
-/**
- * Update UI and server based on AI response toggle state
- */
-function updateAIResponseStatus() {
-  const status = window.ManualIntervention.aiResponseEnabled;
-  console.log(`AI response is now ${status ? 'enabled' : 'disabled'}`);
-  
-  // Update UI elements
-  const statusElement = document.getElementById('aiResponseStatus');
-  if (statusElement) {
-    statusElement.textContent = status ? 'Enabled' : 'Disabled';
-    statusElement.className = status ? 'text-success' : 'text-danger';
-  }
-  
-  // Update toggle button if it exists
-  const toggleBtn = document.getElementById('aiResponseToggle');
-  if (toggleBtn) {
-    toggleBtn.checked = status;
-  }
-  
-  // Send status to server
-  fetch('/api/settings/ai-response', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json'
-    },
-    body: JSON.stringify({ enabled: status })
-  })
-  .then(response => response.json())
-  .then(data => {
-    console.log('Server updated:', data);
-  })
-  .catch(error => {
-    console.error('Failed to update server:', error);
-  });
 }
 
 /**
@@ -428,7 +385,78 @@ function escapeHtml(text) {
  */
 function setCurrentChatId(chatId) {
   window.ManualIntervention.currentChatId = chatId;
-  console.log(`Manual intervention enabled for chat: ${chatId}`);
+  console.log(`Set current chat ID: ${chatId}`);
+  
+  // Check if this chat is blocked and update toggle accordingly
+  checkChatBlockedStatus(chatId);
+}
+
+/**
+ * Check if a chat is blocked from AI responses
+ * @param {string} chatId - The chat ID to check
+ */
+async function checkChatBlockedStatus(chatId) {
+  if (!chatId) return;
+  
+  try {
+    const response = await fetch(`/api/chats/${chatId}/blocked`);
+    const data = await response.json();
+    
+    if (response.ok && data.success) {
+      const aiToggle = document.getElementById('aiResponseToggle');
+      if (aiToggle) {
+        // Update toggle without triggering the change event
+        aiToggle.checked = !data.blocked;
+        window.ManualIntervention.aiResponseEnabled = !data.blocked;
+        console.log(`Chat ${chatId} blocked status: ${data.blocked}`);
+      }
+    }
+  } catch (error) {
+    console.error('Error checking chat blocked status:', error);
+  }
+}
+
+/**
+ * Update AI response status for the current chat
+ * @param {boolean} enabled - Whether AI responses are enabled
+ */
+async function updateAIResponseStatus(enabled) {
+  const chatId = window.ManualIntervention.currentChatId;
+  if (!chatId) {
+    showToast('No chat selected', 'warning');
+    return;
+  }
+  
+  try {
+    const endpoint = enabled ? '/api/chats/unblock' : '/api/chats/block';
+    const response = await fetch(endpoint, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ chatId })
+    });
+    
+    const result = await response.json();
+    
+    if (response.ok && result.success) {
+      const action = enabled ? 'enabled' : 'disabled';
+      showToast(`AI responses ${action} for this chat`, 'success');
+      console.log(`AI responses ${action} for chat ${chatId}`);
+    } else {
+      throw new Error(result.error || `Failed to ${enabled ? 'enable' : 'disable'} AI responses`);
+    }
+  } catch (error) {
+    console.error('Error updating AI response status:', error);
+    showToast(error.message, 'error');
+    
+    // Revert toggle state on error
+    const aiToggle = document.getElementById('aiResponseToggle');
+    if (aiToggle) {
+      aiToggle.checked = !enabled;
+      window.ManualIntervention.aiResponseEnabled = !enabled;
+    }
+  }
 }
 
 /**

@@ -732,47 +732,6 @@ app.get('/api/settings', (req, res) => {
   }
 });
 
-// Global settings for manual intervention features
-let manualInterventionSettings = {
-  aiResponseEnabled: true
-};
-
-app.post('/api/settings/ai-response', (req, res) => {
-  try {
-    const { enabled } = req.body;
-    
-    if (typeof enabled !== 'boolean') {
-      return res.status(400).json({ error: 'Invalid value for enabled parameter' });
-    }
-    
-    // Update both local and global settings
-    manualInterventionSettings.aiResponseEnabled = enabled;
-    global.aiResponseEnabled = enabled;
-    
-    console.log(`[API] AI response ${enabled ? 'enabled' : 'disabled'}`);
-    
-    // Return updated settings
-    res.json({
-      success: true,
-      aiResponseEnabled: enabled
-    });
-  } catch (error) {
-    console.error('[API] Error updating AI response setting:', error);
-    res.status(500).json({ error: 'Failed to update settings' });
-  }
-});
-
-app.get('/api/settings/ai-response', (req, res) => {
-  // Get the current state from the global variable
-  const currentState = typeof global.aiResponseEnabled === 'boolean' 
-    ? global.aiResponseEnabled 
-    : manualInterventionSettings.aiResponseEnabled;
-  
-  res.json({
-    aiResponseEnabled: currentState
-  });
-});
-
 app.post('/api/settings', async (req, res) => {
   try {
     const commandHandler = require('./handlers/commandHandler');
@@ -1013,6 +972,76 @@ app.get('/api/chats', (req, res) => {
       error: 'Failed to load chat history',
       details: error.message 
     });
+  }
+});
+
+// Block a chat from receiving AI responses
+app.post('/api/chats/block', express.json(), (req, res) => {
+  try {
+    const { chatId } = req.body;
+    
+    if (!chatId) {
+      return res.status(400).json({ success: false, error: 'Chat ID is required' });
+    }
+    
+    console.log(`[API] Blocking AI responses for chat: ${chatId}`);
+    
+    // Get the workflow manager to handle blocking
+    const workflowManager = global.workflowManager || require('./workflow/workflowManager');
+    
+    // Add to blocked chats list
+    workflowManager.blockChat(chatId);
+    
+    return res.json({ success: true, message: `Chat ${chatId} blocked from AI responses` });
+  } catch (error) {
+    console.error('[API] Error blocking chat:', error);
+    return res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Unblock a chat to resume AI responses
+app.post('/api/chats/unblock', express.json(), (req, res) => {
+  try {
+    const { chatId } = req.body;
+    
+    if (!chatId) {
+      return res.status(400).json({ success: false, error: 'Chat ID is required' });
+    }
+    
+    console.log(`[API] Unblocking AI responses for chat: ${chatId}`);
+    
+    // Get the workflow manager to handle unblocking
+    const workflowManager = global.workflowManager || require('./workflow/workflowManager');
+    
+    // Remove from blocked chats list
+    workflowManager.unblockChat(chatId);
+    
+    return res.json({ success: true, message: `Chat ${chatId} unblocked for AI responses` });
+  } catch (error) {
+    console.error('[API] Error unblocking chat:', error);
+    return res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Check if a chat is blocked
+app.get('/api/chats/:chatId/blocked', (req, res) => {
+  try {
+    const chatId = req.params.chatId;
+    
+    if (!chatId) {
+      return res.status(400).json({ success: false, error: 'Chat ID is required' });
+    }
+    
+    // Get the workflow manager to check blocked status
+    const workflowManager = global.workflowManager || require('./workflow/workflowManager');
+    
+    // Check if chat is in blocked list
+    const isBlocked = workflowManager.isChatBlocked(chatId);
+    
+    return res.json({ success: true, blocked: isBlocked });
+  } catch (error) {
+    console.error('[API] Error checking blocked status:', error);
+    return res.status(500).json({ success: false, error: error.message });
   }
 });
 

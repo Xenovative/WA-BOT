@@ -29,6 +29,7 @@ class WorkflowManager extends EventEmitter {
     this.profileStatePath = path.join(__dirname, 'workflow-profiles.json');
     this.currentProfile = 'default';
     this.profiles = {};
+    this.blockedChats = new Set(); // Store blocked chat IDs
     
     this.settings = {
       // Core settings
@@ -148,6 +149,12 @@ class WorkflowManager extends EventEmitter {
           console.log(`[WorkflowManager] Loaded ${Object.keys(this.profiles).length} profiles`);
         }
         
+        // Load blocked chats
+        if (state.blockedChats && Array.isArray(state.blockedChats)) {
+          this.blockedChats = new Set(state.blockedChats);
+          console.log(`[WorkflowManager] Loaded ${this.blockedChats.size} blocked chats`);
+        }
+        
         return true;
       }
       console.log('[WorkflowManager] No saved state found, starting fresh');
@@ -169,6 +176,7 @@ class WorkflowManager extends EventEmitter {
         enabledWorkflows: this.enabledWorkflows,
         currentProfile: this.currentProfile,
         profiles: this.profiles,
+        blockedChats: Array.from(this.blockedChats), // Save blocked chats
         lastUpdated: new Date().toISOString()
       };
       
@@ -1217,6 +1225,110 @@ class WorkflowManager extends EventEmitter {
       console.error(`[WorkflowManager] Error getting active workflows: ${error.message}`);
       return [];
     }
+  }
+  
+  /**
+   * Block a chat from receiving AI responses
+   * @param {string} chatId - Chat ID to block
+   * @returns {boolean} - Success status
+   */
+  blockChat(chatId) {
+    if (!chatId) {
+      console.warn('[WorkflowManager] Cannot block chat: No chat ID provided');
+      return false;
+    }
+    
+    // Normalize chat ID to ensure consistent format
+    const normalizedChatId = this.normalizeChatId(chatId);
+    
+    // Add to blocked set
+    this.blockedChats.add(normalizedChatId);
+    console.log(`[WorkflowManager] Blocked chat: ${normalizedChatId}`);
+    
+    // Save state to persist blocked status
+    this.saveState().catch(err => {
+      console.error('[WorkflowManager] Error saving blocked chat state:', err);
+    });
+    
+    return true;
+  }
+  
+  /**
+   * Unblock a chat to resume AI responses
+   * @param {string} chatId - Chat ID to unblock
+   * @returns {boolean} - Success status
+   */
+  unblockChat(chatId) {
+    if (!chatId) {
+      console.warn('[WorkflowManager] Cannot unblock chat: No chat ID provided');
+      return false;
+    }
+    
+    // Normalize chat ID to ensure consistent format
+    const normalizedChatId = this.normalizeChatId(chatId);
+    
+    // Remove from blocked set
+    const wasBlocked = this.blockedChats.delete(normalizedChatId);
+    
+    if (wasBlocked) {
+      console.log(`[WorkflowManager] Unblocked chat: ${normalizedChatId}`);
+      
+      // Save state to persist changes
+      this.saveState().catch(err => {
+        console.error('[WorkflowManager] Error saving unblocked chat state:', err);
+      });
+    } else {
+      console.log(`[WorkflowManager] Chat was not blocked: ${normalizedChatId}`);
+    }
+    
+    return true;
+  }
+  
+  /**
+   * Check if a chat is blocked from AI responses
+   * @param {string} chatId - Chat ID to check
+   * @returns {boolean} - True if chat is blocked
+   */
+  isChatBlocked(chatId) {
+    if (!chatId) return false;
+    
+    // Normalize chat ID to ensure consistent format
+    const normalizedChatId = this.normalizeChatId(chatId);
+    
+    // Check if in blocked set
+    return this.blockedChats.has(normalizedChatId);
+  }
+  
+  /**
+   * Normalize chat ID to ensure consistent format
+   * @param {string} chatId - Chat ID to normalize
+   * @returns {string} - Normalized chat ID
+   * @private
+   */
+  normalizeChatId(chatId) {
+    if (!chatId) return '';
+    
+    // If already starts with chat_, use as is
+    if (chatId.startsWith('chat_')) {
+      return chatId;
+    }
+    
+    // Extract platform prefix if present
+    let platform = '';
+    const platformMatch = chatId.match(/^(whatsapp|telegram)[:._-]?/i);
+    if (platformMatch) {
+      platform = platformMatch[1].toLowerCase();
+      chatId = chatId.replace(/^(whatsapp|telegram)[:._-]?/i, '');
+    }
+    
+    // Clean up the ID
+    chatId = chatId
+      .replace(/[@].*$/, '') // Remove everything after @ (like @c.us)
+      .replace(/[^a-z0-9]/gi, '_') // Replace special chars with underscore
+      .toLowerCase();
+    
+    // Format with platform prefix
+    return platform ? `chat_${platform}_${chatId}` : `chat_${chatId}`;
   }
   
   /**
