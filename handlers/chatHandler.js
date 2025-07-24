@@ -312,7 +312,29 @@ class ChatHandler {
       return path.join(this.chatHistoryDir, 'invalid_chat.json');
     }
     
-    // Normalize the chat ID to ensure consistent file naming
+    // If chatId already starts with 'chat_', use it as is
+    if (chatId.startsWith('chat_')) {
+      const filePath = path.join(this.chatHistoryDir, `${chatId}.json`);
+      
+      // If file exists, return it
+      if (fs.existsSync(filePath)) {
+        return filePath;
+      }
+      
+      // Otherwise, extract the ID part after 'chat_'
+      const idPart = chatId.slice(5); // Remove 'chat_'
+      if (idPart) {
+        const altPath = path.join(this.chatHistoryDir, `chat_${idPart}.json`);
+        if (fs.existsSync(altPath)) {
+          return altPath;
+        }
+      }
+      
+      // If no existing file, return the original path
+      return filePath;
+    }
+    
+    // For non-chat_ prefixed IDs, normalize the ID
     let normalizedId = chatId.toString().trim();
     
     // Remove common WhatsApp/Telegram suffixes and prefixes
@@ -493,96 +515,106 @@ class ChatHandler {
       return [];
     }
 
-    console.log(`[ChatHandler] Loading chat ${chatId} from disk`);
+    // If chatId doesn't start with 'chat_', try with and without the prefix
+    const chatIdsToTry = chatId.startsWith('chat_') 
+      ? [chatId] 
+      : [chatId, `chat_${chatId}`];
+
+    let lastError = null;
     
-    try {
-      const chatFile = this.getChatFilePath(chatId);
-      console.log(`[ChatHandler] Chat file path: ${chatFile}`);
-      
-      if (fs.existsSync(chatFile)) {
-        console.log(`[ChatHandler] Chat file exists for ${chatId}`);
-        const fileContent = fs.readFileSync(chatFile, 'utf8');
-        console.log(`[ChatHandler] Read ${fileContent.length} bytes from chat file`);
+    for (const currentChatId of chatIdsToTry) {
+      try {
+        console.log(`[ChatHandler] Attempting to load chat: ${currentChatId}`);
+        const chatFile = this.getChatFilePath(currentChatId);
+        console.log(`[ChatHandler] Chat file path: ${chatFile}`);
         
-        try {
-          let messages = [];
+        if (fs.existsSync(chatFile)) {
+          console.log(`[ChatHandler] Chat file exists for ${currentChatId}`);
+          const fileContent = fs.readFileSync(chatFile, 'utf8');
+          console.log(`[ChatHandler] Read ${fileContent.length} bytes from chat file`);
+          
           try {
-            const parsed = JSON.parse(fileContent);
-            // Handle both array and object with messages property
-            messages = Array.isArray(parsed) ? parsed : 
-                     (Array.isArray(parsed?.messages) ? parsed.messages : []);
-          } catch (e) {
-            console.error(`[ChatHandler] Error parsing JSON for chat ${chatId}:`, e);
-            console.error(`[ChatHandler] File content sample: ${fileContent.substring(0, 100)}...`);
-            return [];
-          }
-          
-          console.log(`[ChatHandler] Found ${messages.length} raw messages for chat ${chatId}`);
-          
-          // Process and validate messages
-          const validMessages = messages
-            .filter(msg => {
-              const isValid = msg && 
-                            typeof msg === 'object' && 
-                            typeof msg.role === 'string' && 
-                            typeof msg.content === 'string' &&
-                            msg.content.trim() !== '';
-              
-              if (!isValid) {
-                console.warn(`[ChatHandler] Filtered out invalid message in ${chatId}:`, msg);
-              }
-              
-              return isValid;
-            })
-            .map(msg => ({
-              role: msg.role,
-              content: msg.content.trim(),
-              timestamp: typeof msg.timestamp === 'number' 
-                ? new Date(msg.timestamp).toISOString() 
-                : (msg.timestamp || new Date().toISOString())
-            }));
-          
-          // Deduplicate messages by timestamp and content
-          const messageMap = new Map();
-          validMessages.forEach(msg => {
-            const key = `${msg.timestamp}_${msg.content}`;
-            if (!messageMap.has(key)) {
-              messageMap.set(key, msg);
-            } else {
-              console.log(`[ChatHandler] Removed duplicate message in ${chatId}:`, msg.content.substring(0, 50) + '...');
+            let messages = [];
+            try {
+              const parsed = JSON.parse(fileContent);
+              // Handle both array and object with messages property
+              messages = Array.isArray(parsed) ? parsed : 
+                       (Array.isArray(parsed?.messages) ? parsed.messages : []);
+            } catch (e) {
+              console.error(`[ChatHandler] Error parsing JSON for chat ${currentChatId}:`, e);
+              console.error(`[ChatHandler] File content sample: ${fileContent.substring(0, 100)}...`);
+              continue; // Try next chat ID
             }
-          });
-          
-          const uniqueMessages = Array.from(messageMap.values())
-            .sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
-          
-          console.log(`[ChatHandler] Processed to ${uniqueMessages.length} valid, unique messages`);
-          
-          // Update in-memory cache
-          this.conversations.set(chatId, uniqueMessages);
-          
-          // If we had to clean up the messages, save them back
-          if (uniqueMessages.length !== messages.length) {
-            console.log(`[ChatHandler] Cleaned up messages for ${chatId}: ${messages.length} -> ${uniqueMessages.length}`);
-            this.saveConversations();
+            
+            console.log(`[ChatHandler] Found ${messages.length} raw messages for chat ${currentChatId}`);
+            
+            // Process and validate messages
+            const validMessages = messages
+              .filter(msg => {
+                const isValid = msg && 
+                              typeof msg === 'object' && 
+                              typeof msg.role === 'string' && 
+                              typeof msg.content === 'string' &&
+                              msg.content.trim() !== '';
+                
+                if (!isValid) {
+                  console.warn(`[ChatHandler] Filtered out invalid message in ${currentChatId}:`, msg);
+                }
+                
+                return isValid;
+              })
+              .map(msg => ({
+                role: msg.role,
+                content: msg.content.trim(),
+                timestamp: typeof msg.timestamp === 'number' 
+                  ? new Date(msg.timestamp).toISOString() 
+                  : (msg.timestamp || new Date().toISOString())
+              }));
+            
+            // Deduplicate messages by timestamp and content
+            const messageMap = new Map();
+            validMessages.forEach(msg => {
+              const key = `${msg.timestamp}_${msg.content}`;
+              if (!messageMap.has(key)) {
+                messageMap.set(key, msg);
+              } else {
+                console.log(`[ChatHandler] Removed duplicate message in ${currentChatId}:`, msg.content.substring(0, 50) + '...');
+              }
+            });
+            
+            const uniqueMessages = Array.from(messageMap.values())
+              .sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
+            
+            console.log(`[ChatHandler] Processed to ${uniqueMessages.length} valid, unique messages`);
+            
+            // Update in-memory cache with the original chatId
+            this.conversations.set(chatId, uniqueMessages);
+            
+            // If we had to clean up the messages, save them back
+            if (uniqueMessages.length !== messages.length) {
+              console.log(`[ChatHandler] Cleaned up messages for ${currentChatId}: ${messages.length} -> ${uniqueMessages.length}`);
+              this.saveConversations();
+            }
+            
+            return uniqueMessages;
+            
+          } catch (error) {
+            lastError = error;
+            console.error(`[ChatHandler] Error processing messages for chat ${currentChatId}:`, error);
+            continue; // Try next chat ID
           }
-          
-          return uniqueMessages;
-          
-        } catch (error) {
-          console.error(`[ChatHandler] Error processing messages for chat ${chatId}:`, error);
-          // Return empty array on error to prevent crashes
-          return [];
         }
-      } else {
-        console.log(`[ChatHandler] Chat file does not exist for ${chatId}, creating new chat`);
-        this.conversations.set(chatId, []);
-        return [];
+      } catch (error) {
+        lastError = error;
+        console.error(`[ChatHandler] Error loading chat ${currentChatId}:`, error);
+        continue; // Try next chat ID
       }
-    } catch (error) {
-      console.error(`[ChatHandler] Error loading chat ${chatId}:`, error);
-      return [];
     }
+    
+    // If we get here, no chat file was found
+    console.log(`[ChatHandler] Chat file does not exist for any of: ${chatIdsToTry.join(', ')}, creating new chat`);
+    this.conversations.set(chatId, []);
+    return [];
   }
   
   // Load conversations from disk
