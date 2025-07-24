@@ -966,24 +966,24 @@ app.post('/api/chat/send-manual', express.json(), async (req, res) => {
       }
     }
     
+    // Strip platform prefix from chatId to prevent double prefixing
+    // Handle both formats: 'whatsapp:id' and 'whatsapp_id' from frontend
+    let cleanChatId = chatId;
+    
+    console.log(`[Manual-Debug] Original chatId: "${chatId}", platform: "${platform}"`);
+    
+    if (chatId.startsWith(`${platform}:`)) {
+      cleanChatId = chatId.replace(`${platform}:`, '');
+      console.log(`[Manual-Debug] Stripped colon prefix, cleanChatId: "${cleanChatId}"`);
+    } else if (chatId.startsWith(`${platform}_`)) {
+      cleanChatId = chatId.replace(`${platform}_`, '');
+      console.log(`[Manual-Debug] Stripped underscore prefix, cleanChatId: "${cleanChatId}"`);
+    } else {
+      console.log(`[Manual-Debug] No prefix to strip, cleanChatId: "${cleanChatId}"`);
+    }
+    
     // Add message to chat history as assistant message
     if (global.chatHandler) {
-      // Strip platform prefix from chatId to prevent double prefixing
-      // Handle both formats: 'whatsapp:id' and 'whatsapp_id' from frontend
-      let cleanChatId = chatId;
-      
-      console.log(`[Manual-Debug] Original chatId: "${chatId}", platform: "${platform}"`);
-      
-      if (chatId.startsWith(`${platform}:`)) {
-        cleanChatId = chatId.replace(`${platform}:`, '');
-        console.log(`[Manual-Debug] Stripped colon prefix, cleanChatId: "${cleanChatId}"`);
-      } else if (chatId.startsWith(`${platform}_`)) {
-        cleanChatId = chatId.replace(`${platform}_`, '');
-        console.log(`[Manual-Debug] Stripped underscore prefix, cleanChatId: "${cleanChatId}"`);
-      } else {
-        console.log(`[Manual-Debug] No prefix to strip, cleanChatId: "${cleanChatId}"`);
-      }
-      
       console.log(`[Manual-Debug] Calling addMessage with: cleanChatId="${cleanChatId}", platform="${platform}"`);
       global.chatHandler.addMessage(cleanChatId, 'assistant', message, platform);
     }
