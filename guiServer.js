@@ -732,6 +732,47 @@ app.get('/api/settings', (req, res) => {
   }
 });
 
+// Global settings for manual intervention features
+let manualInterventionSettings = {
+  aiResponseEnabled: true
+};
+
+app.post('/api/settings/ai-response', (req, res) => {
+  try {
+    const { enabled } = req.body;
+    
+    if (typeof enabled !== 'boolean') {
+      return res.status(400).json({ error: 'Invalid value for enabled parameter' });
+    }
+    
+    // Update both local and global settings
+    manualInterventionSettings.aiResponseEnabled = enabled;
+    global.aiResponseEnabled = enabled;
+    
+    console.log(`[API] AI response ${enabled ? 'enabled' : 'disabled'}`);
+    
+    // Return updated settings
+    res.json({
+      success: true,
+      aiResponseEnabled: enabled
+    });
+  } catch (error) {
+    console.error('[API] Error updating AI response setting:', error);
+    res.status(500).json({ error: 'Failed to update settings' });
+  }
+});
+
+app.get('/api/settings/ai-response', (req, res) => {
+  // Get the current state from the global variable
+  const currentState = typeof global.aiResponseEnabled === 'boolean' 
+    ? global.aiResponseEnabled 
+    : manualInterventionSettings.aiResponseEnabled;
+  
+  res.json({
+    aiResponseEnabled: currentState
+  });
+});
+
 app.post('/api/settings', async (req, res) => {
   try {
     const commandHandler = require('./handlers/commandHandler');

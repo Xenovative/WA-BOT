@@ -441,6 +441,9 @@ function sendAutomatedMessage(chatId, content, options = {}) {
 // Make it available globally
 global.sendMessage = sendAutomatedMessage;
 
+// Global flag for AI auto-response (default: enabled)
+global.aiResponseEnabled = true;
+
 // Message processing
 // Handle voice messages
 client.on('message', async (message) => {
@@ -457,6 +460,26 @@ client.on('message', async (message) => {
   // Skip messages from self
   if (message.fromMe) {
     console.log('[Message-Event] Skipping message from self');
+    return;
+  }
+  
+  // Check if AI auto-response is disabled
+  if (!global.aiResponseEnabled) {
+    console.log('[Message-Event] AI auto-response is disabled - skipping message processing');
+    // Still add the message to chat history
+    try {
+      if (global.chatHandler) {
+        global.chatHandler.addMessage({
+          chatId: message.from,
+          message: message.body,
+          timestamp: new Date().toISOString(),
+          fromMe: false,
+          type: message.type || 'text'
+        });
+      }
+    } catch (error) {
+      console.error('[Message-Event] Error saving message to chat history:', error);
+    }
     return;
   }
   

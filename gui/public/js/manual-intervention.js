@@ -74,10 +74,16 @@ function initializeManualIntervention() {
   const aiToggle = document.getElementById('aiResponseToggle');
   if (aiToggle) {
     console.log('Found AI toggle, adding event listener');
+    // Set initial state from global variable
+    aiToggle.checked = window.ManualIntervention.aiResponseEnabled;
+    
     aiToggle.addEventListener('change', function() {
       window.ManualIntervention.aiResponseEnabled = this.checked;
       updateAIResponseStatus();
     });
+    
+    // Update UI to match current state
+    updateAIResponseStatus();
   } else {
     console.warn('AI response toggle not found');
   }
@@ -100,6 +106,43 @@ function initializeManualIntervention() {
   setupViewChatListeners();
   
   console.log('Manual intervention initialization complete');
+}
+
+/**
+ * Update UI and server based on AI response toggle state
+ */
+function updateAIResponseStatus() {
+  const status = window.ManualIntervention.aiResponseEnabled;
+  console.log(`AI response is now ${status ? 'enabled' : 'disabled'}`);
+  
+  // Update UI elements
+  const statusElement = document.getElementById('aiResponseStatus');
+  if (statusElement) {
+    statusElement.textContent = status ? 'Enabled' : 'Disabled';
+    statusElement.className = status ? 'text-success' : 'text-danger';
+  }
+  
+  // Update toggle button if it exists
+  const toggleBtn = document.getElementById('aiResponseToggle');
+  if (toggleBtn) {
+    toggleBtn.checked = status;
+  }
+  
+  // Send status to server
+  fetch('/api/settings/ai-response', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({ enabled: status })
+  })
+  .then(response => response.json())
+  .then(data => {
+    console.log('Server updated:', data);
+  })
+  .catch(error => {
+    console.error('Failed to update server:', error);
+  });
 }
 
 /**
