@@ -658,7 +658,7 @@
                 "types": [
                     "ui_spacer"
                 ],
-                "enabled": true,
+                "enabled": false,
                 "local": false,
                 "user": false,
                 "module": "node-red-dashboard",

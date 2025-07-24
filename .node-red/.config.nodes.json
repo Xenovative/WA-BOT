@@ -668,7 +668,7 @@
     },
     "node-red-contrib-telegrambot": {
         "name": "node-red-contrib-telegrambot",
-        "version": "16.3.1",
+        "version": "16.3.2",
         "local": false,
         "user": false,
         "nodes": {

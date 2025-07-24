@@ -968,7 +968,7 @@ app.post('/api/chat/send-manual', express.json(), async (req, res) => {
     
     // Add message to chat history as assistant message
     if (global.chatHandler) {
-      global.chatHandler.addMessage(chatId, 'assistant', message, platform === 'telegram' ? 'telegram' : null);
+      global.chatHandler.addMessage(chatId, 'assistant', message, platform);
     }
     
     // Send the message
