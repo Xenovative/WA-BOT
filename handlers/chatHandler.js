@@ -185,30 +185,49 @@ class ChatHandler {
    * @param {string} [platform] - Platform identifier ('telegram', 'whatsapp', etc.)
    */
   addMessage(chatId, role, content, platform) {
-    if (!chatId) {
-      console.error('[ChatHandler] Cannot add message: No chat ID provided');
+    // Validate input parameters
+    if (!chatId || chatId.trim() === '' || chatId === 'undefined' || chatId === 'null') {
+      console.log('[ChatHandler] Invalid chat ID provided, skipping message:', chatId);
       return;
     }
     
-    // Format the chat ID for storage
+    // Ensure chatId is a string
+    chatId = String(chatId).trim();
+    
+    // Format the chat ID for storage consistently
     let formattedChatId;
     
     // If chatId already starts with 'chat_', use it directly
     if (chatId.startsWith('chat_')) {
       formattedChatId = chatId;
     } 
-    // If it has a platform prefix but no chat_ prefix
+    // If it has a platform prefix but no chat_ prefix (like 'whatsapp_123')
     else if (chatId.match(/^(whatsapp|telegram)_/i)) {
       formattedChatId = `chat_${chatId}`;
     }
-    // Otherwise, normalize with platform info
+    // If we have platform info, normalize the chat ID
     else if (platform) {
-      const platformId = this.getPlatformChatId(platform, chatId);
-      formattedChatId = `chat_${platformId}`;
+      // Clean the chat ID and add platform prefix
+      const cleanId = chatId
+        .replace(/[@].*$/, '')           // Remove everything after @ (like @c.us)
+        .replace(/[^a-z0-9]/gi, '_')     // Replace special chars with underscore
+        .toLowerCase();
+      formattedChatId = `chat_${platform.toLowerCase()}_${cleanId}`;
     }
-    // No platform info available
+    // No platform info available, use generic format
     else {
-      formattedChatId = `chat_${chatId}`;
+      const cleanId = chatId
+        .replace(/[@].*$/, '')
+        .replace(/[^a-z0-9]/gi, '_')
+        .toLowerCase();
+      
+      // Prevent problematic file names
+      if (cleanId === '' || cleanId === 'chat' || cleanId === '_') {
+        formattedChatId = `chat_unknown_${Date.now()}`;
+        console.warn(`[ChatHandler] Problematic chat ID "${chatId}" normalized to ${formattedChatId}`);
+      } else {
+        formattedChatId = `chat_${cleanId}`;
+      }
     }
     
     console.log(`[ChatHandler] Adding ${role} message to chat ${formattedChatId} (original: ${chatId})`);
@@ -395,20 +414,35 @@ class ChatHandler {
       formattedChatId = chatId;
       console.log(`[ChatHandler] Using chat ID with chat_ prefix: ${formattedChatId}`);
     } 
-    // Check if it's a platform-prefixed ID without chat_ prefix
+    // Check if it's a platform-prefixed ID without chat_ prefix (like 'whatsapp_123')
     else if (chatId.match(/^(whatsapp|telegram)_/i)) {
       formattedChatId = `chat_${chatId}`;
       console.log(`[ChatHandler] Added chat_ prefix to platform ID: ${formattedChatId}`);
     }
     // Handle other formats with platform info
     else if (platform) {
-      const platformId = this.getPlatformChatId(platform, chatId);
-      formattedChatId = `chat_${platformId}`;
+      // Clean the chat ID and add platform prefix
+      const cleanId = chatId
+        .replace(/[@].*$/, '')           // Remove everything after @ (like @c.us)
+        .replace(/[^a-z0-9]/gi, '_')     // Replace special chars with underscore
+        .toLowerCase();
+      formattedChatId = `chat_${platform.toLowerCase()}_${cleanId}`;
       console.log(`[ChatHandler] Normalized chat ID with platform: ${formattedChatId}`);
     }
     // No platform info available
     else {
-      formattedChatId = `chat_${chatId}`;
+      const cleanId = chatId
+        .replace(/[@].*$/, '')
+        .replace(/[^a-z0-9]/gi, '_')
+        .toLowerCase();
+      
+      // Prevent problematic file names
+      if (cleanId === '' || cleanId === 'chat' || cleanId === '_') {
+        formattedChatId = `chat_unknown_${Date.now()}`;
+        console.warn(`[ChatHandler] Problematic chat ID "${chatId}" normalized to ${formattedChatId}`);
+      } else {
+        formattedChatId = `chat_${cleanId}`;
+      }
       console.log(`[ChatHandler] Added chat_ prefix to generic ID: ${formattedChatId}`);
     }
     
@@ -460,7 +494,18 @@ class ChatHandler {
       } else if (chatId.match(/^(whatsapp|telegram)_/i)) {
         formattedChatId = `chat_${chatId}`;
       } else {
-        formattedChatId = `chat_${chatId}`;
+        const cleanId = chatId
+          .replace(/[@].*$/, '')
+          .replace(/[^a-z0-9]/gi, '_')
+          .toLowerCase();
+        
+        // Prevent problematic file names
+        if (cleanId === '' || cleanId === 'chat' || cleanId === '_') {
+          formattedChatId = `chat_unknown_${Date.now()}`;
+          console.warn(`[ChatHandler] Problematic chat ID "${chatId}" normalized to ${formattedChatId}`);
+        } else {
+          formattedChatId = `chat_${cleanId}`;
+        }
       }
       
       console.log(`[ChatHandler] Clearing conversation for ${chatId} (formatted: ${formattedChatId})`);
