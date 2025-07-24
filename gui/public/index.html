@@ -425,12 +425,13 @@
                                                 <th>Preview</th>
                                                 <th>Last Active</th>
                                                 <th class="text-center">Messages</th>
+                                                <th class="text-center">AI Auto</th>
                                                 <th class="text-end">Actions</th>
                                             </tr>
                                         </thead>
                                         <tbody id="chats-table-body">
                                             <tr>
-                                                <td colspan="5" class="text-center py-4">
+                                                <td colspan="6" class="text-center py-4">
                                                     <div class="spinner-border text-secondary" role="status">
                                                         <span class="visually-hidden">Loading...</span>
                                                     </div>
@@ -811,6 +812,40 @@
                     </button>
                     <button type="button" class="btn btn-primary" id="exportChatBtn">
                         <i class="bi bi-download me-1"></i> Export
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Manual Intervention Modal -->
+    <div class="modal fade" id="manualInterventionModal" tabindex="-1" aria-labelledby="manualInterventionModalLabel" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header bg-primary text-white">
+                    <h5 class="modal-title" id="manualInterventionModalLabel">Send Manual Message</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label for="manualChatId" class="form-label">Chat ID</label>
+                        <input type="text" class="form-control" id="manualChatId" readonly>
+                    </div>
+                    <div class="mb-3">
+                        <label for="manualMessage" class="form-label">Message</label>
+                        <textarea class="form-control" id="manualMessage" rows="4" placeholder="Type your message here..."></textarea>
+                    </div>
+                    <div class="form-check">
+                        <input class="form-check-input" type="checkbox" id="suppressAiResponse" checked>
+                        <label class="form-check-label" for="suppressAiResponse">
+                            Suppress AI response to this message
+                        </label>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-primary" id="sendManualMessage">
+                        <i class="bi bi-send me-1"></i> Send Message
                     </button>
                 </div>
             </div>

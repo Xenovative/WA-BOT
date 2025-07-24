@@ -937,6 +937,166 @@ app.delete('/api/chats/:chatId', (req, res) => {
   }
 });
 
+// Manual Intervention API Endpoints
+
+// Get blocked chats list
+app.get('/api/blocked-chats', (req, res) => {
+  try {
+    const chatHandler = global.chatHandler || require('./handlers/chatHandler');
+    const blockedChats = chatHandler.getBlockedChats ? chatHandler.getBlockedChats() : [];
+    res.json({ success: true, blockedChats });
+  } catch (error) {
+    console.error('Error getting blocked chats:', error);
+    res.status(500).json({ 
+      error: 'Failed to get blocked chats',
+      details: error.message 
+    });
+  }
+});
+
+// Block a chat (disable AI responses)
+app.post('/api/blocked-chats/:chatId', express.json(), (req, res) => {
+  try {
+    const chatHandler = global.chatHandler || require('./handlers/chatHandler');
+    const chatId = req.params.chatId;
+    
+    if (!chatId) {
+      return res.status(400).json({ error: 'Chat ID is required' });
+    }
+    
+    // Add to blocked chats
+    if (chatHandler.blockChat) {
+      chatHandler.blockChat(chatId);
+    }
+    
+    res.json({ 
+      success: true,
+      message: `AI responses disabled for chat ${chatId}`
+    });
+  } catch (error) {
+    console.error(`Error blocking chat ${req.params.chatId}:`, error);
+    res.status(500).json({ 
+      error: `Failed to block chat ${req.params.chatId}`,
+      details: error.message 
+    });
+  }
+});
+
+// Unblock a chat (enable AI responses)
+app.delete('/api/blocked-chats/:chatId', (req, res) => {
+  try {
+    const chatHandler = global.chatHandler || require('./handlers/chatHandler');
+    const chatId = req.params.chatId;
+    
+    if (!chatId) {
+      return res.status(400).json({ error: 'Chat ID is required' });
+    }
+    
+    // Remove from blocked chats
+    if (chatHandler.unblockChat) {
+      chatHandler.unblockChat(chatId);
+    }
+    
+    res.json({ 
+      success: true,
+      message: `AI responses enabled for chat ${chatId}`
+    });
+  } catch (error) {
+    console.error(`Error unblocking chat ${req.params.chatId}:`, error);
+    res.status(500).json({ 
+      error: `Failed to unblock chat ${req.params.chatId}`,
+      details: error.message 
+    });
+  }
+});
+
+// Send manual message
+app.post('/api/manual-message', express.json(), async (req, res) => {
+  try {
+    const { chatId, message, suppressAiResponse } = req.body;
+    
+    if (!chatId || !message) {
+      return res.status(400).json({ 
+        error: 'Chat ID and message are required' 
+      });
+    }
+    
+    console.log(`[Manual Message] Sending to ${chatId}: ${message}`);
+    console.log(`[Manual Message] Suppress AI: ${suppressAiResponse}`);
+    
+    // Determine platform from chat ID
+    let platform = 'whatsapp'; // default
+    if (chatId.startsWith('telegram_')) {
+      platform = 'telegram';
+    }
+    
+    // Get the appropriate client
+    let success = false;
+    let error = null;
+    
+    if (platform === 'whatsapp') {
+      const client = global.whatsappClient;
+      if (client && client.info && client.info.wid) {
+        try {
+          // Extract actual WhatsApp ID (remove 'whatsapp_' prefix if present)
+          const actualChatId = chatId.replace('whatsapp_', '');
+          await client.sendMessage(actualChatId, message);
+          success = true;
+          console.log(`[Manual Message] WhatsApp message sent successfully to ${actualChatId}`);
+        } catch (err) {
+          error = `WhatsApp error: ${err.message}`;
+          console.error('[Manual Message] WhatsApp send error:', err);
+        }
+      } else {
+        error = 'WhatsApp client not connected';
+      }
+    } else if (platform === 'telegram') {
+      const telegramBot = global.telegramBot;
+      if (telegramBot) {
+        try {
+          // Extract actual Telegram chat ID (remove 'telegram_' prefix)
+          const actualChatId = chatId.replace('telegram_', '');
+          await telegramBot.sendMessage(actualChatId, message);
+          success = true;
+          console.log(`[Manual Message] Telegram message sent successfully to ${actualChatId}`);
+        } catch (err) {
+          error = `Telegram error: ${err.message}`;
+          console.error('[Manual Message] Telegram send error:', err);
+        }
+      } else {
+        error = 'Telegram bot not connected';
+      }
+    }
+    
+    if (success) {
+      // Add message to chat history
+      const chatHandler = global.chatHandler || require('./handlers/chatHandler');
+      if (chatHandler.addMessage) {
+        chatHandler.addMessage(chatId, {
+          role: 'assistant',
+          content: message,
+          timestamp: new Date().toISOString(),
+          isManual: true
+        });
+      }
+      
+      res.json({ 
+        success: true,
+        message: 'Message sent successfully'
+      });
+    } else {
+      throw new Error(error || 'Unknown error occurred');
+    }
+    
+  } catch (error) {
+    console.error('Error sending manual message:', error);
+    res.status(500).json({ 
+      error: 'Failed to send message',
+      details: error.message 
+    });
+  }
+});
+
 app.get('/api/kb', async (req, res) => {
   try {
     const kbManager = require('./kb/kbManager');

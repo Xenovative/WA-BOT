@@ -8,17 +8,21 @@ class ChatHandler {
   constructor() {
     // Map to store conversation history by chat ID
     this.conversations = new Map();
+    // Set to store blocked chat IDs (where AI responses are disabled)
+    this.blockedChats = new Set();
     // Directory to store chat history
     this.chatHistoryDir = path.join(__dirname, '../chat_history');
     this.storageFile = path.join(this.chatHistoryDir, 'chats.json');
+    this.blockedChatsFile = path.join(this.chatHistoryDir, 'blocked_chats.json');
     
     // Ensure chat history directory exists
     if (!fs.existsSync(this.chatHistoryDir)) {
       fs.mkdirSync(this.chatHistoryDir, { recursive: true });
     }
     
-    // Load conversations from disk
+    // Load conversations and blocked chats from disk
     this.loadConversations();
+    this.loadBlockedChats();
   }
 
   /**
@@ -35,31 +39,44 @@ class ChatHandler {
   /**
    * Add a message to the conversation history
    * @param {string} chatId - Unique identifier for the chat
-   * @param {string} role - 'user' or 'assistant'
-   * @param {string} content - Message content
+   * @param {string|object} roleOrMessage - 'user' or 'assistant' role, or message object
+   * @param {string} [content] - Message content (if roleOrMessage is a string)
    * @param {string} [platform] - Platform identifier ('telegram', 'whatsapp', etc.)
    */
-  addMessage(chatId, role, content, platform) {
-    const platformChatId = platform ? this.getPlatformChatId(platform, chatId) : chatId;
+  addMessage(chatId, roleOrMessage, content, platform) {
+    let message;
+    let actualChatId = chatId;
     
-    console.log(`[ChatHandler] Adding ${role} message to chat ${platformChatId}`);
-    
-    if (!this.conversations.has(platformChatId)) {
-      console.log(`[ChatHandler] Creating new conversation for chat ${platformChatId}`);
-      this.conversations.set(platformChatId, []);
+    // Handle both old format (role, content, platform) and new format (message object)
+    if (typeof roleOrMessage === 'object') {
+      // New format: second parameter is a message object
+      message = {
+        role: roleOrMessage.role,
+        content: roleOrMessage.content,
+        timestamp: roleOrMessage.timestamp || new Date().toISOString(),
+        isManual: roleOrMessage.isManual || false
+      };
+    } else {
+      // Old format: separate parameters
+      const role = roleOrMessage;
+      actualChatId = platform ? this.getPlatformChatId(platform, chatId) : chatId;
+      message = {
+        role,
+        content,
+        timestamp: new Date().toISOString()
+      };
     }
     
-    const conversation = this.conversations.get(platformChatId);
-    const timestamp = new Date().toISOString();
+    console.log(`[ChatHandler] Adding ${message.role} message to chat ${actualChatId}`);
     
-    const message = { 
-      role, 
-      content, 
-      timestamp 
-    };
+    if (!this.conversations.has(actualChatId)) {
+      console.log(`[ChatHandler] Creating new conversation for chat ${actualChatId}`);
+      this.conversations.set(actualChatId, []);
+    }
     
+    const conversation = this.conversations.get(actualChatId);
     conversation.push(message);
-    console.log(`[ChatHandler] Added message to chat ${platformChatId}, total messages: ${conversation.length}`);
+    console.log(`[ChatHandler] Added message to chat ${actualChatId}, total messages: ${conversation.length}`);
     
     // Persist to disk immediately
     try {
@@ -456,6 +473,75 @@ class ChatHandler {
     } catch (error) {
       console.error('[ChatHandler] Error loading conversations:', error);
     }
+  }
+
+  /**
+   * Load blocked chats from disk
+   */
+  loadBlockedChats() {
+    try {
+      if (fs.existsSync(this.blockedChatsFile)) {
+        const data = fs.readFileSync(this.blockedChatsFile, 'utf8');
+        const blockedChatsArray = JSON.parse(data);
+        this.blockedChats = new Set(blockedChatsArray);
+        console.log(`[ChatHandler] Loaded ${this.blockedChats.size} blocked chats`);
+      } else {
+        console.log('[ChatHandler] No blocked chats file found, starting with empty set');
+      }
+    } catch (error) {
+      console.error('[ChatHandler] Error loading blocked chats:', error);
+      this.blockedChats = new Set();
+    }
+  }
+
+  /**
+   * Save blocked chats to disk
+   */
+  saveBlockedChats() {
+    try {
+      const blockedChatsArray = Array.from(this.blockedChats);
+      fs.writeFileSync(this.blockedChatsFile, JSON.stringify(blockedChatsArray, null, 2));
+      console.log(`[ChatHandler] Saved ${blockedChatsArray.length} blocked chats to disk`);
+    } catch (error) {
+      console.error('[ChatHandler] Error saving blocked chats:', error);
+    }
+  }
+
+  /**
+   * Check if a chat is blocked (AI responses disabled)
+   * @param {string} chatId - Chat ID to check
+   * @returns {boolean} True if chat is blocked
+   */
+  isChatBlocked(chatId) {
+    return this.blockedChats.has(chatId);
+  }
+
+  /**
+   * Block a chat (disable AI responses)
+   * @param {string} chatId - Chat ID to block
+   */
+  blockChat(chatId) {
+    this.blockedChats.add(chatId);
+    this.saveBlockedChats();
+    console.log(`[ChatHandler] Blocked chat: ${chatId}`);
+  }
+
+  /**
+   * Unblock a chat (enable AI responses)
+   * @param {string} chatId - Chat ID to unblock
+   */
+  unblockChat(chatId) {
+    this.blockedChats.delete(chatId);
+    this.saveBlockedChats();
+    console.log(`[ChatHandler] Unblocked chat: ${chatId}`);
+  }
+
+  /**
+   * Get list of blocked chats
+   * @returns {Array<string>} Array of blocked chat IDs
+   */
+  getBlockedChats() {
+    return Array.from(this.blockedChats);
   }
 }
 

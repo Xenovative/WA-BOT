@@ -2092,7 +2092,7 @@ async function loadChats() {
     // Show loading in table
     chatsTableBody.innerHTML = `
       <tr>
-        <td colspan="5" class="text-center py-4">
+        <td colspan="6" class="text-center py-4">
           <div class="spinner-border text-secondary" role="status">
             <span class="visually-hidden">Loading...</span>
           </div>
@@ -2133,7 +2133,7 @@ async function loadChats() {
         
       chatsTableBody.innerHTML = `
         <tr>
-          <td colspan="5" class="text-center py-4 text-muted">
+          <td colspan="6" class="text-center py-4 text-muted">
             <i class="bi bi-chat-square-text fs-1 d-block mb-2"></i>
             ${noChatsMsg}
           </td>
@@ -2176,6 +2176,17 @@ async function loadChats() {
           ${chat.messageCount || 0}
         </span>`;
       
+      // AI Auto Response Toggle Cell
+      const aiToggleCell = document.createElement('td');
+      aiToggleCell.className = 'text-center';
+      const isBlocked = window.blockedChats && window.blockedChats.has(chat.id);
+      aiToggleCell.innerHTML = `
+        <div class="form-check form-switch d-flex justify-content-center">
+          <input class="form-check-input" type="checkbox" id="ai-toggle-${chat.id}" 
+                 ${!isBlocked ? 'checked' : ''} 
+                 onchange="toggleAiResponse('${chat.id}', this.checked)">
+        </div>`;
+      
       const actionsCell = document.createElement('td');
       actionsCell.className = 'text-nowrap text-end';
       
@@ -2183,6 +2194,11 @@ async function loadChats() {
       viewBtn.className = 'btn btn-sm btn-outline-primary me-2';
       viewBtn.innerHTML = '<i class="bi bi-eye"></i> View';
       viewBtn.addEventListener('click', () => viewChat(chat.id));
+      
+      const sendBtn = document.createElement('button');
+      sendBtn.className = 'btn btn-sm btn-outline-success me-2';
+      sendBtn.innerHTML = '<i class="bi bi-send"></i> Send';
+      sendBtn.addEventListener('click', () => openManualInterventionModal(chat.id));
       
       const deleteBtn = document.createElement('button');
       deleteBtn.className = 'btn btn-sm btn-outline-danger';
@@ -2215,12 +2231,14 @@ async function loadChats() {
       });
       
       actionsCell.appendChild(viewBtn);
+      actionsCell.appendChild(sendBtn);
       actionsCell.appendChild(deleteBtn);
       
       row.appendChild(idCell);
       row.appendChild(previewCell);
       row.appendChild(lastActiveCell);
       row.appendChild(messageCountCell);
+      row.appendChild(aiToggleCell);
       row.appendChild(actionsCell);
       
       chatsTableBody.appendChild(row);
@@ -2232,7 +2250,7 @@ async function loadChats() {
     if (error.name !== 'AbortError') {
       chatsTableBody.innerHTML = `
         <tr>
-          <td colspan="5" class="text-center py-4">
+          <td colspan="6" class="text-center py-4">
             <i class="bi bi-exclamation-triangle text-danger fs-1 d-block mb-2"></i>
             <p class="text-danger mb-0">Error loading chats: ${error.message}</p>
             <button class="btn btn-sm btn-outline-primary mt-3" onclick="loadChats()">
@@ -3350,3 +3368,148 @@ function formatCpuUsage(cpu) {
 function formatBytes(bytes) {
   return formatFileSize(bytes);
 }
+
+// Manual Intervention Functions
+window.blockedChats = new Set();
+
+// Load blocked chats from server on page load
+async function loadBlockedChats() {
+  try {
+    const response = await fetch('/api/blocked-chats');
+    if (response.ok) {
+      const data = await response.json();
+      window.blockedChats = new Set(data.blockedChats || []);
+    }
+  } catch (error) {
+    console.error('Error loading blocked chats:', error);
+  }
+}
+
+// Toggle AI response for a chat
+async function toggleAiResponse(chatId, enabled) {
+  try {
+    const method = enabled ? 'DELETE' : 'POST';
+    const response = await fetch(`/api/blocked-chats/${encodeURIComponent(chatId)}`, {
+      method: method,
+      headers: {
+        'Content-Type': 'application/json'
+      }
+    });
+    
+    if (response.ok) {
+      if (enabled) {
+        window.blockedChats.delete(chatId);
+        showToast(`AI responses enabled for ${formatChatId(chatId)}`, 'success');
+      } else {
+        window.blockedChats.add(chatId);
+        showToast(`AI responses disabled for ${formatChatId(chatId)}`, 'warning');
+      }
+    } else {
+      throw new Error('Failed to update AI response setting');
+    }
+  } catch (error) {
+    console.error('Error toggling AI response:', error);
+    showToast('Error updating AI response setting', 'danger');
+    // Revert the toggle
+    const toggle = document.getElementById(`ai-toggle-${chatId}`);
+    if (toggle) {
+      toggle.checked = !toggle.checked;
+    }
+  }
+}
+
+// Open manual intervention modal
+function openManualInterventionModal(chatId) {
+  const modal = new bootstrap.Modal(document.getElementById('manualInterventionModal'));
+  const chatIdInput = document.getElementById('manualChatId');
+  const messageTextarea = document.getElementById('manualMessage');
+  const suppressCheckbox = document.getElementById('suppressAiResponse');
+  
+  chatIdInput.value = chatId;
+  messageTextarea.value = '';
+  suppressCheckbox.checked = true;
+  
+  modal.show();
+  
+  // Focus on message textarea after modal is shown
+  setTimeout(() => {
+    messageTextarea.focus();
+  }, 300);
+}
+
+// Send manual message
+async function sendManualMessage() {
+  const chatId = document.getElementById('manualChatId').value;
+  const message = document.getElementById('manualMessage').value.trim();
+  const suppressAi = document.getElementById('suppressAiResponse').checked;
+  const sendButton = document.getElementById('sendManualMessage');
+  
+  if (!message) {
+    showToast('Please enter a message', 'warning');
+    return;
+  }
+  
+  // Show loading state
+  const originalText = sendButton.innerHTML;
+  sendButton.disabled = true;
+  sendButton.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Sending...';
+  
+  try {
+    const response = await fetch('/api/manual-message', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        chatId: chatId,
+        message: message,
+        suppressAiResponse: suppressAi
+      })
+    });
+    
+    const result = await response.json();
+    
+    if (response.ok && result.success) {
+      showToast(`Message sent to ${formatChatId(chatId)}`, 'success');
+      
+      // Close modal
+      const modal = bootstrap.Modal.getInstance(document.getElementById('manualInterventionModal'));
+      modal.hide();
+      
+      // Clear form
+      document.getElementById('manualMessage').value = '';
+    } else {
+      throw new Error(result.error || 'Failed to send message');
+    }
+  } catch (error) {
+    console.error('Error sending manual message:', error);
+    showToast(`Error sending message: ${error.message}`, 'danger');
+  } finally {
+    // Restore button state
+    sendButton.disabled = false;
+    sendButton.innerHTML = originalText;
+  }
+}
+
+// Initialize manual intervention features
+document.addEventListener('DOMContentLoaded', function() {
+  // Load blocked chats
+  loadBlockedChats();
+  
+  // Add event listener for send manual message button
+  const sendButton = document.getElementById('sendManualMessage');
+  if (sendButton) {
+    sendButton.addEventListener('click', sendManualMessage);
+  }
+  
+  // Add enter key support for message textarea
+  const messageTextarea = document.getElementById('manualMessage');
+  if (messageTextarea) {
+    messageTextarea.addEventListener('keydown', function(e) {
+      if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+        e.preventDefault();
+        sendManualMessage();
+      }
+    });
+  }
+});
