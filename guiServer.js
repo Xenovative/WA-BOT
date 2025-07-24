@@ -968,7 +968,9 @@ app.post('/api/chat/send-manual', express.json(), async (req, res) => {
     
     // Add message to chat history as assistant message
     if (global.chatHandler) {
-      global.chatHandler.addMessage(chatId, 'assistant', message, platform);
+      // Strip platform prefix from chatId to prevent double prefixing
+      const cleanChatId = chatId.startsWith(`${platform}:`) ? chatId.replace(`${platform}:`, '') : chatId;
+      global.chatHandler.addMessage(cleanChatId, 'assistant', message, platform);
     }
     
     // Send the message
