@@ -909,9 +909,19 @@ app.get('/api/chats/recent', (req, res) => {
     const limit = parseInt(req.query.limit) || 5; // Default to 5 most recent chats
     
     console.log(`[API] Getting ${limit} most recent chats`);
-    const recentChats = chatHandler.getRecentChats(limit);
     
-    // Return the array of chats - already formatted by getRecentChats
+    // Fallback implementation if getRecentChats doesn't exist
+    let recentChats;
+    if (typeof chatHandler.getRecentChats === 'function') {
+      recentChats = chatHandler.getRecentChats(limit);
+    } else {
+      // Use getAllChats and slice for recent chats
+      console.log('[API] Using getAllChats fallback for recent chats');
+      const allChats = chatHandler.getAllChats ? chatHandler.getAllChats() : [];
+      recentChats = allChats.slice(0, limit);
+    }
+    
+    // Return the array of chats
     res.json(recentChats);
   } catch (error) {
     console.error('Error getting recent chats:', error);
