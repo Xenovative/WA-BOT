@@ -205,6 +205,21 @@ if (!chatHandler.isChatBlocked) {
 // Flag to track if shutdown is in progress
 let isShuttingDown = false;
 
+// Message deduplication to prevent double responses
+const processedMessages = new Set();
+const MESSAGE_CACHE_SIZE = 1000; // Keep track of last 1000 messages
+
+// Clean up old message IDs periodically
+setInterval(() => {
+  if (processedMessages.size > MESSAGE_CACHE_SIZE) {
+    const messageArray = Array.from(processedMessages);
+    processedMessages.clear();
+    // Keep only the most recent half
+    messageArray.slice(-MESSAGE_CACHE_SIZE / 2).forEach(id => processedMessages.add(id));
+    console.log('[Dedup] Cleaned up old message IDs');
+  }
+}, 60000); // Clean every minute
+
 /**
  * Handle graceful shutdown of the application
  */
@@ -623,6 +638,15 @@ client.on('message', async (message) => {
     console.log('[Message-Event] Skipping message from self');
     return;
   }
+  
+  // Message deduplication - prevent processing the same message twice
+  const messageId = message.id?.id || message.id?._serialized || `${message.from}_${message.timestamp}_${message.body?.substring(0, 20)}`;
+  if (processedMessages.has(messageId)) {
+    console.log(`[Dedup] Skipping already processed message: ${messageId}`);
+    return;
+  }
+  processedMessages.add(messageId);
+  console.log(`[Dedup] Processing new message: ${messageId}`);
   
   // Initialize message type flags if not set
   message.isCommand = message.isCommand || false;
