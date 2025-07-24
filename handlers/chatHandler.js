@@ -20,16 +20,12 @@ class ChatHandler {
       fs.mkdirSync(this.chatHistoryDir, { recursive: true });
     }
     
-<<<<<<< HEAD
-    // Load conversations and blocked chats from disk
-    this.loadConversations();
-    this.loadBlockedChats();
-=======
     // Migrate any existing chat files to the new format
     this.migrateChatFiles();
     
-    // Load conversations from disk
+    // Load conversations and blocked chats from disk
     this.loadConversations();
+    this.loadBlockedChats();
     console.log('[ChatHandler] Conversations loaded from disk');
   }
   
@@ -138,7 +134,6 @@ class ChatHandler {
     } else {
       console.log('[ChatHandler] No chat files needed migration.');
     }
->>>>>>> 419b5de754e9e3096c99beb72837db7a9eeb50bc
   }
 
   /**
@@ -193,10 +188,18 @@ class ChatHandler {
    * @param {string} [content] - Message content (if roleOrMessage is a string)
    * @param {string} [platform] - Platform identifier ('telegram', 'whatsapp', etc.)
    */
-<<<<<<< HEAD
   addMessage(chatId, roleOrMessage, content, platform) {
+    // Validate input parameters
+    if (!chatId || chatId.trim() === '' || chatId === 'undefined' || chatId === 'null') {
+      console.log('[ChatHandler] Invalid chat ID provided, skipping message:', chatId);
+      return;
+    }
+    
+    // Ensure chatId is a string
+    chatId = String(chatId).trim();
+    
     let message;
-    let actualChatId = chatId;
+    let formattedChatId;
     
     // Handle both old format (role, content, platform) and new format (message object)
     if (typeof roleOrMessage === 'object') {
@@ -207,10 +210,36 @@ class ChatHandler {
         timestamp: roleOrMessage.timestamp || new Date().toISOString(),
         isManual: roleOrMessage.isManual || false
       };
+      formattedChatId = chatId; // Use chatId as-is for new format
     } else {
       // Old format: separate parameters
       const role = roleOrMessage;
-      actualChatId = platform ? this.getPlatformChatId(platform, chatId) : chatId;
+      
+      // Format the chat ID for storage consistently
+      if (chatId.startsWith('chat_')) {
+        formattedChatId = chatId;
+      } else if (chatId.match(/^(whatsapp|telegram)_/i)) {
+        formattedChatId = `chat_${chatId}`;
+      } else if (platform) {
+        const cleanId = chatId
+          .replace(/[@].*$/, '')           // Remove everything after @ (like @c.us)
+          .replace(/[^a-z0-9]/gi, '_')     // Replace special chars with underscore
+          .toLowerCase();
+        formattedChatId = `chat_${platform.toLowerCase()}_${cleanId}`;
+      } else {
+        const cleanId = chatId
+          .replace(/[@].*$/, '')
+          .replace(/[^a-z0-9]/gi, '_')
+          .toLowerCase();
+        
+        if (cleanId === '' || cleanId === 'chat' || cleanId === '_') {
+          formattedChatId = `chat_unknown_${Date.now()}`;
+          console.warn(`[ChatHandler] Problematic chat ID "${chatId}" normalized to ${formattedChatId}`);
+        } else {
+          formattedChatId = `chat_${cleanId}`;
+        }
+      }
+      
       message = {
         role,
         content,
@@ -218,55 +247,7 @@ class ChatHandler {
       };
     }
     
-    console.log(`[ChatHandler] Adding ${message.role} message to chat ${actualChatId}`);
-=======
-  addMessage(chatId, role, content, platform) {
-    // Validate input parameters
-    if (!chatId || chatId.trim() === '' || chatId === 'undefined' || chatId === 'null') {
-      console.log('[ChatHandler] Invalid chat ID provided, skipping message:', chatId);
-      return;
-    }
-    
-    // Ensure chatId is a string
-    chatId = String(chatId).trim();
-    
-    // Format the chat ID for storage consistently
-    let formattedChatId;
-    
-    // If chatId already starts with 'chat_', use it directly
-    if (chatId.startsWith('chat_')) {
-      formattedChatId = chatId;
-    } 
-    // If it has a platform prefix but no chat_ prefix (like 'whatsapp_123')
-    else if (chatId.match(/^(whatsapp|telegram)_/i)) {
-      formattedChatId = `chat_${chatId}`;
-    }
-    // If we have platform info, normalize the chat ID
-    else if (platform) {
-      // Clean the chat ID and add platform prefix
-      const cleanId = chatId
-        .replace(/[@].*$/, '')           // Remove everything after @ (like @c.us)
-        .replace(/[^a-z0-9]/gi, '_')     // Replace special chars with underscore
-        .toLowerCase();
-      formattedChatId = `chat_${platform.toLowerCase()}_${cleanId}`;
-    }
-    // No platform info available, use generic format
-    else {
-      const cleanId = chatId
-        .replace(/[@].*$/, '')
-        .replace(/[^a-z0-9]/gi, '_')
-        .toLowerCase();
-      
-      // Prevent problematic file names
-      if (cleanId === '' || cleanId === 'chat' || cleanId === '_') {
-        formattedChatId = `chat_unknown_${Date.now()}`;
-        console.warn(`[ChatHandler] Problematic chat ID "${chatId}" normalized to ${formattedChatId}`);
-      } else {
-        formattedChatId = `chat_${cleanId}`;
-      }
-    }
-    
-    console.log(`[ChatHandler] Adding ${role} message to chat ${formattedChatId} (original: ${chatId})`);
+    console.log(`[ChatHandler] Adding ${message.role} message to chat ${formattedChatId}`);
     
     // Check if we have this conversation in memory
     if (!this.conversations.has(formattedChatId)) {
@@ -275,21 +256,8 @@ class ChatHandler {
     }
     
     const conversation = this.conversations.get(formattedChatId);
-    const timestamp = new Date().toISOString();
->>>>>>> 419b5de754e9e3096c99beb72837db7a9eeb50bc
-    
-    if (!this.conversations.has(actualChatId)) {
-      console.log(`[ChatHandler] Creating new conversation for chat ${actualChatId}`);
-      this.conversations.set(actualChatId, []);
-    }
-    
-    const conversation = this.conversations.get(actualChatId);
     conversation.push(message);
-<<<<<<< HEAD
-    console.log(`[ChatHandler] Added message to chat ${actualChatId}, total messages: ${conversation.length}`);
-=======
     console.log(`[ChatHandler] Added message to chat ${formattedChatId}, total messages: ${conversation.length}`);
->>>>>>> 419b5de754e9e3096c99beb72837db7a9eeb50bc
     
     // Persist to disk immediately
     try {
