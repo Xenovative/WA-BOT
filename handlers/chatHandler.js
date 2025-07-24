@@ -17,8 +17,118 @@ class ChatHandler {
       fs.mkdirSync(this.chatHistoryDir, { recursive: true });
     }
     
+    // Migrate any existing chat files to the new format
+    this.migrateChatFiles();
+    
     // Load conversations from disk
     this.loadConversations();
+  }
+  
+  /**
+   * Migrate existing chat files to the new naming convention and consolidate duplicates
+   */
+  migrateChatFiles() {
+    if (!fs.existsSync(this.chatHistoryDir)) {
+      return;
+    }
+
+    console.log('[ChatHandler] Starting chat files migration...');
+    const files = fs.readdirSync(this.chatHistoryDir);
+    const chatFiles = files.filter(file => file.endsWith('.json') && file !== 'chats.json');
+    
+    // Group files by normalized chat ID
+    const chatGroups = new Map();
+    
+    chatFiles.forEach(file => {
+      try {
+        const chatId = path.basename(file, '.json');
+        const filePath = path.join(this.chatHistoryDir, file);
+        const content = fs.readFileSync(filePath, 'utf8');
+        
+        // Normalize the chat ID for grouping
+        let normalizedId = chatId
+          .replace(/^whatsapp[:._-]?/i, '')
+          .replace(/^telegram[:._-]?/i, '')
+          .replace(/[@_].*$/, '')
+          .replace(/[^a-z0-9]/gi, '_')
+          .toLowerCase();
+          
+        if (!normalizedId) return;
+        
+        // Add to the appropriate group
+        if (!chatGroups.has(normalizedId)) {
+          chatGroups.set(normalizedId, []);
+        }
+        chatGroups.get(normalizedId).push({ file, path: filePath, content });
+        
+      } catch (error) {
+        console.error(`[ChatHandler] Error processing file ${file} during migration:`, error);
+      }
+    });
+    
+    // Process each group of files
+    let migratedCount = 0;
+    chatGroups.forEach((files, normalizedId) => {
+      if (files.length <= 1) return; // No need to migrate single files
+      
+      try {
+        console.log(`[ChatHandler] Found ${files.length} files for chat ${normalizedId}`);
+        
+        // Merge all messages from all files
+        const allMessages = [];
+        files.forEach(fileInfo => {
+          try {
+            const messages = JSON.parse(fileInfo.content);
+            if (Array.isArray(messages)) {
+              allMessages.push(...messages);
+            }
+          } catch (e) {
+            console.error(`[ChatHandler] Error parsing ${fileInfo.file}:`, e);
+          }
+        });
+        
+        if (allMessages.length === 0) return;
+        
+        // Deduplicate and sort messages
+        const messageMap = new Map();
+        allMessages.forEach(msg => {
+          const key = `${msg.timestamp}_${msg.content}`;
+          messageMap.set(key, msg);
+        });
+        
+        const uniqueMessages = Array.from(messageMap.values())
+          .sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
+        
+        // Save to new file
+        const newFilename = `chat_${normalizedId}.json`;
+        const newPath = path.join(this.chatHistoryDir, newFilename);
+        fs.writeFileSync(newPath, JSON.stringify(uniqueMessages, null, 2));
+        
+        // Remove old files
+        files.forEach(fileInfo => {
+          if (fileInfo.path !== newPath) {
+            try {
+              fs.unlinkSync(fileInfo.path);
+              console.log(`[ChatHandler] Removed old chat file: ${fileInfo.file}`);
+            } catch (e) {
+              console.error(`[ChatHandler] Error removing ${fileInfo.file}:`, e);
+            }
+          }
+        });
+        
+        migratedCount++;
+        console.log(`[ChatHandler] Migrated ${files.length} files to ${newFilename} with ${uniqueMessages.length} messages`);
+        
+      } catch (error) {
+        console.error(`[ChatHandler] Error migrating chat ${normalizedId}:`, error);
+      }
+    });
+    
+    if (migratedCount > 0) {
+      console.log(`[ChatHandler] Migration complete. Processed ${migratedCount} chat groups.`);
+    } else {
+      console.log('[ChatHandler] No chat files needed migration.');
+    }
   }
 
   /**
@@ -192,8 +302,8 @@ class ChatHandler {
   }
   
   /**
-   * Get the path for a chat's history file
-   * @param {string} chatId - The chat ID
+   * Get the path for a chat's history file with consistent naming
+   * @param {string} chatId - The chat ID (can be in any format)
    * @returns {string} Path to the chat's history file
    */
   getChatFilePath(chatId) {
@@ -202,15 +312,56 @@ class ChatHandler {
       return path.join(this.chatHistoryDir, 'invalid_chat.json');
     }
     
-    // Try different formats of the chat ID
-    const originalPath = path.join(this.chatHistoryDir, `${chatId}.json`);
-    if (fs.existsSync(originalPath)) {
-      return originalPath;
+    // Normalize the chat ID to ensure consistent file naming
+    let normalizedId = chatId.toString().trim();
+    
+    // Remove common WhatsApp/Telegram suffixes and prefixes
+    normalizedId = normalizedId
+      .replace(/^whatsapp[:._-]?/i, '')  // Remove whatsapp: or whatsapp_ prefix
+      .replace(/^telegram[:._-]?/i, '')  // Remove telegram: or telegram_ prefix
+      .replace(/[@_].*$/, '')           // Remove everything after @ or _ (like @c.us)
+      .replace(/[^a-z0-9]/gi, '_')      // Replace special chars with underscore
+      .toLowerCase();
+    
+    // Ensure we have a valid filename
+    if (!normalizedId) {
+      console.error(`[ChatHandler] Invalid chatId after normalization: ${chatId}`);
+      return path.join(this.chatHistoryDir, 'invalid_chat.json');
     }
     
-    // Sanitize chat ID to create a valid filename
-    const safeChatId = chatId.toString().replace(/[^a-z0-9-_.]/gi, '_').toLowerCase();
-    return path.join(this.chatHistoryDir, `${safeChatId}.json`);
+    // Always use the normalized ID for the filename
+    const filename = `chat_${normalizedId}.json`;
+    const filePath = path.join(this.chatHistoryDir, filename);
+    
+    // Check for any existing files that might be the same chat
+    if (fs.existsSync(this.chatHistoryDir)) {
+      const files = fs.readdirSync(this.chatHistoryDir);
+      
+      // Look for files that might be the same chat but with different formatting
+      const possibleMatches = files.filter(file => {
+        if (file === filename) return false; // Skip exact match
+        
+        // Extract base ID from filename (remove 'chat_' and '.json')
+        const baseId = file.startsWith('chat_') && file.endsWith('.json')
+          ? file.slice(5, -5)
+          : '';
+          
+        // Check if this file might be the same chat
+        return baseId && (
+          baseId === normalizedId ||
+          baseId.startsWith(normalizedId) ||
+          normalizedId.startsWith(baseId)
+        );
+      });
+      
+      // If we found matching files, use the first one
+      if (possibleMatches.length > 0) {
+        console.log(`[ChatHandler] Found ${possibleMatches.length} possible matches for chat ${chatId}, using ${possibleMatches[0]}`);
+        return path.join(this.chatHistoryDir, possibleMatches[0]);
+      }
+    }
+    
+    return filePath;
   }
 
   // Save conversations to disk
