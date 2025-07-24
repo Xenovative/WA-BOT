@@ -48,10 +48,12 @@ files.forEach(file => {
     }
   }
   
-  // Normalize WhatsApp IDs - remove _c_us suffix for comparison
+  // Normalize WhatsApp IDs - remove WhatsApp domain suffixes for comparison
   let normalizedId = extractedId;
   if (extractedId.endsWith('_c_us')) {
     normalizedId = extractedId.replace('_c_us', '');
+  } else if (extractedId.endsWith('_c.us')) {
+    normalizedId = extractedId.replace('_c.us', '');
   }
   
   // Debug logging
