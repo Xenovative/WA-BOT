@@ -48,8 +48,14 @@ files.forEach(file => {
     }
   }
   
-  // Group by the extracted ID
-  const key = extractedId;
+  // Normalize WhatsApp IDs - remove _c_us suffix for comparison
+  let normalizedId = extractedId;
+  if (extractedId.endsWith('_c_us')) {
+    normalizedId = extractedId.replace('_c_us', '');
+  }
+  
+  // Group by the normalized ID to catch duplicates
+  const key = normalizedId;
   if (!groups[key]) groups[key] = [];
   groups[key].push({
     file,
