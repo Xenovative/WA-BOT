@@ -22,6 +22,7 @@ class ChatHandler {
     
     // Load conversations from disk
     this.loadConversations();
+    console.log('[ChatHandler] Conversations loaded from disk');
   }
   
   /**
@@ -239,9 +240,144 @@ class ChatHandler {
   }
 
   /**
+   * Load all conversations from disk into memory
+   * This is called during initialization and ensures all chat files are loaded
+   */
+  loadConversations() {
+    console.log('[ChatHandler] Loading all conversations from disk');
+    
+    try {
+      // Ensure chat history directory exists
+      if (!fs.existsSync(this.chatHistoryDir)) {
+        fs.mkdirSync(this.chatHistoryDir, { recursive: true });
+        console.log('[ChatHandler] Created chat history directory');
+        return;
+      }
+      
+      // Clear existing conversations to avoid duplicates
+      this.conversations.clear();
+      
+      // Load all existing chat files directly
+      const chatFiles = fs.readdirSync(this.chatHistoryDir).filter(
+        file => file.endsWith('.json') && file !== 'chats.json'
+      );
+      
+      console.log(`[ChatHandler] Found ${chatFiles.length} chat files to load`);
+      
+      // Track chat IDs to detect duplicates
+      const processedIds = new Set();
+      
+      // Load each chat file and populate conversations map
+      chatFiles.forEach(file => {
+        try {
+          // Get the original chat ID from the filename without modifications
+          const chatId = path.basename(file, '.json');
+          
+          // Skip if we've already processed this chat ID or a variant of it
+          for (const processedId of processedIds) {
+            if (this.isSameChatId(chatId, processedId)) {
+              console.log(`[ChatHandler] Skipping duplicate chat file ${file} (matches ${processedId})`);
+              return; // Skip this file
+            }
+          }
+          
+          const filePath = path.join(this.chatHistoryDir, file);
+          const fileContent = fs.readFileSync(filePath, 'utf8');
+          
+          try {
+            const messages = JSON.parse(fileContent);
+            if (Array.isArray(messages) && messages.length > 0) {
+              // Store messages in memory using the exact chat ID from the filename
+              this.conversations.set(chatId, messages);
+              processedIds.add(chatId); // Mark this ID as processed
+              console.log(`[ChatHandler] Loaded ${messages.length} messages for chat ${chatId}`);
+            } else {
+              console.warn(`[ChatHandler] Empty or invalid format in ${file}, initializing empty array`);
+              this.conversations.set(chatId, []);
+              processedIds.add(chatId); // Mark this ID as processed
+            }
+          } catch (parseError) {
+            console.error(`[ChatHandler] Error parsing ${file}:`, parseError);
+            this.conversations.set(chatId, []);
+            processedIds.add(chatId); // Mark this ID as processed
+          }
+        } catch (err) {
+          console.error(`[ChatHandler] Error processing chat file ${file}:`, err);
+        }
+      });
+      
+      // Update the index file to reflect current state
+      this.updateChatIndex();
+      
+      console.log(`[ChatHandler] Successfully loaded ${this.conversations.size} conversations from disk`);
+    } catch (error) {
+      console.error('[ChatHandler] Error loading conversations:', error);
+    }
+  }
+
+  /**
+   * Load a specific chat from disk
+   * @param {string} chatId - The chat ID to load
+   * @returns {Array} Array of message objects
+   */
+  loadChat(chatId) {
+    if (!chatId) {
+      console.log('[ChatHandler] No chat ID provided for loadChat');
+      return [];
+    }
+    
+    console.log(`[ChatHandler] Loading chat ${chatId} from disk`);
+    
+    try {
+      // Format the chat ID consistently
+      let formattedChatId;
+      
+      if (chatId.startsWith('chat_')) {
+        formattedChatId = chatId;
+      } else if (chatId.match(/^(whatsapp|telegram)_/i)) {
+        formattedChatId = `chat_${chatId}`;
+      } else {
+        formattedChatId = `chat_${chatId}`;
+      }
+      
+      // Get the file path for this chat
+      const chatFile = path.join(this.chatHistoryDir, `${formattedChatId}.json`);
+      
+      // Check if the file exists
+      if (fs.existsSync(chatFile)) {
+        const fileContent = fs.readFileSync(chatFile, 'utf8');
+        let messages = [];
+        
+        try {
+          messages = JSON.parse(fileContent);
+          if (!Array.isArray(messages)) {
+            console.error(`[ChatHandler] Chat file ${chatFile} does not contain an array`);
+            messages = [];
+          }
+        } catch (parseError) {
+          console.error(`[ChatHandler] Error parsing JSON for chat file ${chatFile}:`, parseError);
+        }
+        
+        // Store in memory
+        this.conversations.set(formattedChatId, messages);
+        console.log(`[ChatHandler] Loaded ${messages.length} messages for chat ${formattedChatId} from disk`);
+        return messages;
+      } else {
+        console.log(`[ChatHandler] No chat file found for ${formattedChatId}`);
+        // Create an empty conversation
+        this.conversations.set(formattedChatId, []);
+        return [];
+      }
+    } catch (error) {
+      console.error(`[ChatHandler] Error loading chat ${chatId}:`, error);
+      return [];
+    }
+  }
+
+  /**
    * Get conversation history for a chat
    * @param {string} chatId - The chat ID to get conversation for
-   * @param {string} [platform] - Platform identifier ('telegram', 'whatsapp', etc.)
+   * @param {string} [platform] - Platform identifier ('telegram', 'whatsapp', etc.')
    * @param {boolean} [forceReload=false] - Whether to force reload from disk
    * @returns {Array} Array of message objects
    */
