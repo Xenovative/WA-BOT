@@ -97,8 +97,13 @@ const upload = multer({
 // Create uploads directory if it doesn't exist
 fs.mkdirSync('uploads', { recursive: true });
 
-// Serve static files from the public directory
-app.use(express.static(path.join(__dirname, 'gui/public')));
+// Serve static files from the gui/public directory
+app.use(express.static(path.join(__dirname, 'gui', 'public')));
+
+// Serve test page for manual intervention
+app.get('/test-manual-intervention', (req, res) => {
+  res.sendFile(path.join(__dirname, 'test-manual-intervention.html'));
+});
 app.use(express.json());
 
 // Get workflow manager instance
@@ -787,6 +792,116 @@ app.post('/api/profile/delete', (req, res) => {
   }
 });
 
+// Send manual message via bot
+app.post('/api/chats/send-manual', async (req, res) => {
+  try {
+    const { chatId, message, aiResponseEnabled } = req.body;
+    
+    if (!chatId || !message) {
+      return res.status(400).json({
+        success: false,
+        error: 'Chat ID and message are required'
+      });
+    }
+    
+    console.log(`[API] Sending manual message to chat ${chatId}:`, message.substring(0, 50) + '...');
+    console.log(`[API] AI auto-response: ${aiResponseEnabled ? 'enabled' : 'disabled'}`);
+    
+    // Get the appropriate bot handler based on chat ID
+    let botHandler = null;
+    
+    const chatHandler = global.chatHandler || require('./handlers/chatHandler');
+    
+    // Parse the chat ID to extract platform and clean number
+    let platform, cleanNumber, sendToId;
+    
+    // Handle chat_ prefixed IDs (from chat history)
+    if (chatId.startsWith('chat_')) {
+      // Format: chat_whatsapp_85290897701 or chat_telegram_12345678
+      const parts = chatId.split('_');
+      if (parts.length >= 3) {
+        platform = parts[1]; // whatsapp or telegram
+        cleanNumber = parts.slice(2).join('_'); // handle numbers with underscores
+        console.log(`[API] Parsed chat_ prefixed ID - Platform: ${platform}, Number: ${cleanNumber}`);
+      } else if (parts.length === 2) {
+        // Handle case where it's just chat_12345678 (assume WhatsApp)
+        platform = 'whatsapp';
+        cleanNumber = parts[1];
+        console.log(`[API] Parsed simple chat_ ID as WhatsApp - Number: ${cleanNumber}`);
+      }
+    } 
+    // Handle telegram: prefix
+    else if (chatId.startsWith('telegram:')) {
+      // Format: telegram:12345678
+      platform = 'telegram';
+      cleanNumber = chatId.split(':')[1];
+    }
+    // Handle whatsapp: prefix or @c.us suffix
+    else if (chatId.startsWith('whatsapp:') || chatId.includes('@c.us') || chatId.includes('_c.us')) {
+      platform = 'whatsapp';
+      // Extract clean number (remove whatsapp: or whatsapp_ prefix and any @c.us or _c.us suffix)
+      cleanNumber = chatId
+        .replace(/^whatsapp[:_]?/i, '')  // Remove 'whatsapp:' or 'whatsapp_'
+        .replace(/[ _]?c\.us$/, '')     // Remove any _c.us or @c.us suffix
+        .replace('@', '');               // Remove any @ in the middle
+    }
+    
+    // If we have a platform and cleanNumber, proceed with sending
+    if (platform && cleanNumber) {
+      if (platform === 'telegram') {
+        sendToId = cleanNumber; // Telegram just needs the number
+        
+        if (!global.telegramBot) {
+          throw new Error('Telegram bot not available');
+        }
+        
+        // Send message via Telegram bot
+        await global.telegramBot.sendMessage(sendToId, message);
+      } else if (platform === 'whatsapp') {
+        // For sending, we need the format number@c.us
+        sendToId = `${cleanNumber}@c.us`;
+        
+        if (!global.whatsappClient?.client) {
+          throw new Error('WhatsApp client not available');
+        }
+        
+        console.log(`[API] Sending WhatsApp message to ${sendToId}`);
+        
+        // Send message via WhatsApp client
+        await global.whatsappClient.client.sendMessage(sendToId, message);
+      }
+    } else {
+      throw new Error(`Unsupported chat format: ${chatId}. Expected formats: chat_whatsapp_12345, chat_telegram_12345, whatsapp:12345, 12345@c.us`);
+    }
+    
+    // Use the same format as existing chat history files
+    const historyChatId = `${platform}_${cleanNumber}`.toLowerCase();
+    console.log(`[API] Adding to chat history with ID: ${historyChatId}`);
+    
+    // Add to chat history with the consistent ID format
+    chatHandler.addMessage(historyChatId, 'assistant', message, platform);
+    
+    console.log(`[API] Manual message sent via ${platform} to ${sendToId} (stored as ${historyChatId})`);
+    
+    // Store AI response preference for this chat (optional feature for future)
+    // This could be stored in a database or configuration file
+    
+    res.json({
+      success: true,
+      message: 'Message sent successfully',
+      chatId: chatId,
+      aiResponseEnabled: aiResponseEnabled
+    });
+    
+  } catch (error) {
+    console.error('Error sending manual message:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message || 'Failed to send message'
+    });
+  }
+});
+
 // Get recent chats
 app.get('/api/chats/recent', (req, res) => {
   try {
@@ -860,33 +975,132 @@ app.get('/api/chats', (req, res) => {
   }
 });
 
+// Block a chat from receiving AI responses
+app.post('/api/chats/block', express.json(), (req, res) => {
+  try {
+    const { chatId } = req.body;
+    
+    if (!chatId) {
+      return res.status(400).json({ success: false, error: 'Chat ID is required' });
+    }
+    
+    console.log(`[API] Blocking AI responses for chat: ${chatId}`);
+    
+    // Get the workflow manager to handle blocking
+    const WorkflowManager = require('./workflow/workflowManager');
+    const workflowManager = global.workflowManager || (global.workflowManager = new WorkflowManager());
+    
+    // Add to blocked chats list
+    workflowManager.blockChat(chatId);
+    
+    return res.json({ success: true, message: `Chat ${chatId} blocked from AI responses` });
+  } catch (error) {
+    console.error('[API] Error blocking chat:', error);
+    return res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Unblock a chat to resume AI responses
+app.post('/api/chats/unblock', express.json(), (req, res) => {
+  try {
+    const { chatId } = req.body;
+    
+    if (!chatId) {
+      return res.status(400).json({ success: false, error: 'Chat ID is required' });
+    }
+    
+    console.log(`[API] Unblocking AI responses for chat: ${chatId}`);
+    
+    // Get the workflow manager to handle unblocking
+    const WorkflowManager = require('./workflow/workflowManager');
+    const workflowManager = global.workflowManager || (global.workflowManager = new WorkflowManager());
+    
+    // Remove from blocked chats list
+    workflowManager.unblockChat(chatId);
+    
+    return res.json({ success: true, message: `Chat ${chatId} unblocked for AI responses` });
+  } catch (error) {
+    console.error('[API] Error unblocking chat:', error);
+    return res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Check if a chat is blocked
+app.get('/api/chats/:chatId/blocked', (req, res) => {
+  try {
+    const chatId = req.params.chatId;
+    
+    if (!chatId) {
+      return res.status(400).json({ success: false, error: 'Chat ID is required' });
+    }
+    
+    // Get the workflow manager to check blocked status
+    const WorkflowManager = require('./workflow/workflowManager');
+    const workflowManager = global.workflowManager || (global.workflowManager = new WorkflowManager());
+    
+    // Check if chat is in blocked list
+    const isBlocked = workflowManager.isChatBlocked(chatId);
+    
+    return res.json({ success: true, blocked: isBlocked });
+  } catch (error) {
+    console.error('[API] Error checking blocked status:', error);
+    return res.status(500).json({ success: false, error: error.message });
+  }
+});
+
 app.get('/api/chats/:chatId', (req, res) => {
   try {
-    console.log(`[DEBUG] Received request for chat ID: ${req.params.chatId}`);
+    const start = Date.now();
     const chatHandler = global.chatHandler || require('./handlers/chatHandler');
     const chatId = req.params.chatId;
     
     if (!chatId) {
-      console.log('[DEBUG] No chat ID provided');
       return res.status(400).json({ error: 'Chat ID is required' });
     }
     
-    console.log(`[DEBUG] Getting conversation for chat ID: ${chatId}`);
-    const messages = chatHandler.getConversation(chatId);
-    console.log(`[DEBUG] Retrieved ${messages ? messages.length : 0} messages for chat ID: ${chatId}`);
-    console.log('[DEBUG] First few messages:', messages.slice(0, 2));
+    console.log(`[API] Retrieving chat with ID: ${chatId}`);
     
-    // Get chat metadata
-    console.log(`[DEBUG] Getting chat metadata for ID: ${chatId}`);
-    const allChats = chatHandler.getAllChats();
-    console.log(`[DEBUG] Found ${allChats.length} total chats`);
+    // Extract platform from chat ID if present
+    let platform = null;
+    if (chatId.startsWith('chat_')) {
+      const parts = chatId.split('_');
+      if (parts.length >= 3) {
+        platform = parts[1]; // whatsapp or telegram
+      }
+    } else if (chatId.match(/^(whatsapp|telegram)[:._-]/i)) {
+      platform = chatId.match(/^(whatsapp|telegram)/i)[1].toLowerCase();
+    }
     
-    const chatInfo = allChats.find(chat => chat.id === chatId) || {
-      id: chatId,
-      messageCount: messages.length,
-      timestamp: messages.length > 0 ? messages[messages.length - 1].timestamp : new Date().toISOString()
-    };
-    console.log('[DEBUG] Chat info:', chatInfo);
+    console.log(`[API] Detected platform: ${platform || 'unknown'} for chat ${chatId}`);
+    
+    // Get conversation from memory cache when possible
+    const forceReload = req.query.reload === 'true';
+    const messages = chatHandler.getConversation(chatId, platform, forceReload);
+    
+    // Get chat metadata efficiently
+    let chatInfo;
+    try {
+      // Try to find in existing chats first
+      const allChats = chatHandler.getAllChats();
+      // Match by ID or normalized ID
+      chatInfo = allChats.find(chat => {
+        return chat.id === chatId || 
+               (chat.id.startsWith('chat_') && chat.id.includes(chatId)) || 
+               (chatId.startsWith('chat_') && chatId.includes(chat.id));
+      });
+    } catch (err) {
+      // Fallback if getAllChats fails
+      console.warn(`[API] Couldn't get metadata for chat ${chatId}:`, err.message);
+    }
+    
+    // If no metadata found, create basic info
+    if (!chatInfo) {
+      chatInfo = {
+        id: chatId,
+        messageCount: messages.length,
+        timestamp: messages.length > 0 ? messages[messages.length - 1].timestamp : new Date().toISOString()
+      };
+    }
     
     const response = {
       success: true,
@@ -894,11 +1108,13 @@ app.get('/api/chats/:chatId', (req, res) => {
       ...chatInfo,
       conversation: messages
     };
-    console.log('[DEBUG] Sending response with conversation length:', messages.length);
+    
+    const elapsed = Date.now() - start;
+    console.log(`[API] Chat ${chatId} loaded with ${messages.length} messages in ${elapsed}ms`);
     
     res.json(response);
   } catch (error) {
-    console.error(`Error getting chat ${req.params.chatId}:`, error);
+    console.error(`[API] Error getting chat ${req.params.chatId}:`, error);
     res.status(500).json({ 
       error: `Failed to load chat ${req.params.chatId}`,
       details: error.message 
@@ -906,30 +1122,46 @@ app.get('/api/chats/:chatId', (req, res) => {
   }
 });
 
-app.delete('/api/chats/:chatId', (req, res) => {
+app.delete('/api/chats/:chatId', async (req, res) => {
   try {
     const chatHandler = global.chatHandler || require('./handlers/chatHandler');
-    const chatId = req.params.chatId;
+    let chatId = req.params.chatId;
     
     if (!chatId) {
       return res.status(400).json({ error: 'Chat ID is required' });
     }
     
-    // Check if chat exists
-    const chatExists = chatHandler.getAllChats().some(chat => chat.id === chatId);
+    console.log(`[API] Deleting chat: ${chatId}`);
+    
+    // Try to find the exact chat ID in all possible formats
+    const allChats = chatHandler.getAllChats();
+    console.log(`[API] Available chats:`, allChats.map(c => c.id));
+    
+    // Check if chat exists (case insensitive and handle different formats)
+    const chatExists = allChats.some(chat => 
+      chat.id === chatId || 
+      chat.id.toLowerCase() === chatId.toLowerCase() ||
+      chat.id.replace(/[ _]/g, '') === chatId.replace(/[ _]/g, '')
+    );
+    
     if (!chatExists) {
-      return res.status(404).json({ error: 'Chat not found' });
+      console.log(`[API] Chat not found: ${chatId}`);
+      return res.status(404).json({ 
+        error: 'Chat not found',
+        details: `No chat found with ID: ${chatId}`
+      });
     }
     
     // Delete the chat
-    chatHandler.deleteChat(chatId);
+    await chatHandler.deleteChat(chatId);
+    console.log(`[API] Successfully deleted chat: ${chatId}`);
     
     res.json({ 
       success: true,
-      message: `Chat ${chatId} deleted successfully`
+      message: `Chat deleted successfully`
     });
   } catch (error) {
-    console.error(`Error deleting chat ${req.params.chatId}:`, error);
+    console.error(`[API] Error deleting chat ${req.params.chatId}:`, error);
     res.status(500).json({ 
       error: `Failed to delete chat ${req.params.chatId}`,
       details: error.message 

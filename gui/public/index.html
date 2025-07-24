@@ -797,22 +797,55 @@
 
     <!-- Modal for Chat Messages -->
     <div class="modal fade" id="chatModal" tabindex="-1" aria-labelledby="chatModalLabel" aria-hidden="true">
-        <div class="modal-dialog modal-dialog-scrollable modal-lg">
+        <div class="modal-dialog modal-xl modal-dialog-scrollable">
             <div class="modal-content h-100">
                 <div class="modal-header bg-light">
-                    <h5 class="modal-title" id="chatModalTitle">Chat Details</h5>
+                    <div class="d-flex align-items-center">
+                        <h5 class="modal-title me-3" id="chatModalTitle">Chat Details</h5>
+                        <div class="form-check form-switch">
+                            <input class="form-check-input" type="checkbox" id="aiResponseToggle" checked>
+                            <label class="form-check-label" for="aiResponseToggle">
+                                <i class="bi bi-robot me-1"></i> AI Auto-Response
+                            </label>
+                        </div>
+                    </div>
                     <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
                 </div>
-                <div class="modal-body p-0" style="min-height: 60vh; max-height: 70vh; overflow-y: auto;">
+                <div class="modal-body p-0" style="min-height: 60vh; max-height: 60vh; overflow-y: auto;">
                     <div id="chatMessages" class="p-3"></div>
                 </div>
-                <div class="modal-footer bg-light">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
-                        <i class="bi bi-x-circle me-1"></i> Close
-                    </button>
-                    <button type="button" class="btn btn-primary" id="exportChatBtn">
-                        <i class="bi bi-download me-1"></i> Export
-                    </button>
+                <div class="modal-footer bg-light p-3">
+                    <!-- Manual Message Input -->
+                    <div class="w-100 mb-3">
+                        <div class="input-group">
+                            <textarea class="form-control" id="manualMessageInput" rows="2" 
+                                      placeholder="Type a message to send via the bot..."></textarea>
+                            <button class="btn btn-primary" type="button" id="sendManualMessage">
+                                <i class="bi bi-send me-1"></i> Send
+                            </button>
+                        </div>
+                        <div class="form-text">
+                            <i class="bi bi-info-circle me-1"></i>
+                            This message will be sent through the bot to the chat participant.
+                        </div>
+                    </div>
+                    
+                    <!-- Action Buttons -->
+                    <div class="d-flex justify-content-between w-100">
+                        <div>
+                            <button type="button" class="btn btn-outline-secondary" id="refreshChatBtn">
+                                <i class="bi bi-arrow-clockwise me-1"></i> Refresh
+                            </button>
+                        </div>
+                        <div>
+                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+                                <i class="bi bi-x-circle me-1"></i> Close
+                            </button>
+                            <button type="button" class="btn btn-primary" id="exportChatBtn">
+                                <i class="bi bi-download me-1"></i> Export
+                            </button>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
@@ -866,5 +899,6 @@
     <script src="/js/script.js"></script>
     <script src="/js/admin.js"></script>
     <script src="/js/branding.js"></script>
+    <script src="/js/manual-intervention.js"></script>
 </body>
 </html>

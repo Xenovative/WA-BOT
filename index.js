@@ -35,8 +35,9 @@ if (process.env.TELEGRAM_BOT_TOKEN) {
   }
 }
 
-// Make chatHandler globally available for workflow messages
+// Make chatHandler and workflowManager globally available
 global.chatHandler = chatHandler;
+global.workflowManager = workflowManager;
 
 // Flag to track if shutdown is in progress
 let isShuttingDown = false;
@@ -993,10 +994,21 @@ client.on('message', async (message) => {
       
       let response;
       
+      // Format the chat ID to match the expected format in workflowManager
+      const cleanChatId = chatId.includes('@g.us') ? chatId.split('@')[0] : chatId;
+      const formattedChatId = `whatsapp_${cleanChatId}`;
+      
+      // Check if this chat is blocked from AI responses
+      const isChatBlocked = workflowManager.isChatBlocked(formattedChatId);
+      console.log(`[Group Chat] Chat ${formattedChatId} blocked status: ${isChatBlocked}`);
+      
       // Check if message is a command
       if (commandHandler.isCommand(cleanMessageText)) {
         response = await commandHandler.processCommand(cleanMessageText, chatId, message.author || message.from);
         updateLLMClient(); // Update LLM client if provider/model changed
+      } else if (isChatBlocked) {
+        console.log(`[Group Chat] Skipping AI response for blocked chat: ${formattedChatId}`);
+        return; // Skip AI response generation for blocked chats
       } else {
         // Add user message to chat history with platform identifier
         chatHandler.addMessage(chatId, 'user', cleanMessageText, 'whatsapp');
@@ -1047,13 +1059,17 @@ client.on('message', async (message) => {
         }
       }
       
+      // Format the chat ID to match the expected format in chatHandler
+      // Already defined above
+      
       // Send response back as automated message with appropriate flags
       await sendAutomatedMessage(message.from, response, {
         isCommandResponse: message.isCommand,
         isReplyToBot: message.isReplyToBot,
         isBotResponse: true,    // Explicitly mark as bot response
         isAutomated: true,      // Mark as automated
-        isResponseToUser: true  // Mark as response to user
+        isResponseToUser: true, // Mark as response to user
+        chatId: formattedChatId // Include formatted chat ID in options
       });
       console.log('[Group Chat] Response sent successfully');
     } catch (error) {
@@ -1116,16 +1132,27 @@ client.on('message', async (message) => {
     
     let response;
     
+    // Format the chat ID to match the expected format in workflowManager
+    const cleanChatId = chatId.includes('@c.us') ? chatId.split('@')[0] : chatId;
+    const formattedChatId = `whatsapp_${cleanChatId}`;
+    
+    // Check if this chat is blocked from AI responses
+    const isChatBlocked = workflowManager.isChatBlocked(formattedChatId);
+    console.log(`[Direct] Chat ${formattedChatId} blocked status: ${isChatBlocked}`);
+    
     // Check if message is a command
     if (commandHandler.isCommand(messageText)) {
       response = await commandHandler.processCommand(messageText, chatId, message.from);
       updateLLMClient(); // Update LLM client if provider/model changed
+    } else if (isChatBlocked) {
+      console.log(`[Direct] Skipping AI response for blocked chat: ${formattedChatId}`);
+      return; // Skip AI response generation for blocked chats
     } else {
-      // Add user message to chat history
-      chatHandler.addMessage(chatId, 'user', messageText);
+      // Add user message to chat history with platform identifier
+      chatHandler.addMessage(chatId, 'user', messageText, 'whatsapp');
       
-      // Get conversation history
-      const conversation = chatHandler.getConversation(chatId);
+      // Get conversation history with platform identifier
+      const conversation = chatHandler.getConversation(chatId, 'whatsapp');
       
       // Get current settings
       const settings = commandHandler.getCurrentSettings();
@@ -1157,8 +1184,11 @@ client.on('message', async (message) => {
         response = await currentLLMClient.generateResponse(messageText, messages, settings.parameters);
       }
       
-      // Add assistant response to chat history
-      chatHandler.addMessage(chatId, 'assistant', response);
+      // Format the chat ID to match the expected format in chatHandler
+      // Already defined above
+      
+      // Add assistant response to chat history with platform identifier
+      chatHandler.addMessage(formattedChatId, 'assistant', response, 'whatsapp');
       
       // Add citations if RAG was used and citations are enabled
       const showCitations = process.env.KB_SHOW_CITATIONS === 'true';
@@ -1170,11 +1200,20 @@ client.on('message', async (message) => {
       }
     }
     
-    // Send response
+    // Send response with proper chat ID format
     if (message && typeof message.reply === 'function') {
+      // Use reply with the original message to maintain thread context
       await message.reply(response);
+    } else if (message) {
+      // Fallback to sendMessage if reply is not available
+      await sendAutomatedMessage(chatId, response, {
+        isBotResponse: true,
+        isAutomated: true,
+        isResponseToUser: true,
+        chatId: formattedChatId
+      });
     } else {
-      console.error('Invalid message object, cannot send reply:', message);
+      console.error('Invalid message object, cannot send reply');
     }
   } catch (error) {
     console.error('Error processing message:', error);

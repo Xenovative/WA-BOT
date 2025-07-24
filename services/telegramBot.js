@@ -8,6 +8,9 @@ const blocklist = require('../utils/blocklist');
 const rateLimiter = require('../utils/rateLimiter');
 const voiceHandler = require('../utils/voiceHandler');
 
+// Get the global workflowManager instance
+const workflowManager = global.workflowManager;
+
 class TelegramBotService {
   constructor(token) {
     if (!token || !/^\d+:[-a-zA-Z0-9_]+$/.test(token)) {
@@ -250,6 +253,19 @@ class TelegramBotService {
         return;
       }
       
+      // Format the chat ID to match the expected format in workflowManager
+      const formattedChatId = `telegram_${chatId}`;
+      
+      // Check if this chat is blocked from AI responses
+      const isChatBlocked = workflowManager ? workflowManager.isChatBlocked(formattedChatId) : false;
+      console.log(`[Telegram] Chat ${formattedChatId} blocked status: ${isChatBlocked}`);
+      
+      // If chat is blocked from AI responses, skip processing unless it's a command
+      if (isChatBlocked && !messageText.startsWith('/') && !commandHandler.isCommand(cleanMessageText)) {
+        console.log(`[Telegram] Skipping AI response for blocked chat: ${formattedChatId}`);
+        return;
+      }
+      
       // Check rate limit for non-admin users
       if (!commandHandler.isAdmin(userId)) {
         const limitCheck = rateLimiter.checkLimit(userId);
@@ -280,10 +296,10 @@ class TelegramBotService {
       await this.bot.sendChatAction(chatId, 'typing');
       
       // Add user message to chat history with platform identifier
-      chatHandler.addMessage(chatId, 'user', cleanMessageText, 'telegram');
+      chatHandler.addMessage(formattedChatId, 'user', cleanMessageText, 'telegram');
       
       // Get conversation history with platform identifier
-      const conversation = chatHandler.getConversation(chatId, 'telegram');
+      const conversation = chatHandler.getConversation(formattedChatId, 'telegram');
       
       // Get current settings
       const settings = commandHandler.getCurrentSettings();
@@ -323,7 +339,7 @@ class TelegramBotService {
       }
       
       // Add assistant response to chat history with platform identifier
-      chatHandler.addMessage(chatId, 'assistant', response, 'telegram');
+      chatHandler.addMessage(formattedChatId, 'assistant', response, 'telegram');
       
       // Send the response
       await this.sendMessage(chatId, response);
