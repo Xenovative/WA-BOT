@@ -383,12 +383,13 @@ client.sendMessage = async function(chatId, content, options = {}) {
     return originalSendMessage(chatId, content, options);
   }
   
-  // Skip if it's an automated message, bot response, or forwarded message
-  if (options.isAutomated || options.isBotResponse || options.isResponseToUser) {
-    console.log(`[${timestamp}] [${debugId}] [Message-Debug] Skipping automated/bot message`, {
+  // Skip if it's an automated message, bot response, forwarded message, or manual message
+  if (options.isAutomated || options.isBotResponse || options.isResponseToUser || options.isManual) {
+    console.log(`[${timestamp}] [${debugId}] [Message-Debug] Skipping automated/bot/manual message`, {
       isAutomated: options.isAutomated,
       isBotResponse: options.isBotResponse,
-      isResponseToUser: options.isResponseToUser
+      isResponseToUser: options.isResponseToUser,
+      isManual: options.isManual
     });
     return originalSendMessage(chatId, content, options);
   }

@@ -889,6 +889,12 @@ app.post('/api/chats/send-manual', async (req, res) => {
           suppressAiResponse: !aiResponseEnabled  // Invert because aiResponseEnabled=false means suppress AI
         };
         
+        console.log(`[API] Sending manual WhatsApp message with options:`, {
+          sendToId,
+          messageLength: message.length,
+          sendOptions
+        });
+        
         await global.whatsappClient.client.sendMessage(sendToId, message, sendOptions);
       }
     } else {
