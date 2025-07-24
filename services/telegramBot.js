@@ -253,18 +253,16 @@ class TelegramBotService {
         return;
       }
       
-      // Use native chat ID directly
-      const nativeChatId = String(chatId); // Telegram native format: '1234567890'
+      // Format the chat ID to match the expected format in workflowManager
+      const formattedChatId = `telegram_${chatId}`;
       
       // Check if this chat is blocked from AI responses
-      const isChatBlocked = chatHandler.isChatBlocked(nativeChatId);
-      console.log(`[Telegram] Chat ${nativeChatId} blocked status: ${isChatBlocked}`);
+      const isChatBlocked = workflowManager ? workflowManager.isChatBlocked(formattedChatId) : false;
+      console.log(`[Telegram] Chat ${formattedChatId} blocked status: ${isChatBlocked}`);
       
       // If chat is blocked from AI responses, skip processing unless it's a command
       if (isChatBlocked && !messageText.startsWith('/') && !commandHandler.isCommand(cleanMessageText)) {
-        console.log(`[Telegram] Skipping AI response for blocked chat: ${nativeChatId}`);
-        // Still save user message to chat history even when AI is blocked
-        chatHandler.addMessage(nativeChatId, 'user', cleanMessageText);
+        console.log(`[Telegram] Skipping AI response for blocked chat: ${formattedChatId}`);
         return;
       }
       
@@ -297,11 +295,11 @@ class TelegramBotService {
       // Send typing indicator
       await this.bot.sendChatAction(chatId, 'typing');
       
-      // Add user message to chat history
-      chatHandler.addMessage(nativeChatId, 'user', cleanMessageText);
+      // Add user message to chat history with platform identifier
+      chatHandler.addMessage(formattedChatId, 'user', cleanMessageText, 'telegram');
       
-      // Get conversation history
-      const conversation = chatHandler.getConversation(nativeChatId);
+      // Get conversation history with platform identifier
+      const conversation = chatHandler.getConversation(formattedChatId, 'telegram');
       
       // Get current settings
       const settings = commandHandler.getCurrentSettings();
@@ -340,8 +338,8 @@ class TelegramBotService {
         response = await currentLLMClient.generateResponse(cleanMessageText, messages, settings.parameters);
       }
       
-      // Add assistant response to chat history
-      chatHandler.addMessage(nativeChatId, 'assistant', response);
+      // Add assistant response to chat history with platform identifier
+      chatHandler.addMessage(formattedChatId, 'assistant', response, 'telegram');
       
       // Send the response
       await this.sendMessage(chatId, response);

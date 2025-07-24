@@ -1,104 +1,65 @@
 /**
- * Manages conversation history for chats using native chat IDs
+ * Manages conversation history for chats
  */
 const fs = require('fs');
 const path = require('path');
 
 class ChatHandler {
   constructor() {
-    // Map to store conversation history by native chat ID
+    // Map to store conversation history by chat ID
     this.conversations = new Map();
-    // Set to store blocked chat IDs (where AI responses are disabled)
-    this.blockedChats = new Set();
     // Directory to store chat history
     this.chatHistoryDir = path.join(__dirname, '../chat_history');
     this.storageFile = path.join(this.chatHistoryDir, 'chats.json');
-    this.blockedChatsFile = path.join(this.chatHistoryDir, 'blocked_chats.json');
     
     // Ensure chat history directory exists
     if (!fs.existsSync(this.chatHistoryDir)) {
       fs.mkdirSync(this.chatHistoryDir, { recursive: true });
     }
     
-    // Load conversations and blocked chats from disk
+    // Load conversations from disk
     this.loadConversations();
-    this.loadBlockedChats();
-    console.log('[ChatHandler] Conversations loaded from disk');
   }
 
   /**
-   * Sanitize a chat ID for safe filesystem storage while preserving native format
-   * @param {string} chatId - Native chat ID (e.g., '1234567890@c.us', '1234567890')
-   * @returns {string} Safe filename based on chat ID
+   * Get platform-prefixed chat ID
+   * @param {string} platform - Platform identifier ('telegram', 'whatsapp', etc.)
+   * @param {string} chatId - Original chat ID
+   * @returns {string} Platform-prefixed chat ID
    */
-  sanitizeForFilename(chatId) {
-    // Replace unsafe filesystem characters but keep the structure recognizable
-    return chatId
-      .replace(/[@]/g, '_at_')     // @ becomes _at_
-      .replace(/[.]/g, '_dot_')    // . becomes _dot_
-      .replace(/[/\\:*?"<>|]/g, '_'); // Other unsafe chars become _
-  }
-
-  /**
-   * Reverse the filename sanitization to get back the original chat ID
-   * @param {string} filename - Sanitized filename
-   * @returns {string} Original chat ID
-   */
-  unsanitizeFromFilename(filename) {
-    return filename
-      .replace(/_at_/g, '@')       // _at_ becomes @
-      .replace(/_dot_/g, '.')      // _dot_ becomes .
-      .replace(/\.json$/, '');     // Remove .json extension
+  getPlatformChatId(platform, chatId) {
+    if (!platform || !chatId) return chatId;
+    return `${platform}:${chatId}`;
   }
 
   /**
    * Add a message to the conversation history
-   * @param {string} chatId - Native chat identifier (e.g., '1234567890@c.us', '1234567890')
-   * @param {string|object} roleOrMessage - 'user' or 'assistant' role, or message object
-   * @param {string} [content] - Message content (if roleOrMessage is a string)
-   * @param {string} [platform] - Platform identifier (optional, for logging only)
+   * @param {string} chatId - Unique identifier for the chat
+   * @param {string} role - 'user' or 'assistant'
+   * @param {string} content - Message content
+   * @param {string} [platform] - Platform identifier ('telegram', 'whatsapp', etc.)
    */
-  addMessage(chatId, roleOrMessage, content, platform) {
-    // Validate input parameters
-    if (!chatId || chatId.trim() === '' || chatId === 'undefined' || chatId === 'null') {
-      console.log('[ChatHandler] Invalid chat ID provided, skipping message:', chatId);
-      return;
+  addMessage(chatId, role, content, platform) {
+    const platformChatId = platform ? this.getPlatformChatId(platform, chatId) : chatId;
+    
+    console.log(`[ChatHandler] Adding ${role} message to chat ${platformChatId}`);
+    
+    if (!this.conversations.has(platformChatId)) {
+      console.log(`[ChatHandler] Creating new conversation for chat ${platformChatId}`);
+      this.conversations.set(platformChatId, []);
     }
     
-    // Use native chat ID directly
-    const nativeChatId = String(chatId).trim();
+    const conversation = this.conversations.get(platformChatId);
+    const timestamp = new Date().toISOString();
     
-    let message;
+    const message = { 
+      role, 
+      content, 
+      timestamp 
+    };
     
-    // Handle both old format (role, content, platform) and new format (message object)
-    if (typeof roleOrMessage === 'object') {
-      // New format: second parameter is a message object
-      message = {
-        role: roleOrMessage.role,
-        content: roleOrMessage.content,
-        timestamp: roleOrMessage.timestamp || new Date().toISOString(),
-        isManual: roleOrMessage.isManual || false
-      };
-    } else {
-      // Old format: separate parameters
-      message = {
-        role: roleOrMessage,
-        content,
-        timestamp: new Date().toISOString()
-      };
-    }
-    
-    console.log(`[ChatHandler] Adding ${message.role} message to chat ${nativeChatId}`);
-    
-    // Check if we have this conversation in memory
-    if (!this.conversations.has(nativeChatId)) {
-      console.log(`[ChatHandler] Creating new conversation for chat ${nativeChatId}`);
-      this.conversations.set(nativeChatId, []);
-    }
-    
-    const conversation = this.conversations.get(nativeChatId);
     conversation.push(message);
-    console.log(`[ChatHandler] Added message to chat ${nativeChatId}, total messages: ${conversation.length}`);
+    console.log(`[ChatHandler] Added message to chat ${platformChatId}, total messages: ${conversation.length}`);
     
     // Persist to disk immediately
     try {
@@ -109,25 +70,355 @@ class ChatHandler {
   }
 
   /**
-   * Load all conversations from disk into memory
+   * Get conversation history for a chat
+   * @param {string} chatId - The chat ID to get conversation for
+   * @param {string} [platform] - Platform identifier ('telegram', 'whatsapp', etc.)
+   * @returns {Array} Array of message objects
    */
-  loadConversations() {
-    console.log('[ChatHandler] Loading all conversations from disk');
+  getConversation(chatId, platform) {
+    const platformChatId = platform ? this.getPlatformChatId(platform, chatId) : chatId;
+    console.log(`[ChatHandler] Getting conversation for chat ID: ${chatId}`);
+    if (!chatId) {
+      console.log('[ChatHandler] No chat ID provided, returning empty array');
+      return [];
+    }
     
+    // Always load from disk to ensure we have the most up-to-date messages
+    const messages = this.loadChat(platformChatId);
+    console.log(`[ChatHandler] Loaded ${messages.length} messages for chat ${chatId} from disk`);
+    
+    // Return the loaded messages (or empty array if none found)
+    return messages;
+  }
+
+  /**
+   * Clear conversation history for a chat
+   * @param {string} chatId - Unique identifier for the chat
+   */
+  clearConversation(chatId) {
+    try {
+      const chatFile = this.getChatFilePath(chatId);
+      if (fs.existsSync(chatFile)) {
+        fs.unlinkSync(chatFile);
+      }
+      this.conversations.delete(chatId);
+      this.updateChatIndex();
+    } catch (error) {
+      console.error(`Error clearing conversation for ${chatId}:`, error);
+    }
+  }
+  
+  /**
+   * Get all chats with their last message
+   * @returns {Array} Array of chat objects with id and preview
+   */
+  getAllChats() {
+    try {
+      console.log(`Looking for chat index at: ${this.storageFile}`);
+      console.log(`Chat history directory exists: ${fs.existsSync(this.chatHistoryDir) ? 'Yes' : 'No'}`);
+      
+      if (fs.existsSync(this.storageFile)) {
+        console.log('Chat index file found, reading...');
+        const fileContent = fs.readFileSync(this.storageFile, 'utf8');
+        console.log(`File content length: ${fileContent.length} characters`);
+        
+        const data = JSON.parse(fileContent);
+        if (Array.isArray(data)) {
+          console.log(`Successfully parsed ${data.length} chat entries from index`);
+          return data;
+        } else {
+          console.warn('Chat index file does not contain an array');
+        }
+      } else {
+        console.log('No chat index file found, will use in-memory data');
+        // Try to generate index from chat files
+        this.updateChatIndex();
+        if (fs.existsSync(this.storageFile)) {
+          console.log('Generated chat index file, retrying load');
+          const fileContent = fs.readFileSync(this.storageFile, 'utf8');
+          const data = JSON.parse(fileContent);
+          if (Array.isArray(data)) {
+            return data;
+          }
+        }
+      }
+    } catch (error) {
+      console.error('Error in getAllChats:', error);
+      console.error('Error details:', {
+        message: error.message,
+        stack: error.stack,
+        code: error.code
+      });
+    }
+    
+    // Fallback to in-memory data if index file is missing
+    const chats = [];
+    this.conversations.forEach((messages, chatId) => {
+      const lastMessage = messages.length > 0 ? messages[messages.length - 1] : null;
+      const preview = lastMessage?.content?.substring(0, 100) || '';
+      chats.push({
+        id: chatId,
+        preview: preview,
+        timestamp: lastMessage?.timestamp || new Date().toISOString(),
+        messageCount: messages.length
+      });
+    });
+    
+    // Sort by timestamp, newest first
+    return chats.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+  }
+  
+  /**
+   * Delete a chat completely
+   * @param {string} chatId - Unique identifier for the chat to delete
+   */
+  deleteChat(chatId) {
+    try {
+      const chatFile = this.getChatFilePath(chatId);
+      if (fs.existsSync(chatFile)) {
+        fs.unlinkSync(chatFile);
+      }
+      this.conversations.delete(chatId);
+      this.updateChatIndex();
+    } catch (error) {
+      console.error(`Error deleting chat ${chatId}:`, error);
+      throw error; // Re-throw to be handled by the API
+    }
+  }
+  
+  /**
+   * Get the path for a chat's history file
+   * @param {string} chatId - The chat ID
+   * @returns {string} Path to the chat's history file
+   */
+  getChatFilePath(chatId) {
+    if (!chatId) {
+      console.error('[ChatHandler] Attempted to get file path for null or undefined chatId');
+      return path.join(this.chatHistoryDir, 'invalid_chat.json');
+    }
+    
+    // Try different formats of the chat ID
+    const originalPath = path.join(this.chatHistoryDir, `${chatId}.json`);
+    if (fs.existsSync(originalPath)) {
+      return originalPath;
+    }
+    
+    // Sanitize chat ID to create a valid filename
+    const safeChatId = chatId.toString().replace(/[^a-z0-9-_.]/gi, '_').toLowerCase();
+    return path.join(this.chatHistoryDir, `${safeChatId}.json`);
+  }
+
+  // Save conversations to disk
+  saveConversations() {
+    console.log(`[ChatHandler] Saving ${this.conversations.size} conversations to disk`);
+    
+    // Ensure chat history directory exists
+    if (!fs.existsSync(this.chatHistoryDir)) {
+      fs.mkdirSync(this.chatHistoryDir, { recursive: true });
+    }
+    
+    // Save each chat to its own file
+    this.conversations.forEach((messages, chatId) => {
+      try {
+        const chatFile = this.getChatFilePath(chatId);
+        const jsonContent = JSON.stringify(messages, null, 2);
+        
+        // Write to file with error handling
+        fs.writeFileSync(chatFile, jsonContent, 'utf8');
+        console.log(`[ChatHandler] Saved ${messages.length} messages for chat ${chatId}`);
+      } catch (error) {
+        console.error(`[ChatHandler] Error saving chat history for ${chatId}:`, error);
+      }
+    });
+    
+    // Also maintain the main index file
+    this.updateChatIndex();
+  }
+  
+  // Update the main chat index file
+  updateChatIndex() {
+    const chats = [];
+    
+    // Read all chat files
+    if (fs.existsSync(this.chatHistoryDir)) {
+      const files = fs.readdirSync(this.chatHistoryDir).filter(
+        file => file.endsWith('.json') && file !== 'chats.json'
+      );
+      
+      console.log(`[ChatHandler] Found ${files.length} chat files to index`);
+      
+      files.forEach(file => {
+        try {
+          const filePath = path.join(this.chatHistoryDir, file);
+          const fileContent = fs.readFileSync(filePath, 'utf8');
+          
+          try {
+            const messages = JSON.parse(fileContent);
+            
+            if (Array.isArray(messages)) {
+              const chatId = path.basename(file, '.json');
+              
+              // Even if there are no messages, we still want to track the chat
+              const lastMessage = messages.length > 0 ? messages[messages.length - 1] : { content: '', timestamp: new Date().toISOString() };
+              
+              chats.push({
+                id: chatId,
+                preview: lastMessage.content?.substring(0, 100) || '',
+                timestamp: lastMessage.timestamp || new Date().toISOString(),
+                messageCount: messages.length
+              });
+            }
+          } catch (parseError) {
+            console.error(`Error parsing JSON for chat file ${file}:`, parseError);
+          }
+        } catch (error) {
+          console.error(`Error reading chat file ${file}:`, error);
+        }
+      });
+      
+      console.log(`[ChatHandler] Successfully indexed ${chats.length} chats`);
+      
+      // Sort by timestamp, newest first
+      chats.sort((a, b) => {
+        const timeA = typeof a.timestamp === 'number' ? a.timestamp : new Date(a.timestamp).getTime();
+        const timeB = typeof b.timestamp === 'number' ? b.timestamp : new Date(b.timestamp).getTime();
+        return timeB - timeA;
+      });
+      
+      // Save the index
+      fs.writeFileSync(this.storageFile, JSON.stringify(chats, null, 2));
+      console.log(`[ChatHandler] Saved chat index with ${chats.length} entries`);
+    }
+  }
+  
+  // Load a single chat's messages
+  loadChat(chatId) {
+    console.log(`[ChatHandler] Loading chat ${chatId} from disk`);
+    try {
+      const chatFile = this.getChatFilePath(chatId);
+      console.log(`[ChatHandler] Chat file path: ${chatFile}`);
+      
+      if (fs.existsSync(chatFile)) {
+        console.log(`[ChatHandler] Chat file exists for ${chatId}`);
+        const fileContent = fs.readFileSync(chatFile, 'utf8');
+        console.log(`[ChatHandler] Read ${fileContent.length} bytes from chat file`);
+        
+        try {
+          const messages = JSON.parse(fileContent);
+          console.log(`[ChatHandler] Successfully parsed JSON for chat ${chatId}`);
+          
+          if (Array.isArray(messages)) {
+            console.log(`[ChatHandler] Found ${messages.length} messages for chat ${chatId}`);
+            
+            // Convert timestamp to ISO string if it's a number
+            const processedMessages = messages.map(msg => ({
+              ...msg,
+              timestamp: typeof msg.timestamp === 'number' 
+                ? new Date(msg.timestamp).toISOString() 
+                : msg.timestamp
+            }));
+            
+            // Store the complete message history in memory
+            this.conversations.set(chatId, processedMessages);
+            return processedMessages;
+          } else {
+            console.error(`[ChatHandler] Messages for chat ${chatId} is not an array:`, typeof messages);
+          }
+        } catch (parseError) {
+          console.error(`[ChatHandler] Error parsing JSON for chat ${chatId}:`, parseError);
+          console.error(`[ChatHandler] File content sample: ${fileContent.substring(0, 100)}...`);
+        }
+      } else {
+        console.log(`[ChatHandler] Chat file does not exist for ${chatId}, creating new chat`);
+        this.conversations.set(chatId, []);
+        return [];
+      }
+    } catch (error) {
+      console.error(`[ChatHandler] Error loading chat ${chatId}:`, error);
+    }
+    
+    // If we get here, ensure we have at least an empty array for this chat
+    if (!this.conversations.has(chatId)) {
+      this.conversations.set(chatId, []);
+    }
+    
+    return this.conversations.get(chatId);
+  }
+  
+  // Load conversations from disk
+  /**
+   * Get all chats with their metadata
+   * @returns {Array} Array of chat objects with id, preview, timestamp, and messageCount
+   */
+  getAllChats() {
+    try {
+      // Ensure the index is up to date
+      this.updateChatIndex();
+      
+      // Read the index file
+      if (fs.existsSync(this.storageFile)) {
+        const fileContent = fs.readFileSync(this.storageFile, 'utf8');
+        try {
+          const chats = JSON.parse(fileContent);
+          return Array.isArray(chats) ? chats : [];
+        } catch (error) {
+          console.error('[ChatHandler] Error parsing chat index:', error);
+          return [];
+        }
+      }
+      return [];
+    } catch (error) {
+      console.error('[ChatHandler] Error getting all chats:', error);
+      return [];
+    }
+  }
+  
+  /**
+   * Get the most recent chats with all required fields
+   * @param {number} limit - Maximum number of chats to return
+   * @returns {Array} Array of most recent chat objects with all required fields
+   */
+  getRecentChats(limit = 5) {
+    try {
+      const allChats = this.getAllChats();
+      
+      // Sort by timestamp in descending order (newest first)
+      const sortedChats = [...allChats].sort((a, b) => {
+        const timeA = new Date(a.timestamp || 0).getTime();
+        const timeB = new Date(b.timestamp || 0).getTime();
+        return timeB - timeA;
+      });
+      
+      // Get the most recent chats and ensure they have all required fields
+      return sortedChats.slice(0, limit).map(chat => ({
+        id: chat.id,
+        name: chat.id,  // Using ID as name if not available
+        lastMessage: chat.preview || 'No messages',
+        timestamp: chat.timestamp || new Date().toISOString(),
+        // Include any other fields that might be needed
+        messageCount: chat.messageCount || 0,
+        preview: chat.preview || '',
+        // Include the actual messages if available
+        messages: this.conversations.get(chat.id) || []
+      }));
+    } catch (error) {
+      console.error('[ChatHandler] Error getting recent chats:', error);
+      return [];
+    }
+  }
+
+  loadConversations() {
     try {
       // Ensure chat history directory exists
       if (!fs.existsSync(this.chatHistoryDir)) {
         fs.mkdirSync(this.chatHistoryDir, { recursive: true });
         console.log('[ChatHandler] Created chat history directory');
-        return;
+        return; // No existing chats to load
       }
-      
-      // Clear existing conversations to avoid duplicates
-      this.conversations.clear();
       
       // Load all existing chat files directly
       const chatFiles = fs.readdirSync(this.chatHistoryDir).filter(
-        file => file.endsWith('.json') && file !== 'chats.json' && file !== 'blocked_chats.json'
+        file => file.endsWith('.json') && file !== 'chats.json'
       );
       
       console.log(`[ChatHandler] Found ${chatFiles.length} chat files to load`);
@@ -135,24 +426,23 @@ class ChatHandler {
       // Load each chat file and populate conversations map
       chatFiles.forEach(file => {
         try {
-          // Get the original chat ID from the filename
-          const nativeChatId = this.unsanitizeFromFilename(file);
+          const chatId = path.basename(file, '.json');
           const filePath = path.join(this.chatHistoryDir, file);
           const fileContent = fs.readFileSync(filePath, 'utf8');
           
           try {
             const messages = JSON.parse(fileContent);
-            if (Array.isArray(messages) && messages.length > 0) {
-              // Store messages in memory using the native chat ID
-              this.conversations.set(nativeChatId, messages);
-              console.log(`[ChatHandler] Loaded ${messages.length} messages for chat ${nativeChatId}`);
+            if (Array.isArray(messages)) {
+              // Store messages in memory
+              this.conversations.set(chatId, messages);
+              console.log(`[ChatHandler] Loaded ${messages.length} messages for chat ${chatId}`);
             } else {
-              console.warn(`[ChatHandler] Empty or invalid format in ${file}, initializing empty array`);
-              this.conversations.set(nativeChatId, []);
+              console.warn(`[ChatHandler] Invalid format in ${file}, initializing empty array`);
+              this.conversations.set(chatId, []);
             }
           } catch (parseError) {
             console.error(`[ChatHandler] Error parsing ${file}:`, parseError);
-            this.conversations.set(nativeChatId, []);
+            this.conversations.set(chatId, []);
           }
         } catch (err) {
           console.error(`[ChatHandler] Error processing chat file ${file}:`, err);
@@ -169,250 +459,65 @@ class ChatHandler {
   }
 
   /**
-   * Save conversations to disk using native chat IDs
+   * Clear all chat history
    */
-  saveConversations() {
-    console.log(`[ChatHandler] Saving ${this.conversations.size} conversations to disk`);
-    
-    // Ensure chat history directory exists
-    if (!fs.existsSync(this.chatHistoryDir)) {
-      fs.mkdirSync(this.chatHistoryDir, { recursive: true });
-    }
-    
-    // Save each chat to its own file using sanitized filename
-    this.conversations.forEach((messages, nativeChatId) => {
-      try {
-        // Create safe filename based on native chat ID
-        const safeFilename = this.sanitizeForFilename(nativeChatId);
-        const chatFile = path.join(this.chatHistoryDir, `${safeFilename}.json`);
-        
-        console.log(`[ChatHandler] Saving chat ${nativeChatId} to file ${safeFilename}.json`);
-        
-        // Save the messages directly (no complex merging for now)
-        const jsonContent = JSON.stringify(messages, null, 2);
-        fs.writeFileSync(chatFile, jsonContent, 'utf8');
-        
-        console.log(`[ChatHandler] Saved ${messages.length} messages for chat ${nativeChatId}`);
-      } catch (error) {
-        console.error(`[ChatHandler] Error saving chat history for ${nativeChatId}:`, error);
-      }
-    });
-    
-    // Also maintain the main index file
-    this.updateChatIndex();
-  }
-
-  /**
-   * Update the main chat index file
-   */
-  updateChatIndex() {
-    const chats = [];
-    
-    // Create index from in-memory conversations
-    this.conversations.forEach((messages, nativeChatId) => {
-      const lastMessage = messages.length > 0 ? messages[messages.length - 1] : null;
-      const preview = lastMessage?.content?.substring(0, 100) || '';
+  clearAllChats() {
+    try {
+      console.log('[ChatHandler] Clearing all chat history...');
       
-      chats.push({
-        id: nativeChatId,
-        preview: preview,
-        timestamp: lastMessage?.timestamp || new Date().toISOString(),
-        messageCount: messages.length
+      // Clear in-memory conversations
+      this.conversations.clear();
+      
+      // Remove all chat files from disk
+      const chatFiles = fs.readdirSync(this.chatHistoryDir)
+        .filter(file => file.endsWith('.json') && file !== 'chats.json');
+      
+      chatFiles.forEach(file => {
+        const filePath = path.join(this.chatHistoryDir, file);
+        try {
+          fs.unlinkSync(filePath);
+          console.log(`[ChatHandler] Deleted chat file: ${file}`);
+        } catch (error) {
+          console.error(`[ChatHandler] Error deleting ${file}:`, error);
+        }
       });
-    });
-    
-    // Sort by timestamp, newest first
-    chats.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
-    
-    // Save the index
-    try {
-      fs.writeFileSync(this.storageFile, JSON.stringify(chats, null, 2));
-      console.log(`[ChatHandler] Saved chat index with ${chats.length} entries`);
-    } catch (error) {
-      console.error('[ChatHandler] Error saving chat index:', error);
-    }
-  }
-
-  /**
-   * Get conversation history for a chat
-   * @param {string} chatId - Native chat ID
-   * @param {string} [platform] - Platform identifier (optional, for compatibility)
-   * @returns {Array} Array of message objects
-   */
-  getConversation(chatId, platform) {
-    if (!chatId) {
-      console.log('[ChatHandler] No chat ID provided, returning empty array');
-      return [];
-    }
-    
-    const nativeChatId = String(chatId).trim();
-    console.log(`[ChatHandler] Getting conversation for chat ${nativeChatId}`);
-    
-    // Return conversation if it exists, otherwise empty array
-    return this.conversations.get(nativeChatId) || [];
-  }
-
-  /**
-   * Get all chats with metadata
-   * @returns {Array} Array of chat objects with id, preview, timestamp, messageCount
-   */
-  getAllChats() {
-    console.log('[ChatHandler] Getting all chats');
-    
-    const chats = [];
-    this.conversations.forEach((messages, nativeChatId) => {
-      const lastMessage = messages.length > 0 ? messages[messages.length - 1] : null;
-      const preview = lastMessage?.content?.substring(0, 100) || '';
       
-      chats.push({
-        id: nativeChatId,
-        preview: preview,
-        timestamp: lastMessage?.timestamp || new Date().toISOString(),
-        messageCount: messages.length
-      });
-    });
-    
-    // Sort by timestamp, newest first
-    return chats.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
-  }
-
-  /**
-   * Get recent chats with metadata (limited)
-   * @param {number} limit - Maximum number of chats to return
-   * @returns {Array} Array of recent chat objects with id, preview, timestamp, messageCount
-   */
-  getRecentChats(limit = 5) {
-    console.log(`[ChatHandler] Getting ${limit} most recent chats`);
-    
-    const allChats = this.getAllChats();
-    return allChats.slice(0, limit);
-  }
-
-  /**
-   * Delete a chat completely
-   * @param {string} chatId - Native chat ID
-   */
-  deleteChat(chatId) {
-    try {
-      const nativeChatId = String(chatId).trim();
-      const safeFilename = this.sanitizeForFilename(nativeChatId);
-      const chatFile = path.join(this.chatHistoryDir, `${safeFilename}.json`);
-      
-      if (fs.existsSync(chatFile)) {
-        fs.unlinkSync(chatFile);
-        console.log(`[ChatHandler] Deleted chat file for ${nativeChatId}`);
-      }
-      
-      this.conversations.delete(nativeChatId);
-      this.updateChatIndex();
-      
-      console.log(`[ChatHandler] Successfully deleted chat ${nativeChatId}`);
-    } catch (error) {
-      console.error(`Error deleting chat ${chatId}:`, error);
-      throw error;
-    }
-  }
-
-  /**
-   * Clear conversation history for a chat
-   * @param {string} chatId - Native chat ID
-   */
-  clearConversation(chatId) {
-    try {
-      const nativeChatId = String(chatId).trim();
-      console.log(`[ChatHandler] Clearing conversation for chat ${nativeChatId}`);
-      
-      // Clear from memory
-      this.conversations.set(nativeChatId, []);
-      
-      // Save to disk
-      this.saveConversations();
-      
-      console.log(`[ChatHandler] Successfully cleared conversation for chat ${nativeChatId}`);
-    } catch (error) {
-      console.error(`Error clearing conversation for ${chatId}:`, error);
-      throw error;
-    }
-  }
-
-  // --- Blocked Chats Functionality ---
-
-  /**
-   * Load blocked chats from disk
-   */
-  loadBlockedChats() {
-    try {
-      if (fs.existsSync(this.blockedChatsFile)) {
-        const data = JSON.parse(fs.readFileSync(this.blockedChatsFile, 'utf8'));
-        this.blockedChats = new Set(data.blockedChats || []);
-        console.log(`[ChatHandler] Loaded ${this.blockedChats.size} blocked chats`);
-      } else {
-        console.log('[ChatHandler] No blocked chats file found, starting with empty list');
-      }
-    } catch (error) {
-      console.error('[ChatHandler] Error loading blocked chats:', error);
-      this.blockedChats = new Set();
-    }
-  }
-
-  /**
-   * Save blocked chats to disk
-   */
-  saveBlockedChats() {
-    try {
-      const data = {
-        blockedChats: Array.from(this.blockedChats),
-        lastUpdated: new Date().toISOString()
+      // Reset the index file
+      const emptyIndex = {
+        totalChats: 0,
+        lastUpdated: new Date().toISOString(),
+        chats: {}
       };
-      fs.writeFileSync(this.blockedChatsFile, JSON.stringify(data, null, 2));
-      console.log(`[ChatHandler] Saved ${this.blockedChats.size} blocked chats to disk`);
+      
+      fs.writeFileSync(this.storageFile, JSON.stringify(emptyIndex, null, 2));
+      console.log('[ChatHandler] All chat history cleared successfully');
+      
     } catch (error) {
-      console.error('[ChatHandler] Error saving blocked chats:', error);
+      console.error('[ChatHandler] Error clearing all chats:', error);
+      throw error;
     }
-  }
-
-  /**
-   * Check if a chat is blocked from AI responses
-   * @param {string} chatId - Native chat ID
-   * @returns {boolean} True if chat is blocked
-   */
-  isChatBlocked(chatId) {
-    const nativeChatId = String(chatId).trim();
-    return this.blockedChats.has(nativeChatId);
-  }
-
-  /**
-   * Block a chat from AI responses
-   * @param {string} chatId - Native chat ID
-   */
-  blockChat(chatId) {
-    const nativeChatId = String(chatId).trim();
-    this.blockedChats.add(nativeChatId);
-    this.saveBlockedChats();
-    console.log(`[ChatHandler] Blocked chat ${nativeChatId} from AI responses`);
-  }
-
-  /**
-   * Unblock a chat to allow AI responses
-   * @param {string} chatId - Native chat ID
-   */
-  unblockChat(chatId) {
-    const nativeChatId = String(chatId).trim();
-    const wasBlocked = this.blockedChats.delete(nativeChatId);
-    if (wasBlocked) {
-      this.saveBlockedChats();
-      console.log(`[ChatHandler] Unblocked chat ${nativeChatId} for AI responses`);
-    }
-    return wasBlocked;
-  }
-
-  /**
-   * Get all blocked chat IDs
-   * @returns {Array} Array of blocked chat IDs
-   */
-  getBlockedChats() {
-    return Array.from(this.blockedChats);
   }
 }
 
-module.exports = ChatHandler;
+// Create and export the chat handler instance
+const chatHandler = new ChatHandler();
+
+// Initialize sample chat only if no chats exist and this is not a restart
+setImmediate(() => {
+  try {
+    const existingChats = chatHandler.getAllChats();
+    if (existingChats.length === 0) {
+      console.log('[ChatHandler] No existing chats found, creating a sample chat');
+      const chatId = 'sample-chat-' + Date.now();
+      chatHandler.addMessage(chatId, 'user', 'Hello, this is a test message');
+      chatHandler.addMessage(chatId, 'assistant', 'Hi there! This is a sample response to your test message.');
+      console.log(`[ChatHandler] Created sample chat with ID: ${chatId}`);
+    } else {
+      console.log(`[ChatHandler] Found ${existingChats.length} existing chats, skipping sample creation`);
+    }
+  } catch (error) {
+    console.error('[ChatHandler] Error during initialization:', error);
+  }
+});
+
+module.exports = chatHandler;

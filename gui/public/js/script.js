@@ -2092,7 +2092,7 @@ async function loadChats() {
     // Show loading in table
     chatsTableBody.innerHTML = `
       <tr>
-        <td colspan="6" class="text-center py-4">
+        <td colspan="5" class="text-center py-4">
           <div class="spinner-border text-secondary" role="status">
             <span class="visually-hidden">Loading...</span>
           </div>
@@ -2133,7 +2133,7 @@ async function loadChats() {
         
       chatsTableBody.innerHTML = `
         <tr>
-          <td colspan="6" class="text-center py-4 text-muted">
+          <td colspan="5" class="text-center py-4 text-muted">
             <i class="bi bi-chat-square-text fs-1 d-block mb-2"></i>
             ${noChatsMsg}
           </td>
@@ -2176,17 +2176,6 @@ async function loadChats() {
           ${chat.messageCount || 0}
         </span>`;
       
-      // AI Auto Response Toggle Cell
-      const aiToggleCell = document.createElement('td');
-      aiToggleCell.className = 'text-center';
-      const isBlocked = window.blockedChats && window.blockedChats.has(chat.id);
-      aiToggleCell.innerHTML = `
-        <div class="form-check form-switch d-flex justify-content-center">
-          <input class="form-check-input" type="checkbox" id="ai-toggle-${chat.id}" 
-                 ${!isBlocked ? 'checked' : ''} 
-                 onchange="toggleAiResponse('${chat.id}', this.checked)">
-        </div>`;
-      
       const actionsCell = document.createElement('td');
       actionsCell.className = 'text-nowrap text-end';
       
@@ -2194,11 +2183,6 @@ async function loadChats() {
       viewBtn.className = 'btn btn-sm btn-outline-primary me-2';
       viewBtn.innerHTML = '<i class="bi bi-eye"></i> View';
       viewBtn.addEventListener('click', () => viewChat(chat.id));
-      
-      const sendBtn = document.createElement('button');
-      sendBtn.className = 'btn btn-sm btn-outline-success me-2';
-      sendBtn.innerHTML = '<i class="bi bi-send"></i> Send';
-      sendBtn.addEventListener('click', () => openManualInterventionModal(chat.id));
       
       const deleteBtn = document.createElement('button');
       deleteBtn.className = 'btn btn-sm btn-outline-danger';
@@ -2231,14 +2215,12 @@ async function loadChats() {
       });
       
       actionsCell.appendChild(viewBtn);
-      actionsCell.appendChild(sendBtn);
       actionsCell.appendChild(deleteBtn);
       
       row.appendChild(idCell);
       row.appendChild(previewCell);
       row.appendChild(lastActiveCell);
       row.appendChild(messageCountCell);
-      row.appendChild(aiToggleCell);
       row.appendChild(actionsCell);
       
       chatsTableBody.appendChild(row);
@@ -2250,7 +2232,7 @@ async function loadChats() {
     if (error.name !== 'AbortError') {
       chatsTableBody.innerHTML = `
         <tr>
-          <td colspan="6" class="text-center py-4">
+          <td colspan="5" class="text-center py-4">
             <i class="bi bi-exclamation-triangle text-danger fs-1 d-block mb-2"></i>
             <p class="text-danger mb-0">Error loading chats: ${error.message}</p>
             <button class="btn btn-sm btn-outline-primary mt-3" onclick="loadChats()">
@@ -3369,147 +3351,396 @@ function formatBytes(bytes) {
   return formatFileSize(bytes);
 }
 
-// Manual Intervention Functions
-window.blockedChats = new Set();
+// ===============================
+// CHAT FUNCTIONALITY
+// ===============================
 
-// Load blocked chats from server on page load
-async function loadBlockedChats() {
-  try {
-    const response = await fetch('/api/blocked-chats');
-    if (response.ok) {
-      const data = await response.json();
-      window.blockedChats = new Set(data.blockedChats || []);
-    }
-  } catch (error) {
-    console.error('Error loading blocked chats:', error);
-  }
-}
+// currentChatId already declared above, reusing it
+let chatsPagination = { offset: 0, limit: 20, total: 0 };
+let currentChatSort = 'desc';
+let aiToggleStates = new Map(); // Track AI toggle state per chat
 
-// Toggle AI response for a chat
-async function toggleAiResponse(chatId, enabled) {
+// Load AI states from backend
+async function loadAIStates() {
   try {
-    const method = enabled ? 'DELETE' : 'POST';
-    const response = await fetch(`/api/blocked-chats/${encodeURIComponent(chatId)}`, {
-      method: method,
-      headers: {
-        'Content-Type': 'application/json'
-      }
-    });
+    const response = await fetch('/api/chat/ai-states');
+    const data = await response.json();
     
-    if (response.ok) {
-      if (enabled) {
-        window.blockedChats.delete(chatId);
-        showToast(`AI responses enabled for ${formatChatId(chatId)}`, 'success');
-      } else {
-        window.blockedChats.add(chatId);
-        showToast(`AI responses disabled for ${formatChatId(chatId)}`, 'warning');
-      }
-    } else {
-      throw new Error('Failed to update AI response setting');
+    if (data.success && data.aiStates) {
+      // Convert object back to Map
+      aiToggleStates = new Map(Object.entries(data.aiStates));
+      console.log(`Loaded AI states for ${aiToggleStates.size} chats`);
     }
   } catch (error) {
-    console.error('Error toggling AI response:', error);
-    showToast('Error updating AI response setting', 'danger');
-    // Revert the toggle
-    const toggle = document.getElementById(`ai-toggle-${chatId}`);
-    if (toggle) {
-      toggle.checked = !toggle.checked;
-    }
+    console.error('Error loading AI states:', error);
   }
 }
 
-// Open manual intervention modal
-function openManualInterventionModal(chatId) {
-  const modal = new bootstrap.Modal(document.getElementById('manualInterventionModal'));
-  const chatIdInput = document.getElementById('manualChatId');
-  const messageTextarea = document.getElementById('manualMessage');
-  const suppressCheckbox = document.getElementById('suppressAiResponse');
-  
-  chatIdInput.value = chatId;
-  messageTextarea.value = '';
-  suppressCheckbox.checked = true;
-  
-  modal.show();
-  
-  // Focus on message textarea after modal is shown
-  setTimeout(() => {
-    messageTextarea.focus();
-  }, 300);
-}
-
-// Send manual message
-async function sendManualMessage() {
-  const chatId = document.getElementById('manualChatId').value;
-  const message = document.getElementById('manualMessage').value.trim();
-  const suppressAi = document.getElementById('suppressAiResponse').checked;
-  const sendButton = document.getElementById('sendManualMessage');
-  
-  if (!message) {
-    showToast('Please enter a message', 'warning');
-    return;
-  }
-  
-  // Show loading state
-  const originalText = sendButton.innerHTML;
-  sendButton.disabled = true;
-  sendButton.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Sending...';
-  
+// Save AI state to backend
+async function saveAIState(chatId, enabled) {
   try {
-    const response = await fetch('/api/manual-message', {
+    const response = await fetch('/api/chat/ai-states', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json'
       },
       body: JSON.stringify({
         chatId: chatId,
+        enabled: enabled
+      })
+    });
+    
+    const result = await response.json();
+    if (!result.success) {
+      console.error('Failed to save AI state:', result.error);
+    }
+  } catch (error) {
+    console.error('Error saving AI state:', error);
+  }
+}
+
+// Load chats when the tab is shown
+document.addEventListener('DOMContentLoaded', function() {
+  // Add event listener for chats tab
+  const chatsTab = document.querySelector('a[href="#chats"]');
+  if (chatsTab) {
+    chatsTab.addEventListener('shown.bs.tab', function() {
+      loadAIStates().then(() => loadChats());
+    });
+  }
+  
+  // Add refresh button listener
+  const refreshChatsBtn = document.getElementById('refresh-chats');
+  if (refreshChatsBtn) {
+    refreshChatsBtn.addEventListener('click', loadChats);
+  }
+  
+  // Add clear all chats button listener
+  const clearAllChatsBtn = document.getElementById('clear-all-chats');
+  if (clearAllChatsBtn) {
+    clearAllChatsBtn.addEventListener('click', clearAllChats);
+  }
+});
+
+// Load and display chats
+async function loadChats() {
+  try {
+    const response = await fetch(`/api/chats?limit=${chatsPagination.limit}&offset=${chatsPagination.offset}&sort=${currentChatSort}`);
+    const data = await response.json();
+    
+    if (data.success) {
+      displayChats(data.data);
+      chatsPagination = { offset: data.offset, limit: data.limit, total: data.total };
+      updateChatsCount(data.total);
+      updateChatsPagination(data);
+    } else {
+      console.error('Failed to load chats:', data.error);
+      showError('Failed to load chat history');
+    }
+  } catch (error) {
+    console.error('Error loading chats:', error);
+    showError('Error loading chat history');
+  }
+}
+
+// Display chats in the table
+function displayChats(chats) {
+  const tbody = document.getElementById('chats-table-body');
+  if (!tbody) return;
+  
+  if (!chats || chats.length === 0) {
+    tbody.innerHTML = `
+      <tr>
+        <td colspan="5" class="text-center py-4">
+          <i class="bi bi-chat-dots-fill fs-1 text-muted"></i>
+          <p class="mt-2 mb-0 text-muted">No chat history found</p>
+        </td>
+      </tr>
+    `;
+    return;
+  }
+  
+  tbody.innerHTML = chats.map(chat => {
+    const lastActive = new Date(chat.timestamp).toLocaleString();
+    const preview = chat.preview ? escapeHtml(chat.preview.substring(0, 50)) + (chat.preview.length > 50 ? '...' : '') : 'No messages';
+    const chatId = escapeHtml(chat.id);
+    const isAIEnabled = aiToggleStates.get(chat.id) !== false; // Default to enabled
+    
+    return `
+      <tr class="chat-row" data-chat-id="${chatId}">
+        <td>
+          <div class="d-flex align-items-center">
+            <span class="chat-id-display" title="${chatId}">${chatId.length > 20 ? chatId.substring(0, 20) + '...' : chatId}</span>
+            <div class="ms-auto">
+              <div class="form-check form-switch form-check-inline">
+                <input class="form-check-input ai-toggle" type="checkbox" 
+                       id="ai-toggle-${chatId}" 
+                       data-chat-id="${chatId}" 
+                       ${isAIEnabled ? 'checked' : ''}>
+                <label class="form-check-label small text-muted" for="ai-toggle-${chatId}" title="Toggle AI responses">
+                  AI
+                </label>
+              </div>
+            </div>
+          </div>
+        </td>
+        <td>
+          <div class="chat-preview">${preview}</div>
+        </td>
+        <td>
+          <small class="text-muted">${lastActive}</small>
+        </td>
+        <td class="text-center">
+          <span class="badge bg-primary">${chat.messageCount || 0}</span>
+        </td>
+        <td class="text-end">
+          <button class="btn btn-sm btn-outline-primary view-chat-btn" 
+                  data-chat-id="${chatId}" 
+                  data-bs-toggle="modal" 
+                  data-bs-target="#chatModal">
+            <i class="bi bi-eye"></i> View
+          </button>
+        </td>
+      </tr>
+    `;
+  }).join('');
+  
+  // Add event listeners for view buttons and AI toggles
+  tbody.querySelectorAll('.view-chat-btn').forEach(btn => {
+    btn.addEventListener('click', function() {
+      const chatId = this.getAttribute('data-chat-id');
+      openChatModal(chatId);
+    });
+  });
+  
+  tbody.querySelectorAll('.ai-toggle').forEach(toggle => {
+    toggle.addEventListener('change', async function() {
+      const chatId = this.getAttribute('data-chat-id');
+      const isEnabled = this.checked;
+      
+      // Update local state
+      aiToggleStates.set(chatId, isEnabled);
+      
+      // Save to backend
+      await saveAIState(chatId, isEnabled);
+      
+      console.log(`AI ${isEnabled ? 'enabled' : 'disabled'} for chat: ${chatId}`);
+    });
+  });
+}
+
+// Open chat modal and load conversation
+async function openChatModal(chatId) {
+  currentChatId = chatId;
+  const modal = document.getElementById('chatModal');
+  const title = modal.querySelector('.modal-title');
+  const body = modal.querySelector('#chat-messages');
+  
+  if (title) title.textContent = `Chat: ${chatId}`;
+  if (body) body.innerHTML = '<div class="text-center"><div class="spinner-border" role="status"></div></div>';
+  
+  try {
+    const response = await fetch(`/api/chats/${encodeURIComponent(chatId)}`);
+    const data = await response.json();
+    
+    if (data.success && data.conversation) {
+      displayChatMessages(data.conversation);
+    } else {
+      body.innerHTML = '<div class="alert alert-warning">No messages found for this chat.</div>';
+    }
+  } catch (error) {
+    console.error('Error loading chat:', error);
+    body.innerHTML = '<div class="alert alert-danger">Error loading chat messages.</div>';
+  }
+}
+
+// Display chat messages in modal
+function displayChatMessages(messages) {
+  const container = document.getElementById('chat-messages');
+  if (!container) return;
+  
+  if (!messages || messages.length === 0) {
+    container.innerHTML = '<div class="alert alert-info">No messages in this conversation.</div>';
+    return;
+  }
+  
+  container.innerHTML = messages.map(msg => {
+    const isUser = msg.role === 'user';
+    const timestamp = new Date(msg.timestamp).toLocaleString();
+    const content = escapeHtml(msg.content);
+    
+    return `
+      <div class="message mb-3 ${isUser ? 'user-message' : 'assistant-message'}">
+        <div class="d-flex ${isUser ? 'justify-content-end' : 'justify-content-start'}">
+          <div class="message-bubble ${isUser ? 'bg-primary text-white' : 'bg-light'} p-3 rounded" style="max-width: 80%;">
+            <div class="message-content">${content}</div>
+            <div class="message-time small mt-1 ${isUser ? 'text-light' : 'text-muted'}">
+              <i class="bi bi-${isUser ? 'person-fill' : 'robot'}"></i> ${timestamp}
+            </div>
+          </div>
+        </div>
+      </div>
+    `;
+  }).join('');
+  
+  // Scroll to bottom
+  container.scrollTop = container.scrollHeight;
+}
+
+// Send manual message
+async function sendManualMessage() {
+  const messageInput = document.getElementById('manual-message-input');
+  const sendBtn = document.getElementById('send-manual-message');
+  
+  if (!currentChatId || !messageInput) return;
+  
+  const message = messageInput.value.trim();
+  if (!message) return;
+  
+  // Disable input and button
+  messageInput.disabled = true;
+  sendBtn.disabled = true;
+  sendBtn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status"></span> Sending...';
+  
+  try {
+    // Check if AI is enabled for this chat
+    const isAIEnabled = aiToggleStates.get(currentChatId) !== false;
+    
+    const response = await fetch('/api/chat/send-manual', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        chatId: currentChatId,
         message: message,
-        suppressAiResponse: suppressAi
+        enableAI: isAIEnabled
       })
     });
     
     const result = await response.json();
     
-    if (response.ok && result.success) {
-      showToast(`Message sent to ${formatChatId(chatId)}`, 'success');
-      
-      // Close modal
-      const modal = bootstrap.Modal.getInstance(document.getElementById('manualInterventionModal'));
-      modal.hide();
-      
-      // Clear form
-      document.getElementById('manualMessage').value = '';
+    if (result.success) {
+      messageInput.value = '';
+      // Reload the conversation
+      await openChatModal(currentChatId);
+      showSuccess('Message sent successfully');
     } else {
-      throw new Error(result.error || 'Failed to send message');
+      showError('Failed to send message: ' + (result.error || 'Unknown error'));
     }
   } catch (error) {
-    console.error('Error sending manual message:', error);
-    showToast(`Error sending message: ${error.message}`, 'danger');
+    console.error('Error sending message:', error);
+    showError('Error sending message');
   } finally {
-    // Restore button state
-    sendButton.disabled = false;
-    sendButton.innerHTML = originalText;
+    // Re-enable input and button
+    messageInput.disabled = false;
+    sendBtn.disabled = false;
+    sendBtn.innerHTML = '<i class="bi bi-send"></i> Send';
   }
 }
 
-// Initialize manual intervention features
-document.addEventListener('DOMContentLoaded', function() {
-  // Load blocked chats
-  loadBlockedChats();
+// Toggle chat sort
+function toggleChatSort() {
+  currentChatSort = currentChatSort === 'desc' ? 'asc' : 'desc';
+  const sortIcon = document.getElementById('sort-chats');
+  const sortText = document.getElementById('sort-text');
   
-  // Add event listener for send manual message button
-  const sendButton = document.getElementById('sendManualMessage');
-  if (sendButton) {
-    sendButton.addEventListener('click', sendManualMessage);
+  if (sortIcon && sortText) {
+    if (currentChatSort === 'asc') {
+      sortIcon.className = 'bi bi-sort-up';
+      sortText.textContent = 'Oldest First';
+    } else {
+      sortIcon.className = 'bi bi-sort-down';
+      sortText.textContent = 'Newest First';
+    }
   }
   
-  // Add enter key support for message textarea
-  const messageTextarea = document.getElementById('manualMessage');
-  if (messageTextarea) {
-    messageTextarea.addEventListener('keydown', function(e) {
-      if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
-        e.preventDefault();
-        sendManualMessage();
+  // Reset pagination and reload
+  chatsPagination.offset = 0;
+  loadChats();
+}
+
+// Update chats count display
+function updateChatsCount(total) {
+  const countEl = document.getElementById('chats-count');
+  if (countEl) {
+    countEl.textContent = `${total} chat${total !== 1 ? 's' : ''} total`;
+  }
+}
+
+// Update pagination controls
+function updateChatsPagination(data) {
+  const paginationEl = document.getElementById('chats-pagination');
+  if (!paginationEl) return;
+  
+  const hasMore = data.hasMore;
+  const currentPage = Math.floor(data.offset / data.limit) + 1;
+  const totalPages = Math.ceil(data.total / data.limit);
+  
+  let paginationHTML = '';
+  
+  if (totalPages > 1) {
+    paginationHTML = `
+      <nav aria-label="Chat pagination">
+        <ul class="pagination pagination-sm mb-0 justify-content-center">
+          <li class="page-item ${data.offset === 0 ? 'disabled' : ''}">
+            <button class="page-link" onclick="loadChatPage(${Math.max(0, data.offset - data.limit)})" ${data.offset === 0 ? 'disabled' : ''}>
+              <i class="bi bi-chevron-left"></i> Previous
+            </button>
+          </li>
+          <li class="page-item active">
+            <span class="page-link">${currentPage} of ${totalPages}</span>
+          </li>
+          <li class="page-item ${!hasMore ? 'disabled' : ''}">
+            <button class="page-link" onclick="loadChatPage(${data.offset + data.limit})" ${!hasMore ? 'disabled' : ''}>
+              Next <i class="bi bi-chevron-right"></i>
+            </button>
+          </li>
+        </ul>
+      </nav>
+    `;
+  }
+  
+  paginationEl.innerHTML = paginationHTML;
+}
+
+// Load specific page
+function loadChatPage(offset) {
+  chatsPagination.offset = offset;
+  loadChats();
+}
+
+// Clear all chats
+async function clearAllChats() {
+  if (!confirm('Are you sure you want to clear all chat history? This action cannot be undone.')) {
+    return;
+  }
+  
+  try {
+    const response = await fetch('/api/chats/clear', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
       }
     });
+    
+    const result = await response.json();
+    
+    if (result.success) {
+      showSuccess('All chat history cleared successfully');
+      loadChats(); // Reload the empty list
+    } else {
+      showError('Failed to clear chat history: ' + (result.error || 'Unknown error'));
+    }
+  } catch (error) {
+    console.error('Error clearing chats:', error);
+    showError('Error clearing chat history');
   }
-});
+}
+
+// Escape HTML to prevent XSS
+function escapeHtml(text) {
+  const div = document.createElement('div');
+  div.textContent = text;
+  return div.innerHTML;
+}

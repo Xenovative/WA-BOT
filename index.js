@@ -39,186 +39,8 @@ if (process.env.TELEGRAM_BOT_TOKEN) {
 global.chatHandler = chatHandler;
 global.workflowManager = workflowManager;
 
-// Add fallback methods to chatHandler if they don't exist (for compatibility with running instance)
-if (!chatHandler.addMessage || !chatHandler.getConversation || !chatHandler.getAllChats) {
-  console.log('[Compatibility] Adding fallback methods and loading existing chat data');
-  
-  // Initialize conversations map and load existing data
-  if (!chatHandler.conversations) {
-    chatHandler.conversations = new Map();
-    
-    // Try to load existing chat files
-    const chatHistoryDir = path.join(__dirname, 'chat_history');
-    if (fs.existsSync(chatHistoryDir)) {
-      console.log('[Compatibility] Loading existing chat files...');
-      
-      const files = fs.readdirSync(chatHistoryDir);
-      let loadedCount = 0;
-      
-      for (const file of files) {
-        if (file.endsWith('.json') && file !== 'chats.json' && file !== 'blocked_chats.json') {
-          try {
-            const filePath = path.join(chatHistoryDir, file);
-            const data = JSON.parse(fs.readFileSync(filePath, 'utf8'));
-            
-            if (Array.isArray(data) && data.length > 0) {
-              // Extract chat ID from filename and normalize it
-              let chatId = file.replace('.json', '');
-              const normalizedChatId = normalizeChatId(chatId);
-              
-              // Check if we already have this conversation loaded (avoid duplicates)
-              if (chatHandler.conversations.has(normalizedChatId)) {
-                const existingMessages = chatHandler.conversations.get(normalizedChatId);
-                console.log(`[Compatibility] Chat ${normalizedChatId} already loaded with ${existingMessages.length} messages, merging...`);
-                
-                // Merge messages, avoiding duplicates by timestamp
-                const existingTimestamps = new Set(existingMessages.map(m => m.timestamp));
-                const newMessages = data.filter(m => !existingTimestamps.has(m.timestamp));
-                
-                if (newMessages.length > 0) {
-                  existingMessages.push(...newMessages);
-                  console.log(`[Compatibility] Merged ${newMessages.length} new messages into ${normalizedChatId}`);
-                }
-              } else {
-                chatHandler.conversations.set(normalizedChatId, data);
-              }
-              loadedCount++;
-              console.log(`[Compatibility] Loaded ${data.length} messages for chat ${chatId}`);
-            }
-          } catch (error) {
-            console.error(`[Compatibility] Failed to load chat file ${file}:`, error.message);
-          }
-        }
-      }
-      
-      console.log(`[Compatibility] Loaded ${loadedCount} chat files`);
-    }
-  }
-}
-
-// Helper function to normalize chat ID to prevent history override issues
-function normalizeChatId(chatId) {
-  // Convert all formats to native format
-  if (typeof chatId !== 'string') return String(chatId);
-  
-  let normalized = chatId;
-  
-  // WhatsApp formats
-  if (normalized.startsWith('chat_whatsapp_')) {
-    normalized = normalized.replace('chat_whatsapp_', '') + '@c.us';
-  } else if (normalized.startsWith('whatsapp_')) {
-    normalized = normalized.replace('whatsapp_', '') + '@c.us';
-  } else if (/^\d+$/.test(normalized) && normalized.length > 8) {
-    // Assume long numeric string is WhatsApp without @c.us
-    normalized = normalized + '@c.us';
-  }
-  
-  // Telegram formats
-  if (normalized.startsWith('chat_telegram_')) {
-    normalized = normalized.replace('chat_telegram_', '');
-  } else if (normalized.startsWith('telegram_')) {
-    normalized = normalized.replace('telegram_', '');
-  }
-  
-  return normalized;
-}
-
-if (!chatHandler.addMessage) {
-  chatHandler.addMessage = function(chatId, roleOrMessage, content, platform) {
-    const normalizedChatId = normalizeChatId(chatId);
-    console.log(`[Fallback] addMessage called for ${chatId} (normalized: ${normalizedChatId})`);
-    
-    if (!this.conversations) this.conversations = new Map();
-    if (!this.conversations.has(normalizedChatId)) {
-      this.conversations.set(normalizedChatId, []);
-    }
-    
-    let message;
-    if (typeof roleOrMessage === 'object') {
-      message = roleOrMessage;
-    } else {
-      message = { role: roleOrMessage, content, timestamp: new Date().toISOString() };
-    }
-    
-    this.conversations.get(normalizedChatId).push(message);
-    console.log(`[Fallback] Added message to ${normalizedChatId}, total messages: ${this.conversations.get(normalizedChatId).length}`);
-  };
-}
-
-if (!chatHandler.getConversation) {
-  chatHandler.getConversation = function(chatId, platform) {
-    const normalizedChatId = normalizeChatId(chatId);
-    console.log(`[Fallback] getConversation called for ${chatId} (normalized: ${normalizedChatId})`);
-    
-    if (!this.conversations) this.conversations = new Map();
-    const conversation = this.conversations.get(normalizedChatId) || [];
-    console.log(`[Fallback] Retrieved ${conversation.length} messages for ${normalizedChatId}`);
-    return conversation;
-  };
-}
-
-if (!chatHandler.getAllChats) {
-  chatHandler.getAllChats = function() {
-    console.log('[Fallback] getAllChats called');
-    if (!this.conversations) return [];
-    
-    const chats = [];
-    const seenNumbers = new Set(); // Track phone numbers to avoid duplicates
-    
-    this.conversations.forEach((messages, chatId) => {
-      // Extract phone number for deduplication
-      let phoneNumber = chatId;
-      if (chatId.includes('@c.us')) {
-        phoneNumber = chatId.replace('@c.us', '');
-      } else if (chatId.includes('@g.us')) {
-        phoneNumber = chatId.replace('@g.us', '');
-      }
-      
-      // Skip if we've already seen this phone number
-      if (seenNumbers.has(phoneNumber)) {
-        console.log(`[Fallback] Skipping duplicate chat for number ${phoneNumber}`);
-        return;
-      }
-      seenNumbers.add(phoneNumber);
-      
-      const lastMessage = messages.length > 0 ? messages[messages.length - 1] : null;
-      chats.push({
-        id: chatId, // Use the native format ID
-        preview: lastMessage?.content?.substring(0, 100) || '',
-        timestamp: lastMessage?.timestamp || new Date().toISOString(),
-        messageCount: messages.length
-      });
-    });
-    
-    return chats.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
-  };
-}
-
-if (!chatHandler.isChatBlocked) {
-  console.log('[Compatibility] Adding fallback isChatBlocked method');
-  chatHandler.isChatBlocked = function(chatId) {
-    console.log(`[Fallback] isChatBlocked called for ${chatId} but method not available, returning false`);
-    return false; // Default to not blocked
-  };
-}
-
 // Flag to track if shutdown is in progress
 let isShuttingDown = false;
-
-// Message deduplication to prevent double responses
-const processedMessages = new Set();
-const MESSAGE_CACHE_SIZE = 1000; // Keep track of last 1000 messages
-
-// Clean up old message IDs periodically
-setInterval(() => {
-  if (processedMessages.size > MESSAGE_CACHE_SIZE) {
-    const messageArray = Array.from(processedMessages);
-    processedMessages.clear();
-    // Keep only the most recent half
-    messageArray.slice(-MESSAGE_CACHE_SIZE / 2).forEach(id => processedMessages.add(id));
-    console.log('[Dedup] Cleaned up old message IDs');
-  }
-}, 60000); // Clean every minute
 
 /**
  * Handle graceful shutdown of the application
@@ -383,13 +205,12 @@ client.sendMessage = async function(chatId, content, options = {}) {
     return originalSendMessage(chatId, content, options);
   }
   
-  // Skip if it's an automated message, bot response, forwarded message, or manual message
-  if (options.isAutomated || options.isBotResponse || options.isResponseToUser || options.isManual) {
-    console.log(`[${timestamp}] [${debugId}] [Message-Debug] Skipping automated/bot/manual message`, {
+  // Skip if it's an automated message, bot response, or forwarded message
+  if (options.isAutomated || options.isBotResponse || options.isResponseToUser) {
+    console.log(`[${timestamp}] [${debugId}] [Message-Debug] Skipping automated/bot message`, {
       isAutomated: options.isAutomated,
       isBotResponse: options.isBotResponse,
-      isResponseToUser: options.isResponseToUser,
-      isManual: options.isManual
+      isResponseToUser: options.isResponseToUser
     });
     return originalSendMessage(chatId, content, options);
   }
@@ -464,18 +285,18 @@ client.sendMessage = async function(chatId, content, options = {}) {
   console.log(`[Manual-Block] Manual message from bot ${botNumber} to ${chatId}`);
   
   try {
-    // Only process direct messages and check if AI response should be suppressed
-    if (!isGroup && options.suppressAiResponse === true) {
+    // Only process direct messages
+    if (!isGroup) {
       const cleanChatId = chatId.split('@')[0];
       
-      console.log(`[Manual-Block] Adding temp block for manual message to ${cleanChatId} (AI suppressed)`);
+      console.log(`[Manual-Block] Adding temp block for manual message to ${cleanChatId}`);
       
-      // Add a 5-minute temporary block for manual messages when AI is suppressed
+      // Add a 5-minute temporary block for manual messages
       const blockDuration = 5 * 60 * 1000; // 5 minutes
       const success = blocklist.addTempBlock(
         cleanChatId, 
         blockDuration, 
-        'manual - admin message sent (AI suppressed)',
+        'manual - admin message sent',
         true  // Mark as manual block
       );
       
@@ -624,17 +445,6 @@ global.sendMessage = sendAutomatedMessage;
 // Message processing
 // Handle voice messages
 client.on('message', async (message) => {
-  // ================== CRITICAL DEDUPLICATION CHECK ==================
-  // This MUST be the very first thing to prevent duplicate processing
-  const messageId = message.id?.id || message.id?._serialized || `${message.from}_${message.timestamp}_${message.body?.substring(0, 20)}`;
-  if (processedMessages.has(messageId)) {
-    console.log(`🚫 [DEDUP-BLOCK] Already processed message: ${messageId}`);
-    return;
-  }
-  processedMessages.add(messageId);
-  console.log(`✅ [DEDUP-NEW] Processing new message: ${messageId}`);
-  // ====================================================================
-
   console.log('[Message-Event] New message received:', {
     from: message.from,
     to: message.to,
@@ -1184,28 +994,27 @@ client.on('message', async (message) => {
       
       let response;
       
-      // Use native chat ID directly
-      const nativeChatId = chatId; // WhatsApp native format: '1234567890@g.us'
+      // Format the chat ID to match the expected format in workflowManager
+      const cleanChatId = chatId.includes('@g.us') ? chatId.split('@')[0] : chatId;
+      const formattedChatId = `whatsapp_${cleanChatId}`;
       
       // Check if this chat is blocked from AI responses
-      const isChatBlocked = chatHandler.isChatBlocked(nativeChatId);
-      console.log(`[Group Chat] Chat ${nativeChatId} blocked status: ${isChatBlocked}`);
+      const isChatBlocked = workflowManager.isChatBlocked(formattedChatId);
+      console.log(`[Group Chat] Chat ${formattedChatId} blocked status: ${isChatBlocked}`);
       
       // Check if message is a command
       if (commandHandler.isCommand(cleanMessageText)) {
         response = await commandHandler.processCommand(cleanMessageText, chatId, message.author || message.from);
         updateLLMClient(); // Update LLM client if provider/model changed
       } else if (isChatBlocked) {
-        console.log(`[Group Chat] Skipping AI response for blocked chat: ${nativeChatId}`);
-        // Still save user message to chat history even when AI is blocked
-        chatHandler.addMessage(nativeChatId, 'user', cleanMessageText);
+        console.log(`[Group Chat] Skipping AI response for blocked chat: ${formattedChatId}`);
         return; // Skip AI response generation for blocked chats
       } else {
-        // Add user message to chat history
-        chatHandler.addMessage(nativeChatId, 'user', cleanMessageText);
+        // Add user message to chat history with platform identifier
+        chatHandler.addMessage(chatId, 'user', cleanMessageText, 'whatsapp');
         
-        // Get conversation history
-        const conversation = chatHandler.getConversation(nativeChatId);
+        // Get conversation history with platform identifier
+        const conversation = chatHandler.getConversation(chatId, 'whatsapp');
         
         // Get current settings
         const settings = commandHandler.getCurrentSettings();
@@ -1237,8 +1046,8 @@ client.on('message', async (message) => {
           response = await currentLLMClient.generateResponse(cleanMessageText, messages, settings.parameters);
         }
         
-        // Add assistant response to chat history
-        chatHandler.addMessage(nativeChatId, 'assistant', response);
+        // Add assistant response to chat history with platform identifier
+        chatHandler.addMessage(chatId, 'assistant', response, 'whatsapp');
         
         // Add citations if RAG was used and citations are enabled
         const showCitations = process.env.KB_SHOW_CITATIONS === 'true';
@@ -1323,28 +1132,27 @@ client.on('message', async (message) => {
     
     let response;
     
-    // Use native chat ID directly
-    const nativeChatId = chatId; // WhatsApp native format: '1234567890@c.us'
+    // Format the chat ID to match the expected format in workflowManager
+    const cleanChatId = chatId.includes('@c.us') ? chatId.split('@')[0] : chatId;
+    const formattedChatId = `whatsapp_${cleanChatId}`;
     
     // Check if this chat is blocked from AI responses
-    const isChatBlocked = chatHandler.isChatBlocked(nativeChatId);
-    console.log(`[Direct] Chat ${nativeChatId} blocked status: ${isChatBlocked}`);
+    const isChatBlocked = workflowManager.isChatBlocked(formattedChatId);
+    console.log(`[Direct] Chat ${formattedChatId} blocked status: ${isChatBlocked}`);
     
     // Check if message is a command
     if (commandHandler.isCommand(messageText)) {
       response = await commandHandler.processCommand(messageText, chatId, message.from);
       updateLLMClient(); // Update LLM client if provider/model changed
     } else if (isChatBlocked) {
-      console.log(`[Direct] Skipping AI response for blocked chat: ${nativeChatId}`);
-      // Still save user message to chat history even when AI is blocked
-      chatHandler.addMessage(nativeChatId, 'user', messageText);
+      console.log(`[Direct] Skipping AI response for blocked chat: ${formattedChatId}`);
       return; // Skip AI response generation for blocked chats
     } else {
-      // Add user message to chat history
-      chatHandler.addMessage(nativeChatId, 'user', messageText);
+      // Add user message to chat history with platform identifier
+      chatHandler.addMessage(chatId, 'user', messageText, 'whatsapp');
       
-      // Get conversation history
-      const conversation = chatHandler.getConversation(nativeChatId);
+      // Get conversation history with platform identifier
+      const conversation = chatHandler.getConversation(chatId, 'whatsapp');
       
       // Get current settings
       const settings = commandHandler.getCurrentSettings();
@@ -1376,8 +1184,11 @@ client.on('message', async (message) => {
         response = await currentLLMClient.generateResponse(messageText, messages, settings.parameters);
       }
       
-      // Add assistant response to chat history
-      chatHandler.addMessage(nativeChatId, 'assistant', response);
+      // Format the chat ID to match the expected format in chatHandler
+      // Already defined above
+      
+      // Add assistant response to chat history with platform identifier
+      chatHandler.addMessage(formattedChatId, 'assistant', response, 'whatsapp');
       
       // Add citations if RAG was used and citations are enabled
       const showCitations = process.env.KB_SHOW_CITATIONS === 'true';
