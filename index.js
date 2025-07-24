@@ -120,16 +120,35 @@ if (!chatHandler.getAllChats) {
   chatHandler.getAllChats = function() {
     console.log('[Fallback] getAllChats called');
     if (!this.conversations) return [];
+    
     const chats = [];
+    const seenNumbers = new Set(); // Track phone numbers to avoid duplicates
+    
     this.conversations.forEach((messages, chatId) => {
+      // Extract phone number for deduplication
+      let phoneNumber = chatId;
+      if (chatId.includes('@c.us')) {
+        phoneNumber = chatId.replace('@c.us', '');
+      } else if (chatId.includes('@g.us')) {
+        phoneNumber = chatId.replace('@g.us', '');
+      }
+      
+      // Skip if we've already seen this phone number
+      if (seenNumbers.has(phoneNumber)) {
+        console.log(`[Fallback] Skipping duplicate chat for number ${phoneNumber}`);
+        return;
+      }
+      seenNumbers.add(phoneNumber);
+      
       const lastMessage = messages.length > 0 ? messages[messages.length - 1] : null;
       chats.push({
-        id: chatId,
+        id: chatId, // Use the native format ID
         preview: lastMessage?.content?.substring(0, 100) || '',
         timestamp: lastMessage?.timestamp || new Date().toISOString(),
         messageCount: messages.length
       });
     });
+    
     return chats.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
   };
 }
