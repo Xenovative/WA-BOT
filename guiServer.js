@@ -953,6 +953,40 @@ app.get('/api/chats', (req, res) => {
       chats = [];
     }
     
+    // Deduplicate chats by phone number to handle transition from old to new format
+    const seenNumbers = new Set();
+    const deduplicatedChats = [];
+    
+    for (const chat of chats) {
+      // Extract phone number for deduplication
+      let phoneNumber = chat.id;
+      if (chat.id.includes('@c.us')) {
+        phoneNumber = chat.id.replace('@c.us', '');
+      } else if (chat.id.includes('@g.us')) {
+        phoneNumber = chat.id.replace('@g.us', '');
+      } else if (chat.id.startsWith('whatsapp_')) {
+        phoneNumber = chat.id.replace('whatsapp_', '');
+      } else if (chat.id.startsWith('chat_whatsapp_')) {
+        phoneNumber = chat.id.replace('chat_whatsapp_', '');
+      } else if (chat.id.startsWith('telegram_')) {
+        phoneNumber = chat.id.replace('telegram_', '');
+      } else if (chat.id.startsWith('chat_telegram_')) {
+        phoneNumber = chat.id.replace('chat_telegram_', '');
+      }
+      
+      // Skip if we've already seen this phone number
+      if (seenNumbers.has(phoneNumber)) {
+        console.log(`[API] Skipping duplicate chat for number ${phoneNumber}`);
+        continue;
+      }
+      
+      seenNumbers.add(phoneNumber);
+      deduplicatedChats.push(chat);
+    }
+    
+    console.log(`[API] Deduplicated ${chats.length} chats to ${deduplicatedChats.length}`);
+    chats = deduplicatedChats;
+    
     // Sort chats by timestamp if not already sorted
     chats.sort((a, b) => {
       const timeA = new Date(a.timestamp || 0);
