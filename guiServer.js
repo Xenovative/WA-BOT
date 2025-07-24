@@ -1104,14 +1104,22 @@ app.get('/api/chats/:chatId', (req, res) => {
     
     console.log(`[API] Retrieving chat with ID: ${chatId}`);
     
-    // Extract platform from chat ID if present
+    // Detect platform from native chat ID format
     let platform = null;
-    if (chatId.startsWith('chat_')) {
+    if (chatId.includes('@')) {
+      // WhatsApp native format: '1234567890@c.us' or '1234567890@g.us'
+      platform = 'whatsapp';
+    } else if (/^\d+$/.test(chatId)) {
+      // Telegram native format: '1234567890' (numeric only)
+      platform = 'telegram'; 
+    } else if (chatId.startsWith('chat_')) {
+      // Legacy format fallback
       const parts = chatId.split('_');
       if (parts.length >= 3) {
         platform = parts[1]; // whatsapp or telegram
       }
     } else if (chatId.match(/^(whatsapp|telegram)[:._-]/i)) {
+      // Other legacy format fallback
       platform = chatId.match(/^(whatsapp|telegram)/i)[1].toLowerCase();
     }
     
