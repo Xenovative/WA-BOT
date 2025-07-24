@@ -1188,7 +1188,7 @@ client.on('message', async (message) => {
       // Already defined above
       
       // Add assistant response to chat history with platform identifier
-      chatHandler.addMessage(formattedChatId, 'assistant', response, 'whatsapp');
+      chatHandler.addMessage(chatId, 'assistant', response, 'whatsapp');
       
       // Add citations if RAG was used and citations are enabled
       const showCitations = process.env.KB_SHOW_CITATIONS === 'true';

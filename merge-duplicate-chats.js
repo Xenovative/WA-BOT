@@ -76,8 +76,7 @@ files.forEach(file => {
     normalizedId = extractedId.replace('_c.us', '');
   }
   
-  // Debug logging
-  console.log(`DEBUG: ${file} → extractedId: "${extractedId}" → normalizedId: "${normalizedId}"`);
+  // Debug completed - extracting and normalizing IDs
   
   // Group by the normalized ID to catch duplicates
   const key = normalizedId;
