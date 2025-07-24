@@ -62,21 +62,26 @@ if (!chatHandler.addMessage || !chatHandler.getConversation || !chatHandler.getA
             const data = JSON.parse(fs.readFileSync(filePath, 'utf8'));
             
             if (Array.isArray(data) && data.length > 0) {
-              // Extract chat ID from filename
+              // Extract chat ID from filename and normalize it
               let chatId = file.replace('.json', '');
+              const normalizedChatId = normalizeChatId(chatId);
               
-              // Convert old format IDs to native format if possible
-              if (chatId.startsWith('chat_whatsapp_')) {
-                chatId = chatId.replace('chat_whatsapp_', '') + '@c.us';
-              } else if (chatId.startsWith('chat_telegram_')) {
-                chatId = chatId.replace('chat_telegram_', '');
-              } else if (chatId.startsWith('whatsapp_')) {
-                chatId = chatId.replace('whatsapp_', '') + '@c.us';
-              } else if (chatId.startsWith('telegram_')) {
-                chatId = chatId.replace('telegram_', '');
+              // Check if we already have this conversation loaded (avoid duplicates)
+              if (chatHandler.conversations.has(normalizedChatId)) {
+                const existingMessages = chatHandler.conversations.get(normalizedChatId);
+                console.log(`[Compatibility] Chat ${normalizedChatId} already loaded with ${existingMessages.length} messages, merging...`);
+                
+                // Merge messages, avoiding duplicates by timestamp
+                const existingTimestamps = new Set(existingMessages.map(m => m.timestamp));
+                const newMessages = data.filter(m => !existingTimestamps.has(m.timestamp));
+                
+                if (newMessages.length > 0) {
+                  existingMessages.push(...newMessages);
+                  console.log(`[Compatibility] Merged ${newMessages.length} new messages into ${normalizedChatId}`);
+                }
+              } else {
+                chatHandler.conversations.set(normalizedChatId, data);
               }
-              
-              chatHandler.conversations.set(chatId, data);
               loadedCount++;
               console.log(`[Compatibility] Loaded ${data.length} messages for chat ${chatId}`);
             }
@@ -91,11 +96,42 @@ if (!chatHandler.addMessage || !chatHandler.getConversation || !chatHandler.getA
   }
 }
 
+// Helper function to normalize chat ID to prevent history override issues
+function normalizeChatId(chatId) {
+  // Convert all formats to native format
+  if (typeof chatId !== 'string') return String(chatId);
+  
+  let normalized = chatId;
+  
+  // WhatsApp formats
+  if (normalized.startsWith('chat_whatsapp_')) {
+    normalized = normalized.replace('chat_whatsapp_', '') + '@c.us';
+  } else if (normalized.startsWith('whatsapp_')) {
+    normalized = normalized.replace('whatsapp_', '') + '@c.us';
+  } else if (/^\d+$/.test(normalized) && normalized.length > 8) {
+    // Assume long numeric string is WhatsApp without @c.us
+    normalized = normalized + '@c.us';
+  }
+  
+  // Telegram formats
+  if (normalized.startsWith('chat_telegram_')) {
+    normalized = normalized.replace('chat_telegram_', '');
+  } else if (normalized.startsWith('telegram_')) {
+    normalized = normalized.replace('telegram_', '');
+  }
+  
+  return normalized;
+}
+
 if (!chatHandler.addMessage) {
   chatHandler.addMessage = function(chatId, roleOrMessage, content, platform) {
-    console.log(`[Fallback] addMessage called for ${chatId}`);
+    const normalizedChatId = normalizeChatId(chatId);
+    console.log(`[Fallback] addMessage called for ${chatId} (normalized: ${normalizedChatId})`);
+    
     if (!this.conversations) this.conversations = new Map();
-    if (!this.conversations.has(chatId)) this.conversations.set(chatId, []);
+    if (!this.conversations.has(normalizedChatId)) {
+      this.conversations.set(normalizedChatId, []);
+    }
     
     let message;
     if (typeof roleOrMessage === 'object') {
@@ -104,15 +140,20 @@ if (!chatHandler.addMessage) {
       message = { role: roleOrMessage, content, timestamp: new Date().toISOString() };
     }
     
-    this.conversations.get(chatId).push(message);
+    this.conversations.get(normalizedChatId).push(message);
+    console.log(`[Fallback] Added message to ${normalizedChatId}, total messages: ${this.conversations.get(normalizedChatId).length}`);
   };
 }
 
 if (!chatHandler.getConversation) {
   chatHandler.getConversation = function(chatId, platform) {
-    console.log(`[Fallback] getConversation called for ${chatId}`);
+    const normalizedChatId = normalizeChatId(chatId);
+    console.log(`[Fallback] getConversation called for ${chatId} (normalized: ${normalizedChatId})`);
+    
     if (!this.conversations) this.conversations = new Map();
-    return this.conversations.get(chatId) || [];
+    const conversation = this.conversations.get(normalizedChatId) || [];
+    console.log(`[Fallback] Retrieved ${conversation.length} messages for ${normalizedChatId}`);
+    return conversation;
   };
 }
 
