@@ -26,8 +26,28 @@ files.forEach(file => {
   let extractedId = baseName;
   let platforms = [];
   
-  // Handle platform prefixes
-  if (baseName.includes('_')) {
+  // Handle colon-prefixed IDs first (whatsapp:whatsapp_number)
+  if (baseName.includes(':')) {
+    const colonParts = baseName.split(':');
+    if (colonParts[0] === 'whatsapp' || colonParts[0] === 'telegram') {
+      platforms.push(colonParts[0]);
+      // The rest might still have underscore prefixes
+      const remaining = colonParts.slice(1).join(':');
+      if (remaining.includes('_')) {
+        const underscoreParts = remaining.split('_');
+        if (underscoreParts[0] === 'whatsapp' || underscoreParts[0] === 'telegram') {
+          platforms.push(underscoreParts[0]);
+          extractedId = underscoreParts.slice(1).join('_');
+        } else {
+          extractedId = remaining;
+        }
+      } else {
+        extractedId = remaining;
+      }
+    }
+  }
+  // Handle underscore-prefixed IDs (whatsapp_whatsapp_number or whatsapp_number_c_us)
+  else if (baseName.includes('_')) {
     const parts = baseName.split('_');
     
     // Look for patterns like whatsapp_whatsapp_number or whatsapp_number_c_us
