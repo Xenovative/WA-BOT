@@ -994,7 +994,10 @@ app.post('/api/chat/send-manual', express.json(), async (req, res) => {
         const actualChatId = chatId.replace('telegram:', '');
         await client.sendMessage(actualChatId, message);
       } else {
-        await client.sendMessage(chatId, message);
+        // For WhatsApp, use the cleaned chat ID and convert to proper format
+        const whatsappChatId = cleanChatId.replace('_c.us', '@c.us');
+        console.log(`[Manual-Debug] Sending to WhatsApp chatId: "${whatsappChatId}"`);
+        await client.sendMessage(whatsappChatId, message);
       }
       
       console.log(`[Manual] Message sent to ${chatId} via ${platform}, AI ${enableAI ? 'enabled' : 'disabled'}`);
