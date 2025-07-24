@@ -277,6 +277,18 @@ class ChatHandler {
   }
 
   /**
+   * Get recent chats with metadata (limited)
+   * @param {number} limit - Maximum number of chats to return
+   * @returns {Array} Array of recent chat objects with id, preview, timestamp, messageCount
+   */
+  getRecentChats(limit = 5) {
+    console.log(`[ChatHandler] Getting ${limit} most recent chats`);
+    
+    const allChats = this.getAllChats();
+    return allChats.slice(0, limit);
+  }
+
+  /**
    * Delete a chat completely
    * @param {string} chatId - Native chat ID
    */
