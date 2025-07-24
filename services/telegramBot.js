@@ -257,12 +257,14 @@ class TelegramBotService {
       const formattedChatId = `telegram_${chatId}`;
       
       // Check if this chat is blocked from AI responses
-      const isChatBlocked = workflowManager ? workflowManager.isChatBlocked(formattedChatId) : false;
+      const isChatBlocked = chatHandler.isChatBlocked(formattedChatId);
       console.log(`[Telegram] Chat ${formattedChatId} blocked status: ${isChatBlocked}`);
       
       // If chat is blocked from AI responses, skip processing unless it's a command
       if (isChatBlocked && !messageText.startsWith('/') && !commandHandler.isCommand(cleanMessageText)) {
         console.log(`[Telegram] Skipping AI response for blocked chat: ${formattedChatId}`);
+        // Still save user message to chat history even when AI is blocked
+        chatHandler.addMessage(formattedChatId, 'user', cleanMessageText, 'telegram');
         return;
       }
       

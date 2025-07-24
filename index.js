@@ -994,12 +994,12 @@ client.on('message', async (message) => {
       
       let response;
       
-      // Format the chat ID to match the expected format in workflowManager
+      // Format the chat ID to match the expected format in chatHandler
       const cleanChatId = chatId.includes('@g.us') ? chatId.split('@')[0] : chatId;
       const formattedChatId = `whatsapp_${cleanChatId}`;
       
       // Check if this chat is blocked from AI responses
-      const isChatBlocked = workflowManager.isChatBlocked(formattedChatId);
+      const isChatBlocked = chatHandler.isChatBlocked(formattedChatId);
       console.log(`[Group Chat] Chat ${formattedChatId} blocked status: ${isChatBlocked}`);
       
       // Check if message is a command
@@ -1008,6 +1008,8 @@ client.on('message', async (message) => {
         updateLLMClient(); // Update LLM client if provider/model changed
       } else if (isChatBlocked) {
         console.log(`[Group Chat] Skipping AI response for blocked chat: ${formattedChatId}`);
+        // Still save user message to chat history even when AI is blocked
+        chatHandler.addMessage(chatId, 'user', cleanMessageText, 'whatsapp');
         return; // Skip AI response generation for blocked chats
       } else {
         // Add user message to chat history with platform identifier
@@ -1137,7 +1139,7 @@ client.on('message', async (message) => {
     const formattedChatId = `whatsapp_${cleanChatId}`;
     
     // Check if this chat is blocked from AI responses
-    const isChatBlocked = workflowManager.isChatBlocked(formattedChatId);
+    const isChatBlocked = chatHandler.isChatBlocked(formattedChatId);
     console.log(`[Direct] Chat ${formattedChatId} blocked status: ${isChatBlocked}`);
     
     // Check if message is a command
@@ -1146,6 +1148,8 @@ client.on('message', async (message) => {
       updateLLMClient(); // Update LLM client if provider/model changed
     } else if (isChatBlocked) {
       console.log(`[Direct] Skipping AI response for blocked chat: ${formattedChatId}`);
+      // Still save user message to chat history even when AI is blocked
+      chatHandler.addMessage(chatId, 'user', messageText, 'whatsapp');
       return; // Skip AI response generation for blocked chats
     } else {
       // Add user message to chat history with platform identifier

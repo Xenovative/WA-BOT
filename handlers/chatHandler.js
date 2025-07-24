@@ -762,8 +762,12 @@ class ChatHandler {
       fs.mkdirSync(this.chatHistoryDir, { recursive: true });
     }
     
+    // Create a safe copy of the conversations to avoid modifying while iterating
+    const conversationsToSave = new Map(this.conversations);
+    const updatedConversations = new Map();
+    
     // Save each chat to its own file
-    this.conversations.forEach((messages, chatId) => {
+    conversationsToSave.forEach((messages, chatId) => {
       try {
         // Ensure chat ID is properly formatted with chat_ prefix
         let formattedChatId = chatId;
@@ -814,19 +818,21 @@ class ChatHandler {
         const jsonContent = JSON.stringify(mergedMessages, null, 2);
         fs.writeFileSync(chatFile, jsonContent, 'utf8');
         
-        // Update in-memory cache with merged messages using the formatted ID
-        this.conversations.set(formattedChatId, mergedMessages);
-        
-        // If the original chatId is different from formattedChatId, remove the old entry
-        if (chatId !== formattedChatId && this.conversations.has(chatId)) {
-          this.conversations.delete(chatId);
-          console.log(`[ChatHandler] Removed old chat entry for ${chatId}, now using ${formattedChatId}`);
-        }
+        // Store the updated conversation with the formatted ID
+        updatedConversations.set(formattedChatId, mergedMessages);
         
         console.log(`[ChatHandler] Saved ${mergedMessages.length} messages for chat ${formattedChatId}`);
       } catch (error) {
         console.error(`[ChatHandler] Error saving chat history for ${chatId}:`, error);
+        // Still add to updated conversations to avoid losing the data
+        updatedConversations.set(chatId, messages);
       }
+    });
+    
+    // Now safely update the in-memory conversations Map with all changes at once
+    this.conversations.clear();
+    updatedConversations.forEach((messages, chatId) => {
+      this.conversations.set(chatId, messages);
     });
     
     // Also maintain the main index file
