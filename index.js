@@ -624,6 +624,17 @@ global.sendMessage = sendAutomatedMessage;
 // Message processing
 // Handle voice messages
 client.on('message', async (message) => {
+  // ================== CRITICAL DEDUPLICATION CHECK ==================
+  // This MUST be the very first thing to prevent duplicate processing
+  const messageId = message.id?.id || message.id?._serialized || `${message.from}_${message.timestamp}_${message.body?.substring(0, 20)}`;
+  if (processedMessages.has(messageId)) {
+    console.log(`🚫 [DEDUP-BLOCK] Already processed message: ${messageId}`);
+    return;
+  }
+  processedMessages.add(messageId);
+  console.log(`✅ [DEDUP-NEW] Processing new message: ${messageId}`);
+  // ====================================================================
+
   console.log('[Message-Event] New message received:', {
     from: message.from,
     to: message.to,
@@ -639,15 +650,6 @@ client.on('message', async (message) => {
     console.log('[Message-Event] Skipping message from self');
     return;
   }
-  
-  // Message deduplication - prevent processing the same message twice
-  const messageId = message.id?.id || message.id?._serialized || `${message.from}_${message.timestamp}_${message.body?.substring(0, 20)}`;
-  if (processedMessages.has(messageId)) {
-    console.log(`[Dedup] Skipping already processed message: ${messageId}`);
-    return;
-  }
-  processedMessages.add(messageId);
-  console.log(`[Dedup] Processing new message: ${messageId}`);
   
   // Initialize message type flags if not set
   message.isCommand = message.isCommand || false;
