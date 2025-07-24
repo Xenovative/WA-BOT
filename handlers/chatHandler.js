@@ -228,7 +228,7 @@ class ChatHandler {
     };
     
     conversation.push(message);
-    console.log(`[ChatHandler] Added message to chat ${platformChatId}, total messages: ${conversation.length}`);
+    console.log(`[ChatHandler] Added message to chat ${formattedChatId}, total messages: ${conversation.length}`);
     
     // Persist to disk immediately
     try {
