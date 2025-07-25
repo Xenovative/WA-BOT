@@ -1725,6 +1725,8 @@ async function loadRecentChats() {
             const messageCount = chat.messageCount || chat.messages || 0;
             const isAIEnabled = aiToggleStates.get(chatId) !== false; // Default to enabled
             
+            console.log(`[RecentChats] Chat ${chatId}: aiToggleStates.get() = ${aiToggleStates.get(chatId)}, isAIEnabled = ${isAIEnabled}`);
+            
             const row = document.createElement('tr');
             row.innerHTML = `
                 <td>
@@ -2438,7 +2440,8 @@ function addAIToggleListeners() {
                 
                 // Update global state
                 aiToggleStates.set(chatId, enabled);
-                console.log(`[AIToggle] Updated state for ${chatId}: ${enabled}`);
+                console.log(`[AIToggle] Updated global state for ${chatId}: ${enabled}`);
+                console.log('[AIToggle] Current global aiToggleStates Map:', aiToggleStates);
                 
                 // Update the label
                 const label = this.nextElementSibling;
@@ -4233,17 +4236,23 @@ let aiToggleStates = new Map(); // Track AI toggle state per chat
 // Load AI states from backend
 async function loadAIStates() {
   try {
+    console.log('[LoadAIStates] Fetching AI states from backend...');
     const response = await fetch('/api/chat/ai-states');
     const data = await response.json();
     
-    if (data.success && (data.states || data.aiStates)) {
+    console.log('[LoadAIStates] Backend response:', data);
+    
+    if (data.success) {
       // Convert object back to Map - check both possible field names
       const statesObj = data.states || data.aiStates || {};
       aiToggleStates = new Map(Object.entries(statesObj));
-      console.log(`Loaded AI states for ${aiToggleStates.size} chats:`, statesObj);
+      console.log(`[LoadAIStates] Loaded AI states for ${aiToggleStates.size} chats:`, statesObj);
+      console.log('[LoadAIStates] Global aiToggleStates Map:', aiToggleStates);
+    } else {
+      console.error('[LoadAIStates] Backend returned error:', data.error);
     }
   } catch (error) {
-    console.error('Error loading AI states:', error);
+    console.error('[LoadAIStates] Error loading AI states:', error);
   }
 }
 
