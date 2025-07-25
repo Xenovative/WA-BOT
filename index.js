@@ -30,14 +30,16 @@ if (process.env.TELEGRAM_BOT_TOKEN) {
   try {
     telegramBot = new TelegramBotService(process.env.TELEGRAM_BOT_TOKEN);
     telegramBot.start();
+    console.log('Telegram bot started successfully');
   } catch (error) {
     console.error('Failed to start Telegram bot:', error);
   }
 }
 
-// Make chatHandler and workflowManager globally available
+// Make chatHandler, workflowManager, and telegramBot globally available
 global.chatHandler = chatHandler;
 global.workflowManager = workflowManager;
+global.telegramBot = telegramBot;
 
 // Flag to track if shutdown is in progress
 let isShuttingDown = false;
