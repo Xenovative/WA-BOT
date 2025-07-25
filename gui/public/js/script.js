@@ -4247,8 +4247,9 @@ function normalizeChatIdForAI(chatId) {
   if (chatId.startsWith('chat_whatsapp_')) {
     return chatId;
   }
-  // Add the prefix for normalized lookup
-  return `chat_whatsapp_${chatId}`;
+  // Convert @ to _ for WhatsApp chat IDs and add prefix
+  const normalizedId = chatId.replace('@', '_');
+  return `chat_whatsapp_${normalizedId}`;
 }
 
 // Get original chat ID from normalized format
