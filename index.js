@@ -998,6 +998,9 @@ client.on('message', async (message) => {
       const cleanChatId = chatId.includes('@g.us') ? chatId.split('@')[0] : chatId;
       const formattedChatId = `chat_whatsapp_${cleanChatId}_g.us`;
       
+      // Always save user message to chat history, even if AI is blocked
+      chatHandler.addMessage(chatId, 'user', cleanMessageText, 'whatsapp');
+      
       // Check if this chat is blocked from AI responses
       const isChatBlocked = workflowManager.isChatBlocked(formattedChatId);
       console.log(`[Group Chat] Chat ${formattedChatId} blocked status: ${isChatBlocked}`);
@@ -1010,9 +1013,6 @@ client.on('message', async (message) => {
         console.log(`[Group Chat] Skipping AI response for blocked chat: ${formattedChatId}`);
         return; // Skip AI response generation for blocked chats
       } else {
-        // Add user message to chat history with platform identifier
-        chatHandler.addMessage(chatId, 'user', cleanMessageText, 'whatsapp');
-        
         // Get conversation history with platform identifier
         const conversation = chatHandler.getConversation(chatId, 'whatsapp');
         
@@ -1136,6 +1136,9 @@ client.on('message', async (message) => {
     const cleanChatId = chatId.includes('@c.us') ? chatId.split('@')[0] : chatId;
     const formattedChatId = `chat_whatsapp_${cleanChatId}_c.us`;
     
+    // Always save user message to chat history, even if AI is blocked
+    chatHandler.addMessage(chatId, 'user', messageText, 'whatsapp');
+    
     // Check if this chat is blocked from AI responses
     const isChatBlocked = workflowManager.isChatBlocked(formattedChatId);
     console.log(`[Direct] Chat ${formattedChatId} blocked status: ${isChatBlocked}`);
@@ -1148,9 +1151,6 @@ client.on('message', async (message) => {
       console.log(`[Direct] Skipping AI response for blocked chat: ${formattedChatId}`);
       return; // Skip AI response generation for blocked chats
     } else {
-      // Add user message to chat history with platform identifier
-      chatHandler.addMessage(chatId, 'user', messageText, 'whatsapp');
-      
       // Get conversation history with platform identifier
       const conversation = chatHandler.getConversation(chatId, 'whatsapp');
       
