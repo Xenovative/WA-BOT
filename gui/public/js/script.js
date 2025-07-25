@@ -1713,14 +1713,8 @@ async function loadRecentChats() {
             return;
         }
         
-        // Get AI states for all chats and update global state
-        const aiStatesResponse = await fetch('/api/chat/ai-states');
-        const aiStatesData = aiStatesResponse.ok ? await aiStatesResponse.json() : { states: {} };
-        const aiStates = aiStatesData.states || aiStatesData.aiStates || {};
-        
-        // Update global AI toggle states
-        aiToggleStates = new Map(Object.entries(aiStates));
-        console.log(`[RecentChats] Updated AI states for ${aiToggleStates.size} chats:`, aiStates);
+        // Use global AI states (already loaded by loadAIStates())
+        console.log(`[RecentChats] Using global AI states for ${aiToggleStates.size} chats`);
         
         // Clear loading and populate with actual data
         recentChatsBody.innerHTML = '';
