@@ -942,10 +942,15 @@ app.delete('/api/chats/:chatId', (req, res) => {
 
 // Manual message sending endpoint
 app.post('/api/chat/send-manual', express.json(), async (req, res) => {
+  console.log('[Manual-Debug] === Manual message endpoint called ===');
+  console.log('[Manual-Debug] Request body:', JSON.stringify(req.body, null, 2));
+  
   try {
     const { chatId, message, enableAI } = req.body;
+    console.log('[Manual-Debug] Extracted values:', { chatId, message: message?.substring(0, 50) + '...', enableAI });
     
     if (!chatId || !message) {
+      console.log('[Manual-Debug] Missing required parameters');
       return res.status(400).json({ 
         success: false, 
         error: 'Missing required parameters: chatId and message' 
@@ -956,16 +961,25 @@ app.post('/api/chat/send-manual', express.json(), async (req, res) => {
     let client = null;
     let platform = 'whatsapp'; // default
     
+    console.log('[Manual-Debug] Platform detection for chatId:', chatId);
+    
     // Check for both telegram: and telegram_ formats
     if (chatId.startsWith('telegram:') || chatId.startsWith('telegram_')) {
       platform = 'telegram';
+      console.log('[Manual-Debug] Detected platform: telegram');
+      console.log('[Manual-Debug] global.telegramBot available:', !!global.telegramBot);
       client = global.telegramBot;
       if (!client) {
+        console.log('[Manual-Debug] Telegram bot not available, returning error');
         return res.status(500).json({ success: false, error: 'Telegram bot not available' });
       }
     } else {
+      console.log('[Manual-Debug] Detected platform: whatsapp');
+      console.log('[Manual-Debug] global.whatsappClient available:', !!global.whatsappClient);
+      console.log('[Manual-Debug] global.whatsappClient.client available:', !!global.whatsappClient?.client);
       client = global.whatsappClient?.client;
       if (!client) {
+        console.log('[Manual-Debug] WhatsApp client not available, returning error');
         return res.status(500).json({ success: false, error: 'WhatsApp client not available' });
       }
     }
@@ -993,15 +1007,23 @@ app.post('/api/chat/send-manual', express.json(), async (req, res) => {
     }
     
     // Send the message
+    console.log('[Manual-Debug] About to send message via', platform);
+    console.log('[Manual-Debug] Client type:', typeof client);
+    console.log('[Manual-Debug] Client available methods:', Object.getOwnPropertyNames(client || {}).slice(0, 10));
+    
     try {
       if (platform === 'telegram') {
         console.log(`[Manual-Debug] Sending to Telegram chatId: "${cleanChatId}"`);
+        console.log('[Manual-Debug] Telegram client sendMessage method:', typeof client.sendMessage);
         await client.sendMessage(cleanChatId, message);
+        console.log('[Manual-Debug] Telegram message sent successfully');
       } else {
         // For WhatsApp, use the cleaned chat ID and convert to proper format
         const whatsappChatId = cleanChatId.replace('_c.us', '@c.us');
         console.log(`[Manual-Debug] Sending to WhatsApp chatId: "${whatsappChatId}"`);
+        console.log('[Manual-Debug] WhatsApp client sendMessage method:', typeof client.sendMessage);
         await client.sendMessage(whatsappChatId, message);
+        console.log('[Manual-Debug] WhatsApp message sent successfully');
       }
       
       console.log(`[Manual] Message sent to ${chatId} via ${platform}, AI ${enableAI ? 'enabled' : 'disabled'}`);
@@ -1029,7 +1051,11 @@ app.post('/api/chat/send-manual', express.json(), async (req, res) => {
         aiEnabled: enableAI
       });
     } catch (sendError) {
-      console.error('Error sending manual message:', sendError);
+      console.error('[Manual-Debug] Error sending manual message:');
+      console.error('[Manual-Debug] Error name:', sendError.name);
+      console.error('[Manual-Debug] Error message:', sendError.message);
+      console.error('[Manual-Debug] Error stack:', sendError.stack);
+      console.error('[Manual-Debug] Full error object:', sendError);
       res.status(500).json({ 
         success: false, 
         error: 'Failed to send message: ' + sendError.message 
@@ -1037,7 +1063,11 @@ app.post('/api/chat/send-manual', express.json(), async (req, res) => {
     }
     
   } catch (error) {
-    console.error('Error in manual message sending:', error);
+    console.error('[Manual-Debug] Error in manual message sending:');
+    console.error('[Manual-Debug] Error name:', error.name);
+    console.error('[Manual-Debug] Error message:', error.message);
+    console.error('[Manual-Debug] Error stack:', error.stack);
+    console.error('[Manual-Debug] Full error object:', error);
     res.status(500).json({ 
       success: false, 
       error: 'Internal server error: ' + error.message 
