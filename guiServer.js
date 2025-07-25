@@ -994,8 +994,8 @@ app.post('/api/chat/send-manual', express.json(), async (req, res) => {
     // Send the message
     try {
       if (platform === 'telegram') {
-        const actualChatId = chatId.replace('telegram:', '');
-        await client.sendMessage(actualChatId, message);
+        console.log(`[Manual-Debug] Sending to Telegram chatId: "${cleanChatId}"`);
+        await client.sendMessage(cleanChatId, message);
       } else {
         // For WhatsApp, use the cleaned chat ID and convert to proper format
         const whatsappChatId = cleanChatId.replace('_c.us', '@c.us');
