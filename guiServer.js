@@ -1068,9 +1068,14 @@ app.post('/api/chats/clear', express.json(), async (req, res) => {
 // AI toggle state management endpoint
 app.get('/api/chat/ai-states', (req, res) => {
   try {
-    // Get all AI toggle states from memory or storage
-    const aiStates = global.chatAIStates || new Map();
-    const statesObj = Object.fromEntries(aiStates);
+    // Get all blocked chats from workflowManager
+    const blockedChats = global.workflowManager ? global.workflowManager.getBlockedChats() : [];
+    
+    // Convert to states object (blocked = AI disabled)
+    const statesObj = {};
+    blockedChats.forEach(chatId => {
+      statesObj[chatId] = false; // false = AI disabled (blocked)
+    });
     
     res.json({ 
       success: true, 
@@ -1096,13 +1101,21 @@ app.post('/api/chat/ai-states', express.json(), (req, res) => {
       });
     }
     
-    // Initialize global AI states if not exists
-    if (!global.chatAIStates) {
-      global.chatAIStates = new Map();
+    if (!global.workflowManager) {
+      return res.status(500).json({ 
+        success: false, 
+        error: 'WorkflowManager not available' 
+      });
     }
     
-    // Set the AI state for this chat
-    global.chatAIStates.set(chatId, enabled);
+    // Use workflowManager to block/unblock chat
+    if (enabled) {
+      // AI enabled = unblock chat
+      global.workflowManager.unblockChat(chatId);
+    } else {
+      // AI disabled = block chat
+      global.workflowManager.blockChat(chatId);
+    }
     
     console.log(`[AI Toggle] ${enabled ? 'Enabled' : 'Disabled'} AI for chat: ${chatId}`);
     
@@ -1117,6 +1130,107 @@ app.post('/api/chat/ai-states', express.json(), (req, res) => {
     res.status(500).json({ 
       success: false, 
       error: 'Failed to set AI state: ' + error.message 
+    });
+  }
+});
+
+// Get AI states for all chats
+app.get('/api/chat/ai-states', (req, res) => {
+  try {
+    if (!global.workflowManager) {
+      return res.status(500).json({ 
+        success: false, 
+        error: 'WorkflowManager not available' 
+      });
+    }
+    
+    // Get all blocked chats from workflowManager
+    const blockedChats = global.workflowManager.getBlockedChats();
+    const states = {};
+    
+    // Convert blocked chats to AI states (blocked = AI disabled)
+    blockedChats.forEach(chatId => {
+      // Remove normalization prefix to get original chat ID
+      const originalChatId = chatId.replace('chat_whatsapp_', '');
+      states[originalChatId] = false; // AI disabled
+    });
+    
+    res.json({
+      success: true,
+      states: states
+    });
+  } catch (error) {
+    console.error('Error getting AI states:', error);
+    res.status(500).json({ 
+      success: false, 
+      error: 'Failed to get AI states: ' + error.message 
+    });
+  }
+});
+
+// Get recent chats
+app.get('/api/chats/recent', async (req, res) => {
+  try {
+    const chatHandler = require('./handlers/chatHandler');
+    const fs = require('fs');
+    const path = require('path');
+    
+    // Get all chat files
+    const chatsDir = path.join(process.cwd(), 'data', 'chats');
+    const chats = [];
+    
+    if (fs.existsSync(chatsDir)) {
+      const files = fs.readdirSync(chatsDir)
+        .filter(file => file.endsWith('.json'))
+        .map(file => {
+          const filePath = path.join(chatsDir, file);
+          const stats = fs.statSync(filePath);
+          return {
+            file: file,
+            path: filePath,
+            modified: stats.mtime
+          };
+        })
+        .sort((a, b) => b.modified - a.modified) // Sort by most recent
+        .slice(0, 20); // Get top 20 recent chats
+      
+      for (const fileInfo of files) {
+        try {
+          const chatData = JSON.parse(fs.readFileSync(fileInfo.path, 'utf8'));
+          const chatId = fileInfo.file.replace('.json', '').replace(/[^a-zA-Z0-9@._:-]/g, ''); // Clean filename to get chat ID
+          
+          let lastMessage = 'No messages';
+          let messageCount = 0;
+          
+          if (chatData && Array.isArray(chatData) && chatData.length > 0) {
+            messageCount = chatData.length;
+            const lastMsg = chatData[chatData.length - 1];
+            if (lastMsg && lastMsg.content) {
+              lastMessage = lastMsg.content;
+            }
+          }
+          
+          chats.push({
+            chatId: chatId,
+            lastMessage: lastMessage,
+            messageCount: messageCount,
+            lastModified: fileInfo.modified
+          });
+        } catch (parseError) {
+          console.warn(`Failed to parse chat file ${fileInfo.file}:`, parseError.message);
+        }
+      }
+    }
+    
+    res.json({
+      success: true,
+      chats: chats
+    });
+  } catch (error) {
+    console.error('Error getting recent chats:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to get recent chats: ' + error.message
     });
   }
 });

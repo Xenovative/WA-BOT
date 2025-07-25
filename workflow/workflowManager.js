@@ -1472,6 +1472,64 @@ class WorkflowManager extends EventEmitter {
       throw error;
     }
   }
+  
+  /**
+   * Block a chat from receiving AI responses
+   * @param {string} chatId - Chat ID to block
+   * @returns {boolean} - True if successfully blocked
+   */
+  blockChat(chatId) {
+    if (!chatId) return false;
+    
+    const normalizedChatId = this.normalizeChatId(chatId);
+    this.blockedChats.add(normalizedChatId);
+    
+    console.log(`[WorkflowManager] Blocked chat: ${normalizedChatId}`);
+    return true;
+  }
+  
+  /**
+   * Unblock a chat to allow AI responses
+   * @param {string} chatId - Chat ID to unblock
+   * @returns {boolean} - True if successfully unblocked
+   */
+  unblockChat(chatId) {
+    if (!chatId) return false;
+    
+    const normalizedChatId = this.normalizeChatId(chatId);
+    const wasBlocked = this.blockedChats.has(normalizedChatId);
+    this.blockedChats.delete(normalizedChatId);
+    
+    console.log(`[WorkflowManager] Unblocked chat: ${normalizedChatId}`);
+    return wasBlocked;
+  }
+  
+  /**
+   * Toggle AI responses for a chat
+   * @param {string} chatId - Chat ID to toggle
+   * @returns {boolean} - True if now blocked, false if now unblocked
+   */
+  toggleChatAI(chatId) {
+    if (!chatId) return false;
+    
+    const normalizedChatId = this.normalizeChatId(chatId);
+    
+    if (this.blockedChats.has(normalizedChatId)) {
+      this.unblockChat(chatId);
+      return false; // Now unblocked (AI enabled)
+    } else {
+      this.blockChat(chatId);
+      return true; // Now blocked (AI disabled)
+    }
+  }
+  
+  /**
+   * Get all blocked chats
+   * @returns {Array} - Array of blocked chat IDs
+   */
+  getBlockedChats() {
+    return Array.from(this.blockedChats);
+  }
 }
 
 module.exports = WorkflowManager;

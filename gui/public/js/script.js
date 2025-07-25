@@ -1527,7 +1527,185 @@ document.addEventListener('DOMContentLoaded', function() {
     // Other event listeners...
 });
 
-// ...
+// Chat loading and management functions
+async function loadRecentChats() {
+    const recentChatsBody = document.getElementById('recent-chats-body');
+    if (!recentChatsBody) return;
+    
+    try {
+        // Show loading state
+        recentChatsBody.innerHTML = `
+            <tr>
+                <td colspan="5" class="text-center py-4">
+                    <div class="spinner-border spinner-border-sm" role="status">
+                        <span class="visually-hidden">Loading...</span>
+                    </div>
+                    <span class="ms-2">Loading recent chats...</span>
+                </td>
+            </tr>
+        `;
+        
+        // Fetch recent chats from API
+        const response = await fetch('/api/chats/recent');
+        if (!response.ok) {
+            throw new Error('Failed to fetch recent chats');
+        }
+        
+        const data = await response.json();
+        const chats = data.chats || [];
+        
+        if (chats.length === 0) {
+            recentChatsBody.innerHTML = `
+                <tr>
+                    <td colspan="5" class="text-center py-4 text-muted">
+                        <i class="bi bi-chat-text me-2"></i>
+                        No recent chats found
+                    </td>
+                </tr>
+            `;
+            return;
+        }
+        
+        // Get AI states for all chats
+        const aiStatesResponse = await fetch('/api/chat/ai-states');
+        const aiStatesData = aiStatesResponse.ok ? await aiStatesResponse.json() : { states: {} };
+        const aiStates = aiStatesData.states || {};
+        
+        // Clear loading and populate with actual data
+        recentChatsBody.innerHTML = '';
+        
+        chats.forEach(chat => {
+            const chatId = chat.chatId || chat.id;
+            const lastMessage = chat.lastMessage || chat.content || 'No messages';
+            const messageCount = chat.messageCount || chat.messages || 0;
+            const isAIEnabled = aiStates[chatId] !== false; // Default to enabled
+            
+            const row = document.createElement('tr');
+            row.innerHTML = `
+                <td>
+                    <span class="fw-medium">${escapeHtml(chatId)}</span>
+                </td>
+                <td>
+                    <span class="text-truncate d-inline-block" style="max-width: 300px;" title="${escapeHtml(lastMessage)}">
+                        ${escapeHtml(lastMessage.substring(0, 100))}${lastMessage.length > 100 ? '...' : ''}
+                    </span>
+                </td>
+                <td>
+                    <span class="badge bg-secondary">${messageCount}</span>
+                </td>
+                <td>
+                    <div class="form-check form-switch">
+                        <input class="form-check-input ai-toggle" 
+                               type="checkbox" 
+                               data-chat-id="${escapeHtml(chatId)}"
+                               ${isAIEnabled ? 'checked' : ''}>
+                        <label class="form-check-label small text-muted">
+                            ${isAIEnabled ? 'On' : 'Off'}
+                        </label>
+                    </div>
+                </td>
+                <td>
+                    <div class="btn-group" role="group">
+                        <button class="btn btn-sm btn-outline-primary" 
+                                onclick="viewChat('${escapeHtml(chatId)}')" 
+                                title="View Chat">
+                            <i class="bi bi-eye"></i>
+                        </button>
+                        <button class="btn btn-sm btn-outline-danger" 
+                                onclick="deleteChat('${escapeHtml(chatId)}')" 
+                                title="Delete Chat">
+                            <i class="bi bi-trash"></i>
+                        </button>
+                    </div>
+                </td>
+            `;
+            
+            recentChatsBody.appendChild(row);
+        });
+        
+        // Add event listeners for AI toggles
+        addAIToggleListeners();
+        
+    } catch (error) {
+        console.error('Error loading recent chats:', error);
+        recentChatsBody.innerHTML = `
+            <tr>
+                <td colspan="5" class="text-center py-4 text-danger">
+                    <i class="bi bi-exclamation-triangle me-2"></i>
+                    Error loading chats: ${escapeHtml(error.message)}
+                </td>
+            </tr>
+        `;
+    }
+}
+
+// Add event listeners for AI toggle switches
+function addAIToggleListeners() {
+    const toggles = document.querySelectorAll('.ai-toggle');
+    toggles.forEach(toggle => {
+        toggle.addEventListener('change', async function() {
+            const chatId = this.getAttribute('data-chat-id');
+            const enabled = this.checked;
+            
+            try {
+                await toggleChatAI(chatId, enabled);
+                
+                // Update the label
+                const label = this.nextElementSibling;
+                if (label) {
+                    label.textContent = enabled ? 'On' : 'Off';
+                }
+                
+                showToast(`AI ${enabled ? 'enabled' : 'disabled'} for chat`, 'success');
+            } catch (error) {
+                console.error('Error toggling AI:', error);
+                
+                // Revert the toggle state
+                this.checked = !enabled;
+                
+                showToast(`Error: ${error.message}`, 'danger');
+            }
+        });
+    });
+}
+
+// Toggle AI for a specific chat
+async function toggleChatAI(chatId, enabled) {
+    const response = await fetch('/api/chat/ai-states', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+            chatId: chatId,
+            enabled: enabled
+        })
+    });
+    
+    if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
+    }
+    
+    const result = await response.json();
+    if (!result.success) {
+        throw new Error(result.error || 'Failed to toggle AI state');
+    }
+    
+    return result;
+}
+
+// Utility function to escape HTML
+function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
+
+// loadChats function (alias for loadRecentChats for compatibility)
+function loadChats() {
+    loadRecentChats();
+}
 
 /**
  * Load and display recent chats in the dashboard
