@@ -2025,17 +2025,11 @@ async function initializeChatModalControls(chatId) {
   try {
     console.log(`[ChatModal] Initializing controls for chatId: ${chatId}`);
     
-    // Get current AI state for this chat
-    const response = await fetch('/api/chat/ai-states');
-    console.log(`[ChatModal] AI states response status: ${response.status}`);
+    // Use the existing aiToggleStates Map
+    console.log(`[ChatModal] Current aiToggleStates:`, Array.from(aiToggleStates.entries()));
     
-    const data = response.ok ? await response.json() : { states: {} };
-    const aiStates = data.states || {};
-    
-    console.log(`[ChatModal] All AI states:`, aiStates);
-    console.log(`[ChatModal] AI state for ${chatId}:`, aiStates[chatId]);
-    
-    const isAIEnabled = aiStates[chatId] !== false; // Default to enabled
+    // Check if chat is in the map (disabled) or not (enabled by default)
+    const isAIEnabled = !aiToggleStates.has(chatId) || aiToggleStates.get(chatId) !== false;
     console.log(`[ChatModal] AI enabled for ${chatId}: ${isAIEnabled}`);
     
     // Set AI toggle state
@@ -2137,10 +2131,19 @@ async function handleChatModalAiToggle(event) {
   
   try {
     console.log(`[ChatModal] Toggling AI for chat ${chatId}: ${enabled}`);
+    console.log(`[ChatModal] Current aiToggleStates before update:`, Array.from(aiToggleStates.entries()));
     
     // Show loading state
     event.target.disabled = true;
     if (label) label.textContent = 'Updating...';
+    
+    // Update local state immediately for better UX
+    if (enabled) {
+      aiToggleStates.delete(chatId); // Remove from map to use default (enabled)
+    } else {
+      aiToggleStates.set(chatId, false); // Explicitly set to disabled
+    }
+    console.log(`[ChatModal] Updated aiToggleStates:`, Array.from(aiToggleStates.entries()));
     
     // Call the existing toggle function
     console.log(`[ChatModal] Calling toggleChatAI with chatId: ${chatId}, enabled: ${enabled}`);
