@@ -296,10 +296,10 @@ class TelegramBotService {
       await this.bot.sendChatAction(chatId, 'typing');
       
       // Add user message to chat history with platform identifier
-      chatHandler.addMessage(formattedChatId, 'user', cleanMessageText, 'telegram');
+      chatHandler.addMessage(chatId, 'user', cleanMessageText, 'telegram');
       
       // Get conversation history with platform identifier
-      const conversation = chatHandler.getConversation(formattedChatId, 'telegram');
+      const conversation = chatHandler.getConversation(chatId, 'telegram');
       
       // Get current settings
       const settings = commandHandler.getCurrentSettings();
@@ -339,7 +339,7 @@ class TelegramBotService {
       }
       
       // Add assistant response to chat history with platform identifier
-      chatHandler.addMessage(formattedChatId, 'assistant', response, 'telegram');
+      chatHandler.addMessage(chatId, 'assistant', response, 'telegram');
       
       // Send the response
       await this.sendMessage(chatId, response);

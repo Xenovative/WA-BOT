@@ -27,13 +27,9 @@ class WorkflowManager extends EventEmitter {
     this.mqttConnected = false;
     this.stateFilePath = path.join(__dirname, 'workflow-state.json');
     this.profileStatePath = path.join(__dirname, 'workflow-profiles.json');
-    this.blockedChatsPath = path.join(__dirname, 'blocked-chats.json');
     this.currentProfile = 'default';
     this.profiles = {};
     this.blockedChats = new Set(); // Store blocked chat IDs
-    
-    // Load existing blocked chats from disk
-    this.loadBlockedChats();
     
     this.settings = {
       // Core settings
@@ -1488,9 +1484,6 @@ class WorkflowManager extends EventEmitter {
     const normalizedChatId = this.normalizeChatId(chatId);
     this.blockedChats.add(normalizedChatId);
     
-    // Save to disk immediately
-    this.saveBlockedChats();
-    
     console.log(`[WorkflowManager] Blocked chat: ${normalizedChatId}`);
     return true;
   }
@@ -1506,9 +1499,6 @@ class WorkflowManager extends EventEmitter {
     const normalizedChatId = this.normalizeChatId(chatId);
     const wasBlocked = this.blockedChats.has(normalizedChatId);
     this.blockedChats.delete(normalizedChatId);
-    
-    // Save to disk immediately
-    this.saveBlockedChats();
     
     console.log(`[WorkflowManager] Unblocked chat: ${normalizedChatId}`);
     return wasBlocked;
@@ -1534,109 +1524,11 @@ class WorkflowManager extends EventEmitter {
   }
   
   /**
-   * Check if a chat is blocked from AI responses
-   * @param {string} chatId - Chat ID to check
-   * @returns {boolean} - True if blocked, false if allowed
-   */
-  isChatBlocked(chatId) {
-    if (!chatId) return false;
-    
-    const normalizedChatId = this.normalizeChatId(chatId);
-    const isBlocked = this.blockedChats.has(normalizedChatId);
-    
-    console.log(`[WorkflowManager] Checking if chat ${normalizedChatId} is blocked: ${isBlocked}`);
-    return isBlocked;
-  }
-  
-  /**
-   * Normalize chat ID to ensure consistent format across platforms
-   * @param {string} chatId - Raw chat ID
-   * @returns {string} - Normalized chat ID
-   */
-  normalizeChatId(chatId) {
-    if (!chatId) return '';
-    
-    // Convert to string and trim
-    let normalized = String(chatId).trim();
-    
-    // Handle different platform formats:
-    // WhatsApp: "whatsapp:123456789@c.us" or "123456789@c.us"
-    // Telegram: "telegram:123456789" or "telegram_123456789" or "123456789"
-    
-    // If it already has a platform prefix with colon, keep it as is
-    if (normalized.match(/^(whatsapp|telegram):/)) {
-      return normalized;
-    }
-    
-    // If it has telegram_ prefix, extract the ID and convert to telegram: format
-    if (normalized.startsWith('telegram_')) {
-      const chatId = normalized.replace('telegram_', '');
-      return `telegram:${chatId}`;
-    }
-    
-    // If it has whatsapp_ prefix, extract the ID and convert to whatsapp: format
-    if (normalized.startsWith('whatsapp_')) {
-      const chatId = normalized.replace('whatsapp_', '');
-      return `whatsapp:${chatId}`;
-    }
-    
-    // If it looks like a Telegram chat ID (numeric), add telegram: prefix
-    if (/^-?\d+$/.test(normalized)) {
-      return `telegram:${normalized}`;
-    }
-    
-    // If it looks like a WhatsApp chat ID (contains @), add whatsapp: prefix
-    if (normalized.includes('@')) {
-      return `whatsapp:${normalized}`;
-    }
-    
-    // Default: return as is
-    return normalized;
-  }
-  
-  /**
    * Get all blocked chats
    * @returns {Array} - Array of blocked chat IDs
    */
   getBlockedChats() {
     return Array.from(this.blockedChats);
-  }
-  
-  /**
-   * Save blocked chats to disk
-   */
-  saveBlockedChats() {
-    try {
-      const blockedChatsArray = Array.from(this.blockedChats);
-      fs.writeFileSync(this.blockedChatsPath, JSON.stringify(blockedChatsArray, null, 2));
-      console.log(`[WorkflowManager] Saved ${blockedChatsArray.length} blocked chats to disk`);
-    } catch (error) {
-      console.error('[WorkflowManager] Error saving blocked chats:', error);
-    }
-  }
-  
-  /**
-   * Load blocked chats from disk
-   */
-  loadBlockedChats() {
-    try {
-      if (fs.existsSync(this.blockedChatsPath)) {
-        const fileContent = fs.readFileSync(this.blockedChatsPath, 'utf8');
-        const blockedChatsArray = JSON.parse(fileContent);
-        
-        if (Array.isArray(blockedChatsArray)) {
-          this.blockedChats = new Set(blockedChatsArray);
-          console.log(`[WorkflowManager] Loaded ${blockedChatsArray.length} blocked chats from disk`);
-        } else {
-          console.warn('[WorkflowManager] Blocked chats file does not contain an array');
-        }
-      } else {
-        console.log('[WorkflowManager] No blocked chats file found, starting with empty set');
-      }
-    } catch (error) {
-      console.error('[WorkflowManager] Error loading blocked chats:', error);
-      this.blockedChats = new Set(); // Reset to empty set on error
-    }
   }
 }
 

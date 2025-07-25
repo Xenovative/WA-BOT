@@ -995,7 +995,8 @@ client.on('message', async (message) => {
       let response;
       
       // Format the chat ID to match the expected format in workflowManager
-      const formattedChatId = `whatsapp:${chatId}`;
+      const cleanChatId = chatId.includes('@g.us') ? chatId.split('@')[0] : chatId;
+      const formattedChatId = `chat_whatsapp_${cleanChatId}_g.us`;
       
       // Always save user message to chat history, even if AI is blocked
       chatHandler.addMessage(chatId, 'user', cleanMessageText, 'whatsapp');
@@ -1132,7 +1133,8 @@ client.on('message', async (message) => {
     let response;
     
     // Format the chat ID to match the expected format in workflowManager
-    const formattedChatId = `whatsapp:${chatId}`;
+    const cleanChatId = chatId.includes('@c.us') ? chatId.split('@')[0] : chatId;
+    const formattedChatId = `chat_whatsapp_${cleanChatId}_c.us`;
     
     // Always save user message to chat history, even if AI is blocked
     chatHandler.addMessage(chatId, 'user', messageText, 'whatsapp');
