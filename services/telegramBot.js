@@ -254,7 +254,7 @@ class TelegramBotService {
       }
       
       // Format the chat ID to match the expected format in workflowManager
-      const formattedChatId = `telegram_${chatId}`;
+      const formattedChatId = `telegram:${chatId}`;
       
       // Check if this chat is blocked from AI responses
       const isChatBlocked = workflowManager ? workflowManager.isChatBlocked(formattedChatId) : false;

@@ -1524,6 +1524,65 @@ class WorkflowManager extends EventEmitter {
   }
   
   /**
+   * Check if a chat is blocked from AI responses
+   * @param {string} chatId - Chat ID to check
+   * @returns {boolean} - True if blocked, false if allowed
+   */
+  isChatBlocked(chatId) {
+    if (!chatId) return false;
+    
+    const normalizedChatId = this.normalizeChatId(chatId);
+    const isBlocked = this.blockedChats.has(normalizedChatId);
+    
+    console.log(`[WorkflowManager] Checking if chat ${normalizedChatId} is blocked: ${isBlocked}`);
+    return isBlocked;
+  }
+  
+  /**
+   * Normalize chat ID to ensure consistent format across platforms
+   * @param {string} chatId - Raw chat ID
+   * @returns {string} - Normalized chat ID
+   */
+  normalizeChatId(chatId) {
+    if (!chatId) return '';
+    
+    // Convert to string and trim
+    let normalized = String(chatId).trim();
+    
+    // Handle different platform formats:
+    // WhatsApp: "whatsapp:123456789@c.us" or "123456789@c.us"
+    // Telegram: "telegram:123456789" or "telegram_123456789" or "123456789"
+    
+    // If it already has a platform prefix with colon, keep it as is
+    if (normalized.match(/^(whatsapp|telegram):/)) {
+      return normalized;
+    }
+    
+    // If it has telegram_ prefix, convert to telegram: format
+    if (normalized.startsWith('telegram_')) {
+      return normalized.replace('telegram_', 'telegram:');
+    }
+    
+    // If it has whatsapp_ prefix, convert to whatsapp: format
+    if (normalized.startsWith('whatsapp_')) {
+      return normalized.replace('whatsapp_', 'whatsapp:');
+    }
+    
+    // If it looks like a Telegram chat ID (numeric), add telegram: prefix
+    if (/^-?\d+$/.test(normalized)) {
+      return `telegram:${normalized}`;
+    }
+    
+    // If it looks like a WhatsApp chat ID (contains @), add whatsapp: prefix
+    if (normalized.includes('@')) {
+      return `whatsapp:${normalized}`;
+    }
+    
+    // Default: return as is
+    return normalized;
+  }
+  
+  /**
    * Get all blocked chats
    * @returns {Array} - Array of blocked chat IDs
    */
