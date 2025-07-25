@@ -4220,19 +4220,30 @@ async function loadAIStates() {
     const data = await response.json();
     console.log('[DEBUG] AI states response data:', data);
     
-    if (data.success && (data.states || data.aiStates)) {
-      // Convert object back to Map - check both possible field names
-      const statesObj = data.states || data.aiStates || {};
-      aiToggleStates = new Map(Object.entries(statesObj));
-      console.log(`[DEBUG] Loaded AI states for ${aiToggleStates.size} chats:`, statesObj);
+    if (data.success) {
+      // Backend only returns blocked chats (enabled = false)
+      // Initialize empty map - all chats are enabled by default
+      aiToggleStates = new Map();
+      
+      // Only blocked chats are in the response (enabled = false)
+      const blockedChats = Object.entries(data.aiStates || {})
+        .filter(([_, enabled]) => enabled === false)
+        .map(([chatId]) => chatId);
+      
+      // Set blocked chats to false in our map
+      blockedChats.forEach(chatId => {
+        aiToggleStates.set(chatId, false);
+      });
+      
+      console.log(`[DEBUG] Loaded ${blockedChats.length} blocked chats`);
       console.log('[DEBUG] aiToggleStates Map:', Array.from(aiToggleStates.entries()));
     } else {
       console.log('[DEBUG] No AI states found or response not successful');
-      aiToggleStates = new Map(); // Initialize empty map
+      aiToggleStates = new Map();
     }
   } catch (error) {
     console.error('[DEBUG] Error loading AI states:', error);
-    aiToggleStates = new Map(); // Initialize empty map on error
+    aiToggleStates = new Map();
   }
 }
 
@@ -4240,10 +4251,7 @@ async function loadAIStates() {
 async function saveAIState(chatId, enabled) {
   try {
     console.log(`[DEBUG] saveAIState called with chatId: ${chatId}, enabled: ${enabled}`);
-    const payload = {
-      chatId: chatId,
-      enabled: enabled
-    };
+    const payload = { chatId, enabled };
     console.log(`[DEBUG] Sending payload:`, payload);
     
     const response = await fetch('/api/chat/ai-states', {
@@ -4349,7 +4357,8 @@ function displayChats(chats) {
     const preview = chat.preview ? escapeHtml(chat.preview.substring(0, 50)) + (chat.preview.length > 50 ? '...' : '') : 'No messages';
     const chatId = escapeHtml(chat.id);
     const rawChatId = chat.id; // Keep unescaped for lookup
-    const isAIEnabled = aiToggleStates.get(rawChatId) !== false; // Default to enabled
+    // If chat is in the map and set to false, it's disabled. Otherwise, it's enabled.
+    const isAIEnabled = !aiToggleStates.has(rawChatId) || aiToggleStates.get(rawChatId) !== false;
     
     console.log(`[DEBUG] Chat ${rawChatId}: AI state =`, aiToggleStates.get(rawChatId), ', isAIEnabled =', isAIEnabled);
     
