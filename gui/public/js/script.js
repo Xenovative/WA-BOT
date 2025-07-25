@@ -2028,8 +2028,24 @@ async function initializeChatModalControls(chatId) {
     // Use the existing aiToggleStates Map
     console.log(`[ChatModal] Current aiToggleStates:`, Array.from(aiToggleStates.entries()));
     
-    // Check if chat is in the map (disabled) or not (enabled by default)
-    const isAIEnabled = !aiToggleStates.has(chatId) || aiToggleStates.get(chatId) !== false;
+    // Check multiple possible chat ID formats (with and without 'chat_' prefix)
+    const possibleIds = [chatId, `chat_${chatId}`];
+    let isAIEnabled = true; // Default to enabled
+    let foundId = null;
+    
+    for (const id of possibleIds) {
+      if (aiToggleStates.has(id)) {
+        isAIEnabled = aiToggleStates.get(id) !== false;
+        foundId = id;
+        console.log(`[ChatModal] Found matching ID: ${id} -> ${isAIEnabled}`);
+        break;
+      }
+    }
+    
+    if (!foundId) {
+      console.log(`[ChatModal] No matching ID found for ${chatId}, defaulting to enabled`);
+    }
+    
     console.log(`[ChatModal] AI enabled for ${chatId}: ${isAIEnabled}`);
     
     // Set AI toggle state
@@ -2138,10 +2154,26 @@ async function handleChatModalAiToggle(event) {
     if (label) label.textContent = 'Updating...';
     
     // Update local state immediately for better UX
+    // Check if we need to use the 'chat_' prefixed version
+    const possibleIds = [chatId, `chat_${chatId}`];
+    let actualId = chatId;
+    
+    // Find which ID format is actually in the map
+    for (const id of possibleIds) {
+      if (aiToggleStates.has(id)) {
+        actualId = id;
+        break;
+      }
+    }
+    
     if (enabled) {
-      aiToggleStates.delete(chatId); // Remove from map to use default (enabled)
+      // Remove both possible formats to ensure clean state
+      aiToggleStates.delete(chatId);
+      aiToggleStates.delete(`chat_${chatId}`);
     } else {
-      aiToggleStates.set(chatId, false); // Explicitly set to disabled
+      // Use the actual ID format that exists or the prefixed version
+      const idToUse = actualId.startsWith('chat_') ? actualId : `chat_${chatId}`;
+      aiToggleStates.set(idToUse, false);
     }
     console.log(`[ChatModal] Updated aiToggleStates:`, Array.from(aiToggleStates.entries()));
     
