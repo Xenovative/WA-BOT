@@ -13,42 +13,6 @@ const app = express();
 const server = http.createServer(app);
 const wss = new WebSocket.Server({ server });
 const port = process.env.GUI_PORT || 3000;
-
-// Store connected clients
-const clients = new Set();
-
-// WebSocket connection handler
-wss.on('connection', (ws) => {
-  console.log('New WebSocket connection');
-  clients.add(ws);
-  
-  ws.on('close', () => {
-    console.log('WebSocket connection closed');
-    clients.delete(ws);
-  });
-  
-  ws.on('error', (error) => {
-    console.error('WebSocket error:', error);
-    clients.delete(ws);
-  });
-});
-
-// Function to broadcast refresh event to all connected clients
-function broadcastRefresh(chatId) {
-  const message = JSON.stringify({
-    type: 'refresh_chat',
-    chatId: chatId
-  });
-  
-  clients.forEach((client) => {
-    if (client.readyState === WebSocket.OPEN) {
-      client.send(message);
-    }
-  });
-}
-
-// Make broadcastRefresh available globally
-global.broadcastRefresh = broadcastRefresh;
 const adminUtils = require('./utils/adminUtils');
 
 // Serve static files from the public directory first
@@ -1923,15 +1887,46 @@ app.get('*', (req, res, next) => {
   res.sendFile(path.join(__dirname, 'gui/public/index.html'));
 });
 
-// Start the server with WebSocket support
+// WebSocket connection handling
+wss.on('connection', (ws) => {
+  console.log('[WebSocket] Client connected');
+  
+  ws.on('close', () => {
+    console.log('[WebSocket] Client disconnected');
+  });
+  
+  ws.on('error', (error) => {
+    console.error('[WebSocket] Error:', error);
+  });
+});
+
+// Function to broadcast updates to all connected clients
+function broadcastUpdate(type, data) {
+  const message = JSON.stringify({ type, data, timestamp: new Date().toISOString() });
+  
+  wss.clients.forEach((client) => {
+    if (client.readyState === WebSocket.OPEN) {
+      try {
+        client.send(message);
+      } catch (error) {
+        console.error('[WebSocket] Error sending message:', error);
+      }
+    }
+  });
+}
+
+// Make broadcast function globally available
+global.broadcastUpdate = broadcastUpdate;
+
+// Start server
 server.listen(port, () => {
-  console.log(`Server is running on http://localhost:${port}`);
-  console.log(`WebSocket server is running on ws://localhost:${port}`);
+  console.log(`GUI server running on port ${port}`);
+  console.log(`WebSocket server ready for real-time updates`);
 });
 
 // Handle errors
 server.on('error', (error) => {
-console.error('Server error:', error);
+  console.error('Server error:', error);
 });
 
 // Add error handling for unexpected errors

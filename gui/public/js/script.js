@@ -1,61 +1,130 @@
 // Main script.js file for WhatsXENO Management Console
 
-// WebSocket connection
-let socket;
-const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-const wsUrl = `${protocol}//${window.location.host}`;
+// WebSocket connection for real-time updates
+let ws = null;
+let wsReconnectInterval = null;
 
-// Connect to WebSocket server
-function connectWebSocket() {
+function initWebSocket() {
+  const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+  const wsUrl = `${protocol}//${window.location.host}`;
+  
   try {
-    socket = new WebSocket(wsUrl);
+    ws = new WebSocket(wsUrl);
     
-    socket.onopen = () => {
-      console.log('WebSocket connected');
+    ws.onopen = function() {
+      console.log('[WebSocket] Connected to server');
+      clearInterval(wsReconnectInterval);
+      wsReconnectInterval = null;
       updateConnectionStatus(true);
     };
     
-    socket.onmessage = (event) => {
+    ws.onmessage = function(event) {
       try {
         const data = JSON.parse(event.data);
-        if (data.type === 'refresh_chat') {
-          console.log('Refresh chat requested for:', data.chatId);
-          const activeChatId = document.querySelector('.chat.active')?.dataset.chatId;
-          if (!activeChatId || activeChatId === data.chatId) {
-            loadChatMessages(data.chatId);
-          }
-        }
+        handleWebSocketMessage(data);
       } catch (error) {
-        console.error('Error processing WebSocket message:', error);
+        console.error('[WebSocket] Error parsing message:', error);
       }
     };
     
-    socket.onclose = () => {
-      console.log('WebSocket disconnected');
+    ws.onclose = function() {
+      console.log('[WebSocket] Connection closed');
       updateConnectionStatus(false);
-      // Try to reconnect after 5 seconds
-      setTimeout(connectWebSocket, 5000);
+      // Attempt to reconnect every 5 seconds
+      if (!wsReconnectInterval) {
+        wsReconnectInterval = setInterval(initWebSocket, 5000);
+      }
     };
     
-    socket.onerror = (error) => {
-      console.error('WebSocket error:', error);
-      updateConnectionStatus(false);
+    ws.onerror = function(error) {
+      console.error('[WebSocket] Error:', error);
     };
-    
   } catch (error) {
-    console.error('WebSocket connection error:', error);
-    updateConnectionStatus(false);
+    console.error('[WebSocket] Failed to create connection:', error);
   }
 }
 
-// Update connection status indicator
-function updateConnectionStatus(connected) {
-  const indicator = document.getElementById('connection-indicator');
-  if (indicator) {
-    indicator.className = connected ? 'status-indicator active' : 'status-indicator';
-    indicator.title = connected ? 'WebSocket Connected' : 'WebSocket Disconnected';
+function handleWebSocketMessage(data) {
+  console.log('[WebSocket] Received:', data);
+  
+  switch (data.type) {
+    case 'chat_message':
+      // Show a brief visual indicator for new message
+      showNewMessageIndicator(data.data);
+      
+      // Refresh the chat list when a new message is received
+      if (typeof loadRecentChats === 'function') {
+        loadRecentChats();
+      }
+      
+      // If we're currently viewing this chat, refresh the conversation
+      if (typeof refreshCurrentChat === 'function') {
+        refreshCurrentChat(data.data.chatId);
+      }
+      break;
+    default:
+      console.log('[WebSocket] Unknown message type:', data.type);
   }
 }
+
+function showNewMessageIndicator(messageData) {
+  // Create a temporary notification
+  const notification = document.createElement('div');
+  notification.className = 'alert alert-info alert-dismissible fade show position-fixed';
+  notification.style.cssText = 'top: 20px; right: 20px; z-index: 9999; max-width: 300px;';
+  notification.innerHTML = `
+    <small><strong>New Message</strong></small><br>
+    <small>Chat: ${messageData.chatId.replace(/^(whatsapp|telegram):/, '')}</small>
+    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+  `;
+  
+  document.body.appendChild(notification);
+  
+  // Auto-remove after 3 seconds
+  setTimeout(() => {
+    if (notification.parentNode) {
+      notification.remove();
+    }
+  }, 3000);
+}
+
+function updateConnectionStatus(connected) {
+  // Find or create connection status indicator
+  let statusIndicator = document.getElementById('ws-connection-status');
+  if (!statusIndicator) {
+    statusIndicator = document.createElement('div');
+    statusIndicator.id = 'ws-connection-status';
+    statusIndicator.className = 'position-fixed';
+    statusIndicator.style.cssText = 'bottom: 20px; right: 20px; z-index: 9998;';
+    document.body.appendChild(statusIndicator);
+  }
+  
+  if (connected) {
+    statusIndicator.innerHTML = `
+      <span class="badge bg-success">
+        <i class="fas fa-wifi"></i> Live Updates Active
+      </span>
+    `;
+    // Hide after 2 seconds when connected
+    setTimeout(() => {
+      if (statusIndicator.style.display !== 'none') {
+        statusIndicator.style.display = 'none';
+      }
+    }, 2000);
+  } else {
+    statusIndicator.style.display = 'block';
+    statusIndicator.innerHTML = `
+      <span class="badge bg-warning">
+        <i class="fas fa-wifi"></i> Reconnecting...
+      </span>
+    `;
+  }
+}
+
+// Initialize WebSocket connection when page loads
+document.addEventListener('DOMContentLoaded', function() {
+  initWebSocket();
+});
 
 // DOM elements
 const refreshBtn = document.getElementById('refresh-btn');
@@ -286,12 +355,6 @@ function initTabPersistence() {
 }
 
 document.addEventListener('DOMContentLoaded', () => {
-  // Add WebSocket status indicator to the UI
-  addWebSocketStatusIndicator();
-  
-  // Connect to WebSocket server
-  connectWebSocket();
-  
   // Initialize event listeners for elements that might be accessed early
   if (document.getElementById('refresh-kb')) {
     document.getElementById('refresh-kb').addEventListener('click', loadKbDocuments);
@@ -1700,6 +1763,122 @@ async function loadRecentChats() {
             </tr>
         `;
     }
+}
+
+// Global variable to track currently open chat
+let currentOpenChatId = null;
+
+// View chat function
+async function viewChat(chatId) {
+  try {
+    currentOpenChatId = chatId;
+    
+    // Set modal title
+    const modalTitle = document.getElementById('chatModalTitle');
+    if (modalTitle) {
+      modalTitle.textContent = `Chat: ${chatId}`;
+    }
+    
+    // Load chat messages
+    await loadChatMessages(chatId);
+    
+    // Show the modal
+    const chatModal = new bootstrap.Modal(document.getElementById('chatModal'));
+    chatModal.show();
+    
+    // Clear current chat when modal is closed
+    document.getElementById('chatModal').addEventListener('hidden.bs.modal', function() {
+      currentOpenChatId = null;
+    }, { once: true });
+    
+  } catch (error) {
+    console.error('Error viewing chat:', error);
+    showToast(`Error loading chat: ${error.message}`, 'danger');
+  }
+}
+
+// Load chat messages
+async function loadChatMessages(chatId) {
+  const messagesContainer = document.getElementById('chat-messages');
+  if (!messagesContainer) return;
+  
+  try {
+    // Show loading state
+    messagesContainer.innerHTML = `
+      <div class="text-center py-4">
+        <div class="spinner-border" role="status">
+          <span class="visually-hidden">Loading...</span>
+        </div>
+        <div class="mt-2">Loading messages...</div>
+      </div>
+    `;
+    
+    // Fetch chat messages
+    const response = await fetch(`/api/chat/${encodeURIComponent(chatId)}`);
+    if (!response.ok) {
+      throw new Error('Failed to load chat messages');
+    }
+    
+    const data = await response.json();
+    const messages = data.messages || [];
+    
+    // Clear container
+    messagesContainer.innerHTML = '';
+    
+    if (messages.length === 0) {
+      messagesContainer.innerHTML = `
+        <div class="text-center py-4 text-muted">
+          <i class="bi bi-chat-text me-2"></i>
+          No messages in this chat
+        </div>
+      `;
+      return;
+    }
+    
+    // Display messages
+    messages.forEach(message => {
+      const messageDiv = document.createElement('div');
+      messageDiv.className = `mb-3 ${message.role === 'user' ? 'text-end' : 'text-start'}`;
+      
+      const timestamp = new Date(message.timestamp).toLocaleString();
+      const roleClass = message.role === 'user' ? 'bg-primary text-white' : 'bg-light';
+      const roleIcon = message.role === 'user' ? 'bi-person-fill' : 'bi-robot';
+      
+      messageDiv.innerHTML = `
+        <div class="d-inline-block p-3 rounded ${roleClass}" style="max-width: 70%;">
+          <div class="d-flex align-items-center mb-1">
+            <i class="bi ${roleIcon} me-2"></i>
+            <small class="${message.role === 'user' ? 'text-white-50' : 'text-muted'}">  
+              ${message.role === 'user' ? 'User' : 'Assistant'} • ${timestamp}
+            </small>
+          </div>
+          <div>${escapeHtml(message.content)}</div>
+        </div>
+      `;
+      
+      messagesContainer.appendChild(messageDiv);
+    });
+    
+    // Scroll to bottom
+    messagesContainer.scrollTop = messagesContainer.scrollHeight;
+    
+  } catch (error) {
+    console.error('Error loading chat messages:', error);
+    messagesContainer.innerHTML = `
+      <div class="text-center py-4 text-danger">
+        <i class="bi bi-exclamation-triangle me-2"></i>
+        Error loading messages: ${escapeHtml(error.message)}
+      </div>
+    `;
+  }
+}
+
+// Refresh current chat if it's open
+function refreshCurrentChat(chatId) {
+  if (currentOpenChatId && currentOpenChatId === chatId) {
+    console.log(`[WebSocket] Refreshing current chat: ${chatId}`);
+    loadChatMessages(chatId);
+  }
 }
 
 // Add event listeners for AI toggle switches
