@@ -994,12 +994,13 @@ client.on('message', async (message) => {
       
       let response;
       
-      // Format the chat ID to match the expected format in workflowManager
-      const cleanChatId = chatId.includes('@g.us') ? chatId.split('@')[0] : chatId;
-      const formattedChatId = `chat_whatsapp_${cleanChatId}_g.us`;
-      
       // Always save user message to chat history, even if AI is blocked
       chatHandler.addMessage(chatId, 'user', cleanMessageText, 'whatsapp');
+      
+      // Format the chat ID to match the expected format in workflowManager
+      // Use the same format as chatHandler creates: whatsapp:chatId
+      const platformChatId = `whatsapp:${chatId}`;
+      const formattedChatId = platformChatId;
       
       // Check if this chat is blocked from AI responses
       const isChatBlocked = workflowManager.isChatBlocked(formattedChatId);
@@ -1132,12 +1133,13 @@ client.on('message', async (message) => {
     
     let response;
     
-    // Format the chat ID to match the expected format in workflowManager
-    const cleanChatId = chatId.includes('@c.us') ? chatId.split('@')[0] : chatId;
-    const formattedChatId = `chat_whatsapp_${cleanChatId}_c.us`;
-    
     // Always save user message to chat history, even if AI is blocked
     chatHandler.addMessage(chatId, 'user', messageText, 'whatsapp');
+    
+    // Format the chat ID to match the expected format in workflowManager
+    // Use the same format as chatHandler creates: whatsapp:chatId
+    const platformChatId = `whatsapp:${chatId}`;
+    const formattedChatId = platformChatId;
     
     // Check if this chat is blocked from AI responses
     const isChatBlocked = workflowManager.isChatBlocked(formattedChatId);
