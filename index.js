@@ -996,7 +996,7 @@ client.on('message', async (message) => {
       
       // Format the chat ID to match the expected format in workflowManager
       const cleanChatId = chatId.includes('@g.us') ? chatId.split('@')[0] : chatId;
-      const formattedChatId = `whatsapp_${cleanChatId}`;
+      const formattedChatId = `chat_whatsapp_${cleanChatId}_g.us`;
       
       // Check if this chat is blocked from AI responses
       const isChatBlocked = workflowManager.isChatBlocked(formattedChatId);
@@ -1134,7 +1134,7 @@ client.on('message', async (message) => {
     
     // Format the chat ID to match the expected format in workflowManager
     const cleanChatId = chatId.includes('@c.us') ? chatId.split('@')[0] : chatId;
-    const formattedChatId = `whatsapp_${cleanChatId}`;
+    const formattedChatId = `chat_whatsapp_${cleanChatId}_c.us`;
     
     // Check if this chat is blocked from AI responses
     const isChatBlocked = workflowManager.isChatBlocked(formattedChatId);
