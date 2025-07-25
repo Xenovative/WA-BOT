@@ -1823,6 +1823,33 @@ async function viewChat(chatId) {
   }
 }
 
+// Format message content with basic markdown and proper line breaks
+function formatMessageContent(content) {
+  if (!content) return '';
+  
+  // Escape HTML first
+  let formatted = escapeHtml(content);
+  
+  // Convert markdown-style formatting
+  formatted = formatted
+    // Bold text **text** or __text__
+    .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+    .replace(/__(.*?)__/g, '<strong>$1</strong>')
+    // Italic text *text* or _text_
+    .replace(/\*(.*?)\*/g, '<em>$1</em>')
+    .replace(/_(.*?)_/g, '<em>$1</em>')
+    // Code blocks ```code```
+    .replace(/```([\s\S]*?)```/g, '<pre class="bg-dark text-light p-2 rounded mt-2 mb-2" style="font-size: 0.9em; overflow-x: auto;"><code>$1</code></pre>')
+    // Inline code `code`
+    .replace(/`([^`]+)`/g, '<code class="bg-secondary bg-opacity-25 px-1 rounded">$1</code>')
+    // Links [text](url)
+    .replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank" class="text-decoration-none">$1 <i class="bi bi-box-arrow-up-right"></i></a>')
+    // Simple URLs
+    .replace(/(https?:\/\/[^\s]+)/g, '<a href="$1" target="_blank" class="text-decoration-none">$1 <i class="bi bi-box-arrow-up-right"></i></a>');
+  
+  return formatted;
+}
+
 // Load chat messages
 async function loadChatMessages(chatId) {
   const messagesContainer = document.getElementById('chat-messages');
@@ -1869,36 +1896,41 @@ async function loadChatMessages(chatId) {
       messageDiv.className = `mb-3 ${message.role === 'user' ? 'text-end' : 'text-start'}`;
       
       const timestamp = new Date(message.timestamp).toLocaleString();
-      const roleClass = message.role === 'user' ? 'bg-primary text-white' : 'bg-light';
+      const roleClass = message.role === 'user' ? 'bg-primary text-white' : 'bg-light border';
       const roleIcon = message.role === 'user' ? 'bi-person-fill' : 'bi-robot';
       
+      // Format message content with proper line breaks and basic markdown
+      let formattedContent = formatMessageContent(message.content);
+      
       messageDiv.innerHTML = `
-        <div class="d-inline-block p-3 rounded ${roleClass}" style="max-width: 70%;">
-          <div class="d-flex align-items-center mb-1">
+        <div class="d-inline-block p-3 rounded-3 shadow-sm ${roleClass}" style="max-width: 75%; word-wrap: break-word;">
+          <div class="d-flex align-items-center mb-2">
             <i class="bi ${roleIcon} me-2"></i>
-            <small class="${message.role === 'user' ? 'text-white-50' : 'text-muted'}">  
-              ${message.role === 'user' ? 'User' : 'Assistant'} • ${timestamp}
+            <small class="${message.role === 'user' ? 'text-white-50' : 'text-muted'} fw-medium">  
+              ${message.role === 'user' ? 'You' : 'AI Assistant'}
+            </small>
+            <small class="${message.role === 'user' ? 'text-white-50' : 'text-muted'} ms-auto">
+              ${timestamp}
             </small>
           </div>
-          <div>${escapeHtml(message.content)}</div>
+          <div class="message-content" style="white-space: pre-wrap; line-height: 1.4;">${formattedContent}</div>
         </div>
       `;
       
       messagesContainer.appendChild(messageDiv);
     });
     
-    // Scroll to bottom smoothly
-    messagesContainer.scrollTo({
-      top: messagesContainer.scrollHeight,
-      behavior: 'smooth'
-    });
-    
-    // Add a subtle flash effect to indicate new content
-    messagesContainer.style.transition = 'background-color 0.3s ease';
+    // Add some padding to the container for better spacing
+    messagesContainer.style.padding = '1rem';
     messagesContainer.style.backgroundColor = '#f8f9fa';
+    
+    // Scroll to bottom smoothly
     setTimeout(() => {
-      messagesContainer.style.backgroundColor = '';
-    }, 300);
+      messagesContainer.scrollTo({
+        top: messagesContainer.scrollHeight,
+        behavior: 'smooth'
+      });
+    }, 100);
     
   } catch (error) {
     console.error('Error loading chat messages:', error);
