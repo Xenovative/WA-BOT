@@ -29,6 +29,12 @@ class ChatHandler {
    */
   getPlatformChatId(platform, chatId) {
     if (!platform || !chatId) return chatId;
+    
+    // If chatId already has a platform prefix, don't add another one
+    if (chatId.includes(':') && (chatId.startsWith('telegram:') || chatId.startsWith('whatsapp:'))) {
+      return chatId;
+    }
+    
     return `${platform}:${chatId}`;
   }
 

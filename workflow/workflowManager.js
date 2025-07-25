@@ -1558,14 +1558,16 @@ class WorkflowManager extends EventEmitter {
       return normalized;
     }
     
-    // If it has telegram_ prefix, convert to telegram: format
+    // If it has telegram_ prefix, extract the ID and convert to telegram: format
     if (normalized.startsWith('telegram_')) {
-      return normalized.replace('telegram_', 'telegram:');
+      const chatId = normalized.replace('telegram_', '');
+      return `telegram:${chatId}`;
     }
     
-    // If it has whatsapp_ prefix, convert to whatsapp: format
+    // If it has whatsapp_ prefix, extract the ID and convert to whatsapp: format
     if (normalized.startsWith('whatsapp_')) {
-      return normalized.replace('whatsapp_', 'whatsapp:');
+      const chatId = normalized.replace('whatsapp_', '');
+      return `whatsapp:${chatId}`;
     }
     
     // If it looks like a Telegram chat ID (numeric), add telegram: prefix
