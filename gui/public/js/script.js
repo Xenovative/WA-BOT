@@ -1795,6 +1795,9 @@ async function viewChat(chatId) {
       modalTitle.textContent = `Chat: ${chatId}`;
     }
     
+    // Initialize AI toggle state
+    await initializeChatModalControls(chatId);
+    
     // Load chat messages
     await loadChatMessages(chatId);
     
@@ -1805,6 +1808,8 @@ async function viewChat(chatId) {
     // Clear current chat when modal is closed
     document.getElementById('chatModal').addEventListener('hidden.bs.modal', function() {
       currentOpenChatId = null;
+      // Remove event listeners to prevent memory leaks
+      cleanupChatModalEventListeners();
     }, { once: true });
     
   } catch (error) {
@@ -2008,6 +2013,126 @@ function refreshCurrentChatOptimized(chatId, newMessage = null) {
   }
 }
 
+// Initialize chat modal controls (AI toggle and refresh button)
+async function initializeChatModalControls(chatId) {
+  try {
+    // Get current AI state for this chat
+    const response = await fetch('/api/chat/ai-states');
+    const data = response.ok ? await response.json() : { states: {} };
+    const aiStates = data.states || {};
+    const isAIEnabled = aiStates[chatId] !== false; // Default to enabled
+    
+    // Update AI toggle
+    const aiToggle = document.getElementById('chatModalAIToggle');
+    const aiToggleLabel = document.getElementById('chatModalAIToggleLabel');
+    
+    if (aiToggle) {
+      aiToggle.checked = isAIEnabled;
+      aiToggle.setAttribute('data-chat-id', chatId);
+    }
+    
+    if (aiToggleLabel) {
+      aiToggleLabel.textContent = isAIEnabled ? 'On' : 'Off';
+    }
+    
+    // Add event listeners
+    addChatModalEventListeners(chatId);
+    
+  } catch (error) {
+    console.error('Error initializing chat modal controls:', error);
+  }
+}
+
+// Add event listeners for chat modal controls
+function addChatModalEventListeners(chatId) {
+  // AI Toggle event listener
+  const aiToggle = document.getElementById('chatModalAIToggle');
+  if (aiToggle) {
+    // Remove existing listener to prevent duplicates
+    aiToggle.removeEventListener('change', handleChatModalAIToggle);
+    aiToggle.addEventListener('change', handleChatModalAIToggle);
+  }
+  
+  // Refresh button event listener
+  const refreshBtn = document.getElementById('refreshChatBtn');
+  if (refreshBtn) {
+    // Remove existing listener to prevent duplicates
+    refreshBtn.removeEventListener('click', handleChatModalRefresh);
+    refreshBtn.addEventListener('click', handleChatModalRefresh);
+  }
+}
+
+// Handle AI toggle change in chat modal
+async function handleChatModalAIToggle(event) {
+  const chatId = event.target.getAttribute('data-chat-id');
+  const enabled = event.target.checked;
+  
+  try {
+    await toggleChatAI(chatId, enabled);
+    
+    // Update the label
+    const label = document.getElementById('chatModalAIToggleLabel');
+    if (label) {
+      label.textContent = enabled ? 'On' : 'Off';
+    }
+    
+    // Also update the main chat list toggle if visible
+    const mainToggle = document.querySelector(`.ai-toggle[data-chat-id="${chatId}"]`);
+    if (mainToggle) {
+      mainToggle.checked = enabled;
+      const mainLabel = mainToggle.nextElementSibling;
+      if (mainLabel) {
+        mainLabel.textContent = enabled ? 'On' : 'Off';
+      }
+    }
+    
+    showToast(`AI ${enabled ? 'enabled' : 'disabled'} for this chat`, 'success');
+  } catch (error) {
+    console.error('Error toggling AI in chat modal:', error);
+    
+    // Revert the toggle state
+    event.target.checked = !enabled;
+    
+    showToast(`Error: ${error.message}`, 'danger');
+  }
+}
+
+// Handle refresh button click in chat modal
+function handleChatModalRefresh() {
+  if (currentOpenChatId) {
+    console.log(`[ChatModal] Refreshing chat: ${currentOpenChatId}`);
+    
+    // Add spinning animation to refresh button
+    const refreshBtn = document.getElementById('refreshChatBtn');
+    if (refreshBtn) {
+      const icon = refreshBtn.querySelector('i');
+      if (icon) {
+        icon.classList.add('fa-spin');
+        setTimeout(() => {
+          icon.classList.remove('fa-spin');
+        }, 1000);
+      }
+    }
+    
+    // Reload the chat messages
+    loadChatMessages(currentOpenChatId);
+    showToast('Chat refreshed', 'info');
+  }
+}
+
+// Clean up event listeners when modal is closed
+function cleanupChatModalEventListeners() {
+  const aiToggle = document.getElementById('chatModalAIToggle');
+  if (aiToggle) {
+    aiToggle.removeEventListener('change', handleChatModalAIToggle);
+  }
+  
+  const refreshBtn = document.getElementById('refreshChatBtn');
+  if (refreshBtn) {
+    refreshBtn.removeEventListener('click', handleChatModalRefresh);
+  }
+}
+
 // Make functions globally available
 window.loadRecentChats = loadRecentChats;
 window.viewChat = viewChat;
@@ -2015,6 +2140,7 @@ window.refreshCurrentChat = refreshCurrentChat;
 window.refreshCurrentChatOptimized = refreshCurrentChatOptimized;
 window.loadChatMessages = loadChatMessages;
 window.appendNewMessage = appendNewMessage;
+window.initializeChatModalControls = initializeChatModalControls;
 
 // Add event listeners for AI toggle switches
 function addAIToggleListeners() {
