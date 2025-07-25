@@ -4214,33 +4214,47 @@ let aiToggleStates = new Map(); // Track AI toggle state per chat
 // Load AI states from backend
 async function loadAIStates() {
   try {
+    console.log('[DEBUG] Loading AI states...');
     const response = await fetch('/api/chat/ai-states');
+    console.log('[DEBUG] AI states response status:', response.status);
     const data = await response.json();
+    console.log('[DEBUG] AI states response data:', data);
     
     if (data.success && (data.states || data.aiStates)) {
       // Convert object back to Map - check both possible field names
       const statesObj = data.states || data.aiStates || {};
       aiToggleStates = new Map(Object.entries(statesObj));
-      console.log(`Loaded AI states for ${aiToggleStates.size} chats:`, statesObj);
+      console.log(`[DEBUG] Loaded AI states for ${aiToggleStates.size} chats:`, statesObj);
+      console.log('[DEBUG] aiToggleStates Map:', Array.from(aiToggleStates.entries()));
+    } else {
+      console.log('[DEBUG] No AI states found or response not successful');
+      aiToggleStates = new Map(); // Initialize empty map
     }
   } catch (error) {
-    console.error('Error loading AI states:', error);
+    console.error('[DEBUG] Error loading AI states:', error);
+    aiToggleStates = new Map(); // Initialize empty map on error
   }
 }
 
 // Save AI state to backend
 async function saveAIState(chatId, enabled) {
   try {
+    console.log(`[DEBUG] saveAIState called with chatId: ${chatId}, enabled: ${enabled}`);
+    const payload = {
+      chatId: chatId,
+      enabled: enabled
+    };
+    console.log(`[DEBUG] Sending payload:`, payload);
+    
     const response = await fetch('/api/chat/ai-states', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json'
       },
-      body: JSON.stringify({
-        chatId: chatId,
-        enabled: enabled
-      })
+      body: JSON.stringify(payload)
     });
+    
+    console.log(`[DEBUG] saveAIState response status:`, response.status);
     
     if (!response.ok) {
       const errorText = await response.text();
@@ -4326,11 +4340,18 @@ function displayChats(chats) {
     return;
   }
   
+  console.log('[DEBUG] displayChats called with', chats.length, 'chats');
+  console.log('[DEBUG] aiToggleStates size:', aiToggleStates.size);
+  console.log('[DEBUG] aiToggleStates entries:', Array.from(aiToggleStates.entries()));
+  
   tbody.innerHTML = chats.map(chat => {
     const lastActive = new Date(chat.timestamp).toLocaleString();
     const preview = chat.preview ? escapeHtml(chat.preview.substring(0, 50)) + (chat.preview.length > 50 ? '...' : '') : 'No messages';
     const chatId = escapeHtml(chat.id);
-    const isAIEnabled = aiToggleStates.get(chat.id) !== false; // Default to enabled
+    const rawChatId = chat.id; // Keep unescaped for lookup
+    const isAIEnabled = aiToggleStates.get(rawChatId) !== false; // Default to enabled
+    
+    console.log(`[DEBUG] Chat ${rawChatId}: AI state =`, aiToggleStates.get(rawChatId), ', isAIEnabled =', isAIEnabled);
     
     return `
       <tr class="chat-row" data-chat-id="${chatId}">
@@ -4341,7 +4362,7 @@ function displayChats(chats) {
               <div class="form-check form-switch form-check-inline">
                 <input class="form-check-input ai-toggle" type="checkbox" 
                        id="ai-toggle-${chatId}" 
-                       data-chat-id="${chatId}" 
+                       data-chat-id="${rawChatId}" 
                        ${isAIEnabled ? 'checked' : ''}>
                 <label class="form-check-label small text-muted" for="ai-toggle-${chatId}" title="Toggle AI responses">
                   AI
@@ -4384,14 +4405,20 @@ function displayChats(chats) {
       const chatId = this.getAttribute('data-chat-id');
       const isEnabled = this.checked;
       
+      console.log(`[DEBUG] Toggle clicked for chat ${chatId}, new state: ${isEnabled}`);
+      console.log(`[DEBUG] Previous state in map:`, aiToggleStates.get(chatId));
+      
       try {
         // Save AI state to backend
+        console.log(`[DEBUG] Saving AI state to backend...`);
         await saveAIState(chatId, isEnabled);
+        console.log(`[DEBUG] AI state saved successfully`);
         
         // Update local state after successful backend update
         aiToggleStates.set(chatId, isEnabled);
+        console.log(`[DEBUG] Updated local state, new map size:`, aiToggleStates.size);
         
-        console.log(`AI ${isEnabled ? 'enabled' : 'disabled'} for chat: ${chatId}`);
+        console.log(`[DEBUG] AI ${isEnabled ? 'enabled' : 'disabled'} for chat: ${chatId}`);
         showToast(`AI ${isEnabled ? 'enabled' : 'disabled'} for chat`, 'success');
       } catch (error) {
         console.error('Error toggling AI:', error);
