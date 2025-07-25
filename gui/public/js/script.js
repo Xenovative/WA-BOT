@@ -2332,6 +2332,7 @@ window.handleChatModalRefresh = handleChatModalRefresh;
 window.toggleChatAI = toggleChatAI;
 window.addChatModalEventListeners = addChatModalEventListeners;
 window.removeChatModalEventListeners = removeChatModalEventListeners;
+window.sendManualMessage = sendManualMessage;
 
 // Make variables globally available
 window.currentOpenChatId = currentOpenChatId;
@@ -4427,7 +4428,14 @@ async function sendManualMessage() {
   const messageInput = document.getElementById('manual-message-input');
   const sendBtn = document.getElementById('send-manual-message');
   
-  if (!currentChatId || !messageInput) return;
+  // Try multiple variable names for compatibility
+  const chatId = window.currentOpenChatId || window.currentChatId || currentOpenChatId || currentChatId;
+  
+  if (!chatId || !messageInput) {
+    console.error('[SendMessage] No chat ID available or message input not found');
+    showToast('Error: No chat selected', 'danger');
+    return;
+  }
   
   const message = messageInput.value.trim();
   if (!message) return;
@@ -4438,8 +4446,10 @@ async function sendManualMessage() {
   sendBtn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status"></span> Sending...';
   
   try {
+    console.log(`[SendMessage] Sending message for chatId: ${chatId}`);
+    
     // Check if AI is enabled for this chat
-    const isAIEnabled = aiToggleStates.get(currentChatId) !== false;
+    const isAIEnabled = aiToggleStates.get(chatId) !== false;
     
     const response = await fetch('/api/chat/send-manual', {
       method: 'POST',
@@ -4447,7 +4457,7 @@ async function sendManualMessage() {
         'Content-Type': 'application/json'
       },
       body: JSON.stringify({
-        chatId: currentChatId,
+        chatId: chatId,
         message: message,
         enableAI: isAIEnabled
       })
@@ -4458,14 +4468,14 @@ async function sendManualMessage() {
     if (result.success) {
       messageInput.value = '';
       // Reload the conversation
-      await openChatModal(currentChatId);
-      showSuccess('Message sent successfully');
+      await loadChatMessages(chatId);
+      showToast('Message sent successfully', 'success');
     } else {
-      showError('Failed to send message: ' + (result.error || 'Unknown error'));
+      showToast('Failed to send message: ' + (result.error || 'Unknown error'), 'danger');
     }
   } catch (error) {
     console.error('Error sending message:', error);
-    showError('Error sending message');
+    showToast('Error sending message: ' + error.message, 'danger');
   } finally {
     // Re-enable input and button
     messageInput.disabled = false;
