@@ -255,6 +255,10 @@ class TelegramBotService {
       // Format the chat ID to match the expected format in workflowManager
       const formattedChatId = `telegram:${chatId}`;
       
+      // ALWAYS save user message to chat history first (regardless of AI blocking)
+      chatHandler.addMessage(chatId, 'user', cleanMessageText, 'telegram');
+      console.log(`[Telegram] User message saved to chat history: ${chatId}`);
+      
       // Check if this chat is blocked from AI responses
       console.log(`[Telegram] Debug - workflowManager available: ${!!global.workflowManager}`);
       console.log(`[Telegram] Debug - formattedChatId: "${formattedChatId}"`);
@@ -297,10 +301,7 @@ class TelegramBotService {
       // Send typing indicator
       await this.bot.sendChatAction(chatId, 'typing');
       
-      // Add user message to chat history with platform identifier
-      chatHandler.addMessage(chatId, 'user', cleanMessageText, 'telegram');
-      
-      // Get conversation history with platform identifier
+      // Get conversation history with platform identifier (message already saved above)
       const conversation = chatHandler.getConversation(chatId, 'telegram');
       
       // Get current settings
