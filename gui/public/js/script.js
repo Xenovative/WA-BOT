@@ -64,10 +64,14 @@ function handleWebSocketMessage(data) {
         console.error('[WebSocket] Error refreshing chat list:', error);
       }
       
-      // If we're currently viewing this chat, refresh the conversation
-      console.log('[WebSocket] Checking for refreshCurrentChat function:', typeof refreshCurrentChat);
-      if (typeof refreshCurrentChat === 'function') {
-        console.log('[WebSocket] Calling refreshCurrentChat for:', data.data.chatId);
+      // If we're currently viewing this chat, refresh the conversation with the new message
+      console.log('[WebSocket] Checking for refreshCurrentChatOptimized function:', typeof refreshCurrentChatOptimized);
+      if (typeof refreshCurrentChatOptimized === 'function') {
+        console.log('[WebSocket] Calling refreshCurrentChatOptimized for:', data.data.chatId);
+        // Pass the new message data for optimized append
+        refreshCurrentChatOptimized(data.data.chatId, data.data.message);
+      } else if (typeof refreshCurrentChat === 'function') {
+        console.log('[WebSocket] Falling back to refreshCurrentChat for:', data.data.chatId);
         refreshCurrentChat(data.data.chatId);
       }
       break;
@@ -1871,8 +1875,18 @@ async function loadChatMessages(chatId) {
       messagesContainer.appendChild(messageDiv);
     });
     
-    // Scroll to bottom
-    messagesContainer.scrollTop = messagesContainer.scrollHeight;
+    // Scroll to bottom smoothly
+    messagesContainer.scrollTo({
+      top: messagesContainer.scrollHeight,
+      behavior: 'smooth'
+    });
+    
+    // Add a subtle flash effect to indicate new content
+    messagesContainer.style.transition = 'background-color 0.3s ease';
+    messagesContainer.style.backgroundColor = '#f8f9fa';
+    setTimeout(() => {
+      messagesContainer.style.backgroundColor = '';
+    }, 300);
     
   } catch (error) {
     console.error('Error loading chat messages:', error);
@@ -1887,9 +1901,110 @@ async function loadChatMessages(chatId) {
 
 // Refresh current chat if it's open
 function refreshCurrentChat(chatId) {
-  if (currentOpenChatId && currentOpenChatId === chatId) {
-    console.log(`[WebSocket] Refreshing current chat: ${chatId}`);
+  console.log(`[WebSocket] refreshCurrentChat called with chatId: ${chatId}`);
+  console.log(`[WebSocket] currentOpenChatId: ${currentOpenChatId}`);
+  
+  if (!currentOpenChatId) {
+    console.log('[WebSocket] No chat currently open');
+    return;
+  }
+  
+  // Check for exact match first
+  if (currentOpenChatId === chatId) {
+    console.log(`[WebSocket] Exact match - refreshing chat: ${chatId}`);
     loadChatMessages(chatId);
+    return;
+  }
+  
+  // Check for normalized chat ID matches (handle different formats)
+  const normalizedCurrent = currentOpenChatId.replace(/^(whatsapp|telegram):/, '').replace(/_/g, '').replace(/@.*$/, '');
+  const normalizedIncoming = chatId.replace(/^(whatsapp|telegram):/, '').replace(/_/g, '').replace(/@.*$/, '');
+  
+  console.log(`[WebSocket] Normalized current: ${normalizedCurrent}`);
+  console.log(`[WebSocket] Normalized incoming: ${normalizedIncoming}`);
+  
+  if (normalizedCurrent === normalizedIncoming) {
+    console.log(`[WebSocket] Normalized match - refreshing chat: ${chatId}`);
+    loadChatMessages(currentOpenChatId); // Use the original chat ID for loading
+    return;
+  }
+  
+  console.log(`[WebSocket] No match found - not refreshing chat`);
+}
+
+// Append a single new message to the current chat view (more efficient than full reload)
+function appendNewMessage(message) {
+  const messagesContainer = document.getElementById('chat-messages');
+  if (!messagesContainer) return;
+  
+  const messageDiv = document.createElement('div');
+  messageDiv.className = `mb-3 ${message.role === 'user' ? 'text-end' : 'text-start'}`;
+  
+  const timestamp = new Date(message.timestamp).toLocaleString();
+  const roleClass = message.role === 'user' ? 'bg-primary text-white' : 'bg-light';
+  const roleIcon = message.role === 'user' ? 'bi-person-fill' : 'bi-robot';
+  
+  messageDiv.innerHTML = `
+    <div class="d-inline-block p-3 rounded ${roleClass}" style="max-width: 70%;">
+      <div class="d-flex align-items-center mb-1">
+        <i class="bi ${roleIcon} me-2"></i>
+        <small class="${message.role === 'user' ? 'text-white-50' : 'text-muted'}">
+          ${message.role === 'user' ? 'User' : 'Assistant'} • ${timestamp}
+        </small>
+      </div>
+      <div>${escapeHtml(message.content)}</div>
+    </div>
+  `;
+  
+  // Add a subtle animation for new messages
+  messageDiv.style.opacity = '0';
+  messageDiv.style.transform = 'translateY(20px)';
+  messageDiv.style.transition = 'opacity 0.3s ease, transform 0.3s ease';
+  
+  messagesContainer.appendChild(messageDiv);
+  
+  // Trigger animation
+  setTimeout(() => {
+    messageDiv.style.opacity = '1';
+    messageDiv.style.transform = 'translateY(0)';
+  }, 10);
+  
+  // Scroll to bottom smoothly
+  setTimeout(() => {
+    messagesContainer.scrollTo({
+      top: messagesContainer.scrollHeight,
+      behavior: 'smooth'
+    });
+  }, 100);
+}
+
+// Enhanced refresh function that can append single messages or do full reload
+function refreshCurrentChatOptimized(chatId, newMessage = null) {
+  console.log(`[WebSocket] refreshCurrentChatOptimized called with chatId: ${chatId}`);
+  
+  if (!currentOpenChatId) {
+    console.log('[WebSocket] No chat currently open');
+    return;
+  }
+  
+  // Check if this is for the current chat
+  const isCurrentChat = currentOpenChatId === chatId || 
+    currentOpenChatId.replace(/^(whatsapp|telegram):/, '').replace(/_/g, '').replace(/@.*$/, '') ===
+    chatId.replace(/^(whatsapp|telegram):/, '').replace(/_/g, '').replace(/@.*$/, '');
+  
+  if (!isCurrentChat) {
+    console.log(`[WebSocket] Message not for current chat`);
+    return;
+  }
+  
+  // If we have a specific new message, just append it
+  if (newMessage) {
+    console.log(`[WebSocket] Appending new message to current chat`);
+    appendNewMessage(newMessage);
+  } else {
+    // Otherwise do a full reload
+    console.log(`[WebSocket] Full reload of current chat`);
+    loadChatMessages(currentOpenChatId);
   }
 }
 
@@ -1897,7 +2012,9 @@ function refreshCurrentChat(chatId) {
 window.loadRecentChats = loadRecentChats;
 window.viewChat = viewChat;
 window.refreshCurrentChat = refreshCurrentChat;
+window.refreshCurrentChatOptimized = refreshCurrentChatOptimized;
 window.loadChatMessages = loadChatMessages;
+window.appendNewMessage = appendNewMessage;
 
 // Add event listeners for AI toggle switches
 function addAIToggleListeners() {
