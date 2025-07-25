@@ -4242,12 +4242,20 @@ async function saveAIState(chatId, enabled) {
       })
     });
     
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`HTTP error! status: ${response.status} - ${errorText}`);
+    }
+    
     const result = await response.json();
     if (!result.success) {
-      console.error('Failed to save AI state:', result.error);
+      throw new Error(result.error || 'Failed to save AI state');
     }
+    
+    return result;
   } catch (error) {
     console.error('Error saving AI state:', error);
+    throw error;
   }
 }
 
@@ -4280,6 +4288,9 @@ document.addEventListener('DOMContentLoaded', function() {
 // Load and display chats
 async function loadChats() {
   try {
+    // Load AI states first to ensure they're available when displaying chats
+    await loadAIStates();
+    
     const response = await fetch(`/api/chats?limit=${chatsPagination.limit}&offset=${chatsPagination.offset}&sort=${currentChatSort}`);
     const data = await response.json();
     
@@ -4373,13 +4384,23 @@ function displayChats(chats) {
       const chatId = this.getAttribute('data-chat-id');
       const isEnabled = this.checked;
       
-      // Update local state
-      aiToggleStates.set(chatId, isEnabled);
-      
-      // Save to backend
-      await saveAIState(chatId, isEnabled);
-      
-      console.log(`AI ${isEnabled ? 'enabled' : 'disabled'} for chat: ${chatId}`);
+      try {
+        // Save AI state to backend
+        await saveAIState(chatId, isEnabled);
+        
+        // Update local state after successful backend update
+        aiToggleStates.set(chatId, isEnabled);
+        
+        console.log(`AI ${isEnabled ? 'enabled' : 'disabled'} for chat: ${chatId}`);
+        showToast(`AI ${isEnabled ? 'enabled' : 'disabled'} for chat`, 'success');
+      } catch (error) {
+        console.error('Error toggling AI:', error);
+        
+        // Revert the toggle state on error
+        this.checked = !isEnabled;
+        
+        showToast(`Error: ${error.message}`, 'danger');
+      }
     });
   });
 }
