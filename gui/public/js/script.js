@@ -87,37 +87,93 @@ function showNewMessageIndicator(messageData) {
   // Create a temporary notification
   const notification = document.createElement('div');
   notification.className = 'alert alert-info alert-dismissible fade show position-fixed';
-  notification.style.cssText = 'top: 20px; right: 20px; z-index: 9999; max-width: 350px;';
+  notification.style.cssText = 'top: 20px; right: 20px; z-index: 9999; max-width: 350px; cursor: pointer; transition: all 0.2s ease;';
   
-  // Extract message content and create a snippet
-  let messageSnippet = '';
+  // Extract and format the chat ID
+  const chatId = messageData.chatId.replace(/^(whatsapp|telegram):/, '');
+  
+  // Extract and format the message content
+  let messagePreview = '';
   if (messageData.message && messageData.message.content) {
     const content = messageData.message.content.trim();
-    messageSnippet = content.length > 50 ? content.substring(0, 50) + '...' : content;
+    // Truncate message if too long (max 80 characters)
+    messagePreview = content.length > 80 ? content.substring(0, 80) + '...' : content;
+    // Escape HTML to prevent injection
+    messagePreview = escapeHtml(messagePreview);
   }
   
-  // Format the chat ID for display
-  const chatDisplayId = messageData.chatId.replace(/^(whatsapp|telegram):/, '').replace(/@c\.us$/, '');
+  // Determine message type icon and color
+  let messageIcon = 'bi-chat-dots';
+  let iconColor = 'text-primary';
+  if (messageData.message && messageData.message.role === 'user') {
+    messageIcon = 'bi-person-fill';
+    iconColor = 'text-success';
+  } else if (messageData.message && messageData.message.role === 'assistant') {
+    messageIcon = 'bi-robot';
+    iconColor = 'text-info';
+  }
   
   notification.innerHTML = `
     <div class="d-flex align-items-start">
+      <i class="bi ${messageIcon} ${iconColor} me-2 mt-1"></i>
       <div class="flex-grow-1">
-        <small><strong>New Message</strong></small><br>
-        <small class="text-muted">From: ${chatDisplayId}</small>
-        ${messageSnippet ? `<br><small class="text-dark" style="font-style: italic;">${escapeHtml(messageSnippet)}</small>` : ''}
+        <div class="d-flex justify-content-between align-items-start">
+          <small><strong>New Message</strong></small>
+          <button type="button" class="btn-close btn-close-sm ms-2" data-bs-dismiss="alert" aria-label="Close"></button>
+        </div>
+        <small class="text-muted d-block mb-1">From: ${escapeHtml(chatId)}</small>
+        ${messagePreview ? `<div class="small text-dark" style="line-height: 1.3; word-break: break-word;">${messagePreview}</div>` : ''}
+        <small class="text-muted mt-1 d-block"><i class="bi bi-hand-index me-1"></i>Click to open chat</small>
       </div>
-      <button type="button" class="btn-close btn-sm ms-2" data-bs-dismiss="alert" style="font-size: 0.7rem;"></button>
     </div>
   `;
   
+  // Add hover effects
+  notification.addEventListener('mouseenter', () => {
+    notification.style.transform = 'scale(1.02)';
+    notification.style.boxShadow = '0 4px 12px rgba(0,0,0,0.15)';
+  });
+  
+  notification.addEventListener('mouseleave', () => {
+    notification.style.transform = 'scale(1)';
+    notification.style.boxShadow = '';
+  });
+  
+  // Add click handler to open the chat
+  notification.addEventListener('click', (e) => {
+    // Don't trigger if clicking the close button
+    if (e.target.classList.contains('btn-close')) {
+      return;
+    }
+    
+    // Open the chat
+    if (typeof viewChat === 'function') {
+      viewChat(messageData.chatId);
+      // Switch to the chats tab
+      const chatTab = document.querySelector('a[href="#chats"]');
+      if (chatTab) {
+        const tab = new bootstrap.Tab(chatTab);
+        tab.show();
+      }
+    }
+    
+    // Remove the notification
+    notification.remove();
+  });
+  
   document.body.appendChild(notification);
   
-  // Auto-remove after 3 seconds
-  setTimeout(() => {
+  // Auto-remove after 7 seconds (increased to give more time to read and interact)
+  const autoRemoveTimeout = setTimeout(() => {
     if (notification.parentNode) {
       notification.remove();
     }
-  }, 3000);
+  }, 7000);
+  
+  // Clear timeout if manually removed
+  notification.addEventListener('closed.bs.alert', () => {
+    clearTimeout(autoRemoveTimeout);
+  });
 }
 
 function updateConnectionStatus(connected) {
