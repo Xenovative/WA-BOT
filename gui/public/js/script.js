@@ -1847,7 +1847,9 @@ async function loadChatMessages(chatId) {
     }
     
     const data = await response.json();
-    const messages = data.messages || [];
+    console.log(`[ChatModal] API response for chatId ${chatId}:`, data);
+    const messages = data.conversation || data.messages || [];
+    console.log(`[ChatModal] Extracted ${messages.length} messages:`, messages);
     
     // Clear container
     messagesContainer.innerHTML = '';
