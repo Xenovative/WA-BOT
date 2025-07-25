@@ -1809,7 +1809,7 @@ async function viewChat(chatId) {
     document.getElementById('chatModal').addEventListener('hidden.bs.modal', function() {
       currentOpenChatId = null;
       // Remove event listeners to prevent memory leaks
-      cleanupChatModalEventListeners();
+      removeChatModalEventListeners();
     }, { once: true });
     
   } catch (error) {
@@ -2022,21 +2022,20 @@ async function initializeChatModalControls(chatId) {
     const aiStates = data.states || {};
     const isAIEnabled = aiStates[chatId] !== false; // Default to enabled
     
-    // Update AI toggle
-    const aiToggle = document.getElementById('chatModalAIToggle');
-    const aiToggleLabel = document.getElementById('chatModalAIToggleLabel');
+    // Set AI toggle state
+    const aiToggle = document.getElementById('chatModalAiToggle');
+    const aiToggleLabel = document.getElementById('chatModalAiToggleLabel');
     
-    if (aiToggle) {
+    if (aiToggle && aiToggleLabel) {
       aiToggle.checked = isAIEnabled;
+      aiToggleLabel.textContent = isAIEnabled ? 'On' : 'Off';
+      
+      // Store chat ID in toggle for event handler
       aiToggle.setAttribute('data-chat-id', chatId);
     }
     
-    if (aiToggleLabel) {
-      aiToggleLabel.textContent = isAIEnabled ? 'On' : 'Off';
-    }
-    
     // Add event listeners
-    addChatModalEventListeners(chatId);
+    addChatModalEventListeners();
     
   } catch (error) {
     console.error('Error initializing chat modal controls:', error);
@@ -2044,92 +2043,122 @@ async function initializeChatModalControls(chatId) {
 }
 
 // Add event listeners for chat modal controls
-function addChatModalEventListeners(chatId) {
+function addChatModalEventListeners() {
   // AI Toggle event listener
-  const aiToggle = document.getElementById('chatModalAIToggle');
+  const aiToggle = document.getElementById('chatModalAiToggle');
   if (aiToggle) {
     // Remove existing listener to prevent duplicates
-    aiToggle.removeEventListener('change', handleChatModalAIToggle);
-    aiToggle.addEventListener('change', handleChatModalAIToggle);
+    aiToggle.removeEventListener('change', handleChatModalAiToggle);
+    aiToggle.addEventListener('change', handleChatModalAiToggle);
   }
   
   // Refresh button event listener
-  const refreshBtn = document.getElementById('refreshChatBtn');
+  const refreshBtn = document.getElementById('chatModalRefreshBtn');
   if (refreshBtn) {
-    // Remove existing listener to prevent duplicates
     refreshBtn.removeEventListener('click', handleChatModalRefresh);
     refreshBtn.addEventListener('click', handleChatModalRefresh);
   }
 }
 
+// Remove event listeners for chat modal controls
+function removeChatModalEventListeners() {
+  const aiToggle = document.getElementById('chatModalAiToggle');
+  const refreshBtn = document.getElementById('chatModalRefreshBtn');
+  
+  if (aiToggle) {
+    aiToggle.removeEventListener('change', handleChatModalAiToggle);
+  }
+  
+  if (refreshBtn) {
+    refreshBtn.removeEventListener('click', handleChatModalRefresh);
+  }
+}
+
 // Handle AI toggle change in chat modal
-async function handleChatModalAIToggle(event) {
+async function handleChatModalAiToggle(event) {
   const chatId = event.target.getAttribute('data-chat-id');
   const enabled = event.target.checked;
+  const label = document.getElementById('chatModalAiToggleLabel');
   
   try {
+    console.log(`[ChatModal] Toggling AI for chat ${chatId}: ${enabled}`);
+    
+    // Show loading state
+    event.target.disabled = true;
+    if (label) label.textContent = 'Updating...';
+    
+    // Call the existing toggle function
     await toggleChatAI(chatId, enabled);
     
-    // Update the label
-    const label = document.getElementById('chatModalAIToggleLabel');
+    // Update label
     if (label) {
       label.textContent = enabled ? 'On' : 'Off';
     }
     
-    // Also update the main chat list toggle if visible
-    const mainToggle = document.querySelector(`.ai-toggle[data-chat-id="${chatId}"]`);
-    if (mainToggle) {
-      mainToggle.checked = enabled;
-      const mainLabel = mainToggle.nextElementSibling;
-      if (mainLabel) {
-        mainLabel.textContent = enabled ? 'On' : 'Off';
-      }
+    // Show success message
+    showToast(`AI ${enabled ? 'enabled' : 'disabled'} for this chat`, 'success');
+    
+    // Refresh the main chat list to sync the toggle state
+    if (typeof window.loadRecentChats === 'function') {
+      window.loadRecentChats();
     }
     
-    showToast(`AI ${enabled ? 'enabled' : 'disabled'} for this chat`, 'success');
   } catch (error) {
     console.error('Error toggling AI in chat modal:', error);
     
     // Revert the toggle state
     event.target.checked = !enabled;
+    if (label) {
+      label.textContent = !enabled ? 'On' : 'Off';
+    }
     
     showToast(`Error: ${error.message}`, 'danger');
+  } finally {
+    event.target.disabled = false;
   }
 }
 
 // Handle refresh button click in chat modal
 function handleChatModalRefresh() {
-  if (currentOpenChatId) {
-    console.log(`[ChatModal] Refreshing chat: ${currentOpenChatId}`);
-    
-    // Add spinning animation to refresh button
-    const refreshBtn = document.getElementById('refreshChatBtn');
-    if (refreshBtn) {
-      const icon = refreshBtn.querySelector('i');
-      if (icon) {
-        icon.classList.add('fa-spin');
-        setTimeout(() => {
-          icon.classList.remove('fa-spin');
-        }, 1000);
-      }
-    }
-    
-    // Reload the chat messages
-    loadChatMessages(currentOpenChatId);
-    showToast('Chat refreshed', 'info');
-  }
-}
-
-// Clean up event listeners when modal is closed
-function cleanupChatModalEventListeners() {
-  const aiToggle = document.getElementById('chatModalAIToggle');
-  if (aiToggle) {
-    aiToggle.removeEventListener('change', handleChatModalAIToggle);
+  if (!currentOpenChatId) {
+    console.warn('[ChatModal] No chat currently open for refresh');
+    return;
   }
   
-  const refreshBtn = document.getElementById('refreshChatBtn');
+  console.log(`[ChatModal] Refreshing chat: ${currentOpenChatId}`);
+  
+  // Show loading state on button
+  const refreshBtn = document.getElementById('chatModalRefreshBtn');
   if (refreshBtn) {
-    refreshBtn.removeEventListener('click', handleChatModalRefresh);
+    const originalHtml = refreshBtn.innerHTML;
+    refreshBtn.innerHTML = '<i class="bi bi-arrow-clockwise spin"></i>';
+    refreshBtn.disabled = true;
+    
+    // Add CSS for spin animation if not already present
+    if (!document.querySelector('style[data-chat-modal-styles]')) {
+      const style = document.createElement('style');
+      style.setAttribute('data-chat-modal-styles', 'true');
+      style.textContent = `
+        .spin {
+          animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+          from { transform: rotate(0deg); }
+          to { transform: rotate(360deg); }
+        }
+      `;
+      document.head.appendChild(style);
+    }
+    
+    // Refresh the chat messages
+    loadChatMessages(currentOpenChatId).finally(() => {
+      // Restore button state
+      refreshBtn.innerHTML = originalHtml;
+      refreshBtn.disabled = false;
+    });
+  } else {
+    // Fallback if button not found
+    loadChatMessages(currentOpenChatId);
   }
 }
 
@@ -2141,6 +2170,8 @@ window.refreshCurrentChatOptimized = refreshCurrentChatOptimized;
 window.loadChatMessages = loadChatMessages;
 window.appendNewMessage = appendNewMessage;
 window.initializeChatModalControls = initializeChatModalControls;
+window.handleChatModalAiToggle = handleChatModalAiToggle;
+window.handleChatModalRefresh = handleChatModalRefresh;
 
 // Add event listeners for AI toggle switches
 function addAIToggleListeners() {
