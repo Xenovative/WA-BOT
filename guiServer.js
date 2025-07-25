@@ -956,7 +956,8 @@ app.post('/api/chat/send-manual', express.json(), async (req, res) => {
     let client = null;
     let platform = 'whatsapp'; // default
     
-    if (chatId.startsWith('telegram:')) {
+    // Check for both telegram: and telegram_ formats
+    if (chatId.startsWith('telegram:') || chatId.startsWith('telegram_')) {
       platform = 'telegram';
       client = global.telegramBot;
       if (!client) {
