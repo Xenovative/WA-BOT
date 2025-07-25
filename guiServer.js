@@ -1891,6 +1891,15 @@ app.get('*', (req, res, next) => {
 wss.on('connection', (ws) => {
   console.log('[WebSocket] Client connected');
   
+  // Send a test message to confirm connection
+  setTimeout(() => {
+    ws.send(JSON.stringify({
+      type: 'connection_test',
+      data: { message: 'WebSocket connection established' },
+      timestamp: new Date().toISOString()
+    }));
+  }, 1000);
+  
   ws.on('close', () => {
     console.log('[WebSocket] Client disconnected');
   });

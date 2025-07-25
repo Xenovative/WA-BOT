@@ -49,18 +49,30 @@ function handleWebSocketMessage(data) {
   
   switch (data.type) {
     case 'chat_message':
+      console.log('[WebSocket] Processing chat_message event');
+      
       // Show a brief visual indicator for new message
       showNewMessageIndicator(data.data);
       
       // Refresh the chat list when a new message is received
-      if (typeof loadRecentChats === 'function') {
-        loadRecentChats();
+      console.log('[WebSocket] Refreshing chat list...');
+      try {
+        // Call the function directly since it's in global scope
+        window.loadRecentChats();
+        console.log('[WebSocket] Chat list refreshed successfully');
+      } catch (error) {
+        console.error('[WebSocket] Error refreshing chat list:', error);
       }
       
       // If we're currently viewing this chat, refresh the conversation
+      console.log('[WebSocket] Checking for refreshCurrentChat function:', typeof refreshCurrentChat);
       if (typeof refreshCurrentChat === 'function') {
+        console.log('[WebSocket] Calling refreshCurrentChat for:', data.data.chatId);
         refreshCurrentChat(data.data.chatId);
       }
+      break;
+    case 'connection_test':
+      console.log('[WebSocket] Connection test received:', data.data.message);
       break;
     default:
       console.log('[WebSocket] Unknown message type:', data.type);
@@ -1880,6 +1892,12 @@ function refreshCurrentChat(chatId) {
     loadChatMessages(chatId);
   }
 }
+
+// Make functions globally available
+window.loadRecentChats = loadRecentChats;
+window.viewChat = viewChat;
+window.refreshCurrentChat = refreshCurrentChat;
+window.loadChatMessages = loadChatMessages;
 
 // Add event listeners for AI toggle switches
 function addAIToggleListeners() {
