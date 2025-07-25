@@ -1,5 +1,62 @@
 // Main script.js file for WhatsXENO Management Console
 
+// WebSocket connection
+let socket;
+const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+const wsUrl = `${protocol}//${window.location.host}`;
+
+// Connect to WebSocket server
+function connectWebSocket() {
+  try {
+    socket = new WebSocket(wsUrl);
+    
+    socket.onopen = () => {
+      console.log('WebSocket connected');
+      updateConnectionStatus(true);
+    };
+    
+    socket.onmessage = (event) => {
+      try {
+        const data = JSON.parse(event.data);
+        if (data.type === 'refresh_chat') {
+          console.log('Refresh chat requested for:', data.chatId);
+          const activeChatId = document.querySelector('.chat.active')?.dataset.chatId;
+          if (!activeChatId || activeChatId === data.chatId) {
+            loadChatMessages(data.chatId);
+          }
+        }
+      } catch (error) {
+        console.error('Error processing WebSocket message:', error);
+      }
+    };
+    
+    socket.onclose = () => {
+      console.log('WebSocket disconnected');
+      updateConnectionStatus(false);
+      // Try to reconnect after 5 seconds
+      setTimeout(connectWebSocket, 5000);
+    };
+    
+    socket.onerror = (error) => {
+      console.error('WebSocket error:', error);
+      updateConnectionStatus(false);
+    };
+    
+  } catch (error) {
+    console.error('WebSocket connection error:', error);
+    updateConnectionStatus(false);
+  }
+}
+
+// Update connection status indicator
+function updateConnectionStatus(connected) {
+  const indicator = document.getElementById('connection-indicator');
+  if (indicator) {
+    indicator.className = connected ? 'status-indicator active' : 'status-indicator';
+    indicator.title = connected ? 'WebSocket Connected' : 'WebSocket Disconnected';
+  }
+}
+
 // DOM elements
 const refreshBtn = document.getElementById('refresh-btn');
 const connectionStatus = document.getElementById('connection-status');
@@ -229,6 +286,12 @@ function initTabPersistence() {
 }
 
 document.addEventListener('DOMContentLoaded', () => {
+  // Add WebSocket status indicator to the UI
+  addWebSocketStatusIndicator();
+  
+  // Connect to WebSocket server
+  connectWebSocket();
+  
   // Initialize event listeners for elements that might be accessed early
   if (document.getElementById('refresh-kb')) {
     document.getElementById('refresh-kb').addEventListener('click', loadKbDocuments);

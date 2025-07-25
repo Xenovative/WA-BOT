@@ -43,6 +43,67 @@ body {
   margin-right: .5rem;
 }
 
+/* Status indicator */
+.status-indicator {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background-color: #dc3545; /* Red by default */
+  margin-right: 8px;
+  position: relative;
+  top: -1px;
+}
+
+.status-indicator.active {
+  background-color: #28a745; /* Green when connected */
+  box-shadow: 0 0 8px rgba(40, 167, 69, 0.5);
+}
+
+.status-indicator::after {
+  content: '';
+  position: absolute;
+  top: -4px;
+  left: -4px;
+  right: -4px;
+  bottom: -4px;
+  border-radius: 50%;
+  border: 1px solid rgba(0, 0, 0, 0.1);
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+
+.status-indicator.active::after {
+  animation: pulse 2s infinite;
+  opacity: 1;
+}
+
+@keyframes pulse {
+  0% {
+    transform: scale(1);
+    opacity: 0.5;
+  }
+  70% {
+    transform: scale(1.5);
+    opacity: 0;
+  }
+  100% {
+    transform: scale(1);
+    opacity: 0;
+  }
+}
+
+/* Status bar */
+.status-bar {
+  padding: 10px 15px;
+  background-color: #f8f9fa;
+  border-top: 1px solid #dee2e6;
+  display: flex;
+  align-items: center;
+  font-size: 0.8rem;
+  color: #6c757d;
+}
+
 /* Cards and dashboard styles */
 .border-left-primary {
   border-left: .25rem solid #4e73df !important;

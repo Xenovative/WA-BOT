@@ -74,6 +74,13 @@ class ChatHandler {
         
         // Update the index as well
         this.updateChatIndex();
+        
+        // Trigger UI refresh for this chat
+        if (global.broadcastRefresh) {
+          global.broadcastRefresh(platformChatId);
+        } else {
+          console.log('[ChatHandler] broadcastRefresh not available, UI may not update in real-time');
+        }
       } catch (error) {
         console.error(`[ChatHandler] Failed to save chat ${platformChatId}:`, error);
       }
