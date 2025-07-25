@@ -287,7 +287,10 @@ class ChatHandler {
             const messages = JSON.parse(fileContent);
             
             if (Array.isArray(messages)) {
-              const chatId = path.basename(file, '.json');
+              const filename = path.basename(file, '.json');
+              // Convert filename format back to proper chat ID format
+              // e.g., "telegram_7244879869" -> "telegram:7244879869"
+              const chatId = filename.replace(/^(telegram|whatsapp)_/, '$1:');
               
               // Even if there are no messages, we still want to track the chat
               const lastMessage = messages.length > 0 ? messages[messages.length - 1] : { content: '', timestamp: new Date().toISOString() };
