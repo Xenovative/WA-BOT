@@ -8,8 +8,7 @@ const blocklist = require('../utils/blocklist');
 const rateLimiter = require('../utils/rateLimiter');
 const voiceHandler = require('../utils/voiceHandler');
 
-// Get the global workflowManager instance
-const workflowManager = global.workflowManager;
+// Note: workflowManager will be accessed via global.workflowManager at runtime
 
 class TelegramBotService {
   constructor(token) {
@@ -257,10 +256,10 @@ class TelegramBotService {
       const formattedChatId = `telegram:${chatId}`;
       
       // Check if this chat is blocked from AI responses
-      console.log(`[Telegram] Debug - workflowManager available: ${!!workflowManager}`);
+      console.log(`[Telegram] Debug - workflowManager available: ${!!global.workflowManager}`);
       console.log(`[Telegram] Debug - formattedChatId: "${formattedChatId}"`);
       
-      const isChatBlocked = workflowManager ? workflowManager.isChatBlocked(formattedChatId) : false;
+      const isChatBlocked = global.workflowManager ? global.workflowManager.isChatBlocked(formattedChatId) : false;
       console.log(`[Telegram] Chat ${formattedChatId} blocked status: ${isChatBlocked}`);
       
       // If chat is blocked from AI responses, skip processing unless it's a command
