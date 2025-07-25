@@ -1657,13 +1657,18 @@ $(document).ready(function() {
 
 // Load chats when document is ready
 document.addEventListener('DOMContentLoaded', function() {
-    loadChats();
-    loadRecentChats();
+    // Load AI states first, then load chats
+    loadAIStates().then(() => {
+        loadChats();
+        loadRecentChats();
+    });
     
     // Add refresh button event listener
     const refreshBtn = document.getElementById('refresh-recent-chats');
     if (refreshBtn) {
-        refreshBtn.addEventListener('click', loadRecentChats);
+        refreshBtn.addEventListener('click', () => {
+            loadAIStates().then(() => loadRecentChats());
+        });
     }
     
     // Other event listeners...
@@ -1724,7 +1729,7 @@ async function loadRecentChats() {
             const chatId = chat.chatId || chat.id;
             const lastMessage = chat.lastMessage || chat.content || 'No messages';
             const messageCount = chat.messageCount || chat.messages || 0;
-            const isAIEnabled = aiStates[chatId] !== false; // Default to enabled
+            const isAIEnabled = aiToggleStates.get(chatId) !== false; // Default to enabled
             
             const row = document.createElement('tr');
             row.innerHTML = `
@@ -4287,7 +4292,9 @@ document.addEventListener('DOMContentLoaded', function() {
   // Add refresh button listener
   const refreshChatsBtn = document.getElementById('refresh-chats');
   if (refreshChatsBtn) {
-    refreshChatsBtn.addEventListener('click', loadChats);
+    refreshChatsBtn.addEventListener('click', () => {
+      loadAIStates().then(() => loadChats());
+    });
   }
   
   // Add clear all chats button listener
