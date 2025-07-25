@@ -27,9 +27,13 @@ class WorkflowManager extends EventEmitter {
     this.mqttConnected = false;
     this.stateFilePath = path.join(__dirname, 'workflow-state.json');
     this.profileStatePath = path.join(__dirname, 'workflow-profiles.json');
+    this.blockedChatsPath = path.join(__dirname, 'blocked-chats.json');
     this.currentProfile = 'default';
     this.profiles = {};
     this.blockedChats = new Set(); // Store blocked chat IDs
+    
+    // Load existing blocked chats from disk
+    this.loadBlockedChats();
     
     this.settings = {
       // Core settings
@@ -1484,6 +1488,9 @@ class WorkflowManager extends EventEmitter {
     const normalizedChatId = this.normalizeChatId(chatId);
     this.blockedChats.add(normalizedChatId);
     
+    // Save to disk immediately
+    this.saveBlockedChats();
+    
     console.log(`[WorkflowManager] Blocked chat: ${normalizedChatId}`);
     return true;
   }
@@ -1499,6 +1506,9 @@ class WorkflowManager extends EventEmitter {
     const normalizedChatId = this.normalizeChatId(chatId);
     const wasBlocked = this.blockedChats.has(normalizedChatId);
     this.blockedChats.delete(normalizedChatId);
+    
+    // Save to disk immediately
+    this.saveBlockedChats();
     
     console.log(`[WorkflowManager] Unblocked chat: ${normalizedChatId}`);
     return wasBlocked;
@@ -1590,6 +1600,43 @@ class WorkflowManager extends EventEmitter {
    */
   getBlockedChats() {
     return Array.from(this.blockedChats);
+  }
+  
+  /**
+   * Save blocked chats to disk
+   */
+  saveBlockedChats() {
+    try {
+      const blockedChatsArray = Array.from(this.blockedChats);
+      fs.writeFileSync(this.blockedChatsPath, JSON.stringify(blockedChatsArray, null, 2));
+      console.log(`[WorkflowManager] Saved ${blockedChatsArray.length} blocked chats to disk`);
+    } catch (error) {
+      console.error('[WorkflowManager] Error saving blocked chats:', error);
+    }
+  }
+  
+  /**
+   * Load blocked chats from disk
+   */
+  loadBlockedChats() {
+    try {
+      if (fs.existsSync(this.blockedChatsPath)) {
+        const fileContent = fs.readFileSync(this.blockedChatsPath, 'utf8');
+        const blockedChatsArray = JSON.parse(fileContent);
+        
+        if (Array.isArray(blockedChatsArray)) {
+          this.blockedChats = new Set(blockedChatsArray);
+          console.log(`[WorkflowManager] Loaded ${blockedChatsArray.length} blocked chats from disk`);
+        } else {
+          console.warn('[WorkflowManager] Blocked chats file does not contain an array');
+        }
+      } else {
+        console.log('[WorkflowManager] No blocked chats file found, starting with empty set');
+      }
+    } catch (error) {
+      console.error('[WorkflowManager] Error loading blocked chats:', error);
+      this.blockedChats = new Set(); // Reset to empty set on error
+    }
   }
 }
 
