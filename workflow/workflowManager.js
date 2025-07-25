@@ -1306,8 +1306,17 @@ class WorkflowManager extends EventEmitter {
     // Normalize chat ID to ensure consistent format
     const normalizedChatId = this.normalizeChatId(chatId);
     
+    // Debug logging
+    console.log(`[WorkflowManager] isChatBlocked debug:`);
+    console.log(`  - Original chatId: "${chatId}"`);
+    console.log(`  - Normalized chatId: "${normalizedChatId}"`);
+    console.log(`  - Blocked chats:`, Array.from(this.blockedChats));
+    
     // Check if in blocked set
-    return this.blockedChats.has(normalizedChatId);
+    const isBlocked = this.blockedChats.has(normalizedChatId);
+    console.log(`  - Is blocked: ${isBlocked}`);
+    
+    return isBlocked;
   }
   
   /**
