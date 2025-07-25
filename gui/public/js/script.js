@@ -87,11 +87,27 @@ function showNewMessageIndicator(messageData) {
   // Create a temporary notification
   const notification = document.createElement('div');
   notification.className = 'alert alert-info alert-dismissible fade show position-fixed';
-  notification.style.cssText = 'top: 20px; right: 20px; z-index: 9999; max-width: 300px;';
+  notification.style.cssText = 'top: 20px; right: 20px; z-index: 9999; max-width: 350px;';
+  
+  // Extract message content and create a snippet
+  let messageSnippet = '';
+  if (messageData.message && messageData.message.content) {
+    const content = messageData.message.content.trim();
+    messageSnippet = content.length > 50 ? content.substring(0, 50) + '...' : content;
+  }
+  
+  // Format the chat ID for display
+  const chatDisplayId = messageData.chatId.replace(/^(whatsapp|telegram):/, '').replace(/@c\.us$/, '');
+  
   notification.innerHTML = `
-    <small><strong>New Message</strong></small><br>
-    <small>Chat: ${messageData.chatId.replace(/^(whatsapp|telegram):/, '')}</small>
-    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    <div class="d-flex align-items-start">
+      <div class="flex-grow-1">
+        <small><strong>New Message</strong></small><br>
+        <small class="text-muted">From: ${chatDisplayId}</small>
+        ${messageSnippet ? `<br><small class="text-dark" style="font-style: italic;">${escapeHtml(messageSnippet)}</small>` : ''}
+      </div>
+      <button type="button" class="btn-close btn-sm ms-2" data-bs-dismiss="alert" style="font-size: 0.7rem;"></button>
+    </div>
   `;
   
   document.body.appendChild(notification);
