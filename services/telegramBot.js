@@ -257,6 +257,9 @@ class TelegramBotService {
       const formattedChatId = `telegram:${chatId}`;
       
       // Check if this chat is blocked from AI responses
+      console.log(`[Telegram] Debug - workflowManager available: ${!!workflowManager}`);
+      console.log(`[Telegram] Debug - formattedChatId: "${formattedChatId}"`);
+      
       const isChatBlocked = workflowManager ? workflowManager.isChatBlocked(formattedChatId) : false;
       console.log(`[Telegram] Chat ${formattedChatId} blocked status: ${isChatBlocked}`);
       
