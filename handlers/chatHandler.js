@@ -40,34 +40,48 @@ class ChatHandler {
    * @param {string} [platform] - Platform identifier ('telegram', 'whatsapp', etc.)
    */
   addMessage(chatId, role, content, platform) {
-    const platformChatId = platform ? this.getPlatformChatId(platform, chatId) : chatId;
-    
-    console.log(`[ChatHandler] Adding ${role} message to chat ${platformChatId}`);
-    
-    if (!this.conversations.has(platformChatId)) {
-      console.log(`[ChatHandler] Loading existing conversation for chat ${platformChatId}`);
-      // Load existing messages from disk before creating new conversation
-      const existingMessages = this.loadChat(platformChatId);
-      this.conversations.set(platformChatId, existingMessages);
-    }
-    
-    const conversation = this.conversations.get(platformChatId);
-    const timestamp = new Date().toISOString();
-    
-    const message = { 
-      role, 
-      content, 
-      timestamp 
-    };
-    
-    conversation.push(message);
-    console.log(`[ChatHandler] Added message to chat ${platformChatId}, total messages: ${conversation.length}`);
-    
-    // Persist to disk immediately
     try {
-      this.saveConversations();
+      const platformChatId = platform ? this.getPlatformChatId(platform, chatId) : chatId;
+      
+      console.log(`[ChatHandler] Adding ${role} message to chat ${platformChatId}`);
+      
+      // Always load existing messages from disk first to ensure we have the latest
+      const existingMessages = this.loadChat(platformChatId);
+      
+      // Update in-memory conversation
+      this.conversations.set(platformChatId, existingMessages);
+      
+      const conversation = this.conversations.get(platformChatId);
+      const timestamp = new Date().toISOString();
+      
+      const message = { 
+        role, 
+        content, 
+        timestamp 
+      };
+      
+      // Add new message
+      conversation.push(message);
+      
+      console.log(`[ChatHandler] Added message to chat ${platformChatId}, total messages: ${conversation.length}`);
+      
+      // Save this chat immediately
+      try {
+        const chatFile = this.getChatFilePath(platformChatId);
+        const jsonContent = JSON.stringify(conversation, null, 2);
+        fs.writeFileSync(chatFile, jsonContent, 'utf8');
+        console.log(`[ChatHandler] Saved ${conversation.length} messages to ${chatFile}`);
+        
+        // Update the index as well
+        this.updateChatIndex();
+      } catch (error) {
+        console.error(`[ChatHandler] Failed to save chat ${platformChatId}:`, error);
+      }
+      
+      return true;
     } catch (error) {
-      console.error(`[ChatHandler] Failed to save conversations after adding message:`, error);
+      console.error(`[ChatHandler] Error in addMessage:`, error);
+      return false;
     }
   }
 

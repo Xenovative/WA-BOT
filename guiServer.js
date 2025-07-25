@@ -1148,17 +1148,12 @@ app.get('/api/chat/ai-states', (req, res) => {
     const blockedChats = global.workflowManager.getBlockedChats();
     const states = {};
     
-    // Get all chats from chatHandler to map blocked states
-    if (global.chatHandler) {
-      const allChats = global.chatHandler.getAllChats();
-      
-      allChats.forEach(chat => {
-        const chatId = chat.id;
-        // Check if this chat is blocked
-        const isBlocked = global.workflowManager.isChatBlocked(chatId);
-        states[chatId] = !isBlocked; // AI enabled = not blocked
-      });
-    }
+    // Convert blocked chats to AI states (blocked = AI disabled)
+    blockedChats.forEach(chatId => {
+      // Remove normalization prefix to get original chat ID
+      const originalChatId = chatId.replace('chat_whatsapp_', '');
+      states[originalChatId] = false; // AI disabled
+    });
     
     res.json({
       success: true,
@@ -1176,33 +1171,56 @@ app.get('/api/chat/ai-states', (req, res) => {
 // Get recent chats
 app.get('/api/chats/recent', async (req, res) => {
   try {
-    console.log('[API] Getting recent chats');
+    const chatHandler = require('./handlers/chatHandler');
+    const fs = require('fs');
+    const path = require('path');
     
-    if (!global.chatHandler) {
-      return res.status(500).json({
-        success: false,
-        error: 'ChatHandler not available'
-      });
+    // Get all chat files
+    const chatsDir = path.join(process.cwd(), 'data', 'chats');
+    const chats = [];
+    
+    if (fs.existsSync(chatsDir)) {
+      const files = fs.readdirSync(chatsDir)
+        .filter(file => file.endsWith('.json'))
+        .map(file => {
+          const filePath = path.join(chatsDir, file);
+          const stats = fs.statSync(filePath);
+          return {
+            file: file,
+            path: filePath,
+            modified: stats.mtime
+          };
+        })
+        .sort((a, b) => b.modified - a.modified) // Sort by most recent
+        .slice(0, 20); // Get top 20 recent chats
+      
+      for (const fileInfo of files) {
+        try {
+          const chatData = JSON.parse(fs.readFileSync(fileInfo.path, 'utf8'));
+          const chatId = fileInfo.file.replace('.json', '').replace(/[^a-zA-Z0-9@._:-]/g, ''); // Clean filename to get chat ID
+          
+          let lastMessage = 'No messages';
+          let messageCount = 0;
+          
+          if (chatData && Array.isArray(chatData) && chatData.length > 0) {
+            messageCount = chatData.length;
+            const lastMsg = chatData[chatData.length - 1];
+            if (lastMsg && lastMsg.content) {
+              lastMessage = lastMsg.content;
+            }
+          }
+          
+          chats.push({
+            chatId: chatId,
+            lastMessage: lastMessage,
+            messageCount: messageCount,
+            lastModified: fileInfo.modified
+          });
+        } catch (parseError) {
+          console.warn(`Failed to parse chat file ${fileInfo.file}:`, parseError.message);
+        }
+      }
     }
-    
-    // Use the global chatHandler to get all chats
-    const allChats = global.chatHandler.getAllChats();
-    console.log(`[API] Found ${allChats.length} chats`);
-    
-    // Sort by timestamp and limit to recent chats
-    const recentChats = allChats
-      .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp))
-      .slice(0, parseInt(req.query.limit) || 20)
-      .map(chat => ({
-        chatId: chat.id,
-        lastMessage: chat.preview || 'No messages',
-        messageCount: chat.messageCount || 0,
-        lastModified: chat.timestamp
-      }));
-    
-    console.log(`[API] Returning ${recentChats.length} recent chats`);
-    
-    const chats = recentChats;
     
     res.json({
       success: true,
