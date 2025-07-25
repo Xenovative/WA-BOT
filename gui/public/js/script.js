@@ -1841,7 +1841,7 @@ async function loadChatMessages(chatId) {
     `;
     
     // Fetch chat messages
-    const response = await fetch(`/api/chat/${encodeURIComponent(chatId)}`);
+    const response = await fetch(`/api/chats/${encodeURIComponent(chatId)}`);
     if (!response.ok) {
       throw new Error('Failed to load chat messages');
     }
