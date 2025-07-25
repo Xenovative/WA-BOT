@@ -1342,10 +1342,10 @@ class WorkflowManager extends EventEmitter {
     
     // Extract platform prefix if present in other formats
     let platform = '';
-    const platformMatch = chatId.match(/^(whatsapp|telegram)[:.-]?/i);
+    const platformMatch = chatId.match(/^(whatsapp|telegram)[:.\-_]?/i);
     if (platformMatch) {
       platform = platformMatch[1].toLowerCase();
-      chatId = chatId.replace(/^(whatsapp|telegram)[:.-]?/i, '');
+      chatId = chatId.replace(/^(whatsapp|telegram)[:.\-_]?/i, '');
     }
     
     // Clean up the ID
