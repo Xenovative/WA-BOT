@@ -2334,6 +2334,80 @@ window.removeChatModalEventListeners = removeChatModalEventListeners;
 // Make variables globally available
 window.currentOpenChatId = currentOpenChatId;
 
+// Test function to debug chat modal controls
+window.testChatModalControls = function() {
+  console.log('=== CHAT MODAL CONTROLS TEST ===');
+  
+  const modal = document.getElementById('chatModal');
+  const aiToggle = document.getElementById('chatModalAiToggle');
+  const aiToggleLabel = document.getElementById('chatModalAiToggleLabel');
+  const refreshBtn = document.getElementById('chatModalRefreshBtn');
+  const chatMessages = document.getElementById('chat-messages');
+  const modalTitle = document.getElementById('chatModalTitle');
+  
+  console.log('Modal element:', modal);
+  console.log('AI Toggle element:', aiToggle);
+  console.log('AI Toggle Label element:', aiToggleLabel);
+  console.log('Refresh Button element:', refreshBtn);
+  console.log('Chat Messages element:', chatMessages);
+  console.log('Modal Title element:', modalTitle);
+  
+  console.log('Current chat ID variables:');
+  console.log('- currentOpenChatId:', typeof currentOpenChatId !== 'undefined' ? currentOpenChatId : 'undefined');
+  console.log('- window.currentOpenChatId:', window.currentOpenChatId);
+  console.log('- window.currentChatId:', window.currentChatId);
+  
+  if (aiToggle) {
+    console.log('AI Toggle properties:');
+    console.log('- checked:', aiToggle.checked);
+    console.log('- data-chat-id:', aiToggle.getAttribute('data-chat-id'));
+    console.log('- event listeners:', aiToggle.cloneNode().outerHTML);
+  }
+  
+  if (refreshBtn) {
+    console.log('Refresh Button properties:');
+    console.log('- disabled:', refreshBtn.disabled);
+    console.log('- innerHTML:', refreshBtn.innerHTML);
+  }
+  
+  console.log('Available functions:');
+  console.log('- toggleChatAI:', typeof toggleChatAI);
+  console.log('- handleChatModalAiToggle:', typeof handleChatModalAiToggle);
+  console.log('- handleChatModalRefresh:', typeof handleChatModalRefresh);
+  console.log('- initializeChatModalControls:', typeof initializeChatModalControls);
+  console.log('- addChatModalEventListeners:', typeof addChatModalEventListeners);
+  
+  console.log('=== END TEST ===');
+};
+
+// Manual test functions
+window.testAIToggle = function() {
+  console.log('Testing AI toggle manually...');
+  const aiToggle = document.getElementById('chatModalAiToggle');
+  if (aiToggle) {
+    console.log('AI toggle found, simulating click...');
+    aiToggle.click();
+  } else {
+    console.error('AI toggle not found!');
+  }
+};
+
+window.testRefreshButton = function() {
+  console.log('Testing refresh button manually...');
+  const refreshBtn = document.getElementById('chatModalRefreshBtn');
+  if (refreshBtn) {
+    console.log('Refresh button found, simulating click...');
+    refreshBtn.click();
+  } else {
+    console.error('Refresh button not found!');
+  }
+};
+
+window.forceAddEventListeners = function() {
+  console.log('Forcing event listener addition...');
+  addChatModalEventListeners();
+};
+
 // Add event listeners for AI toggle switches
 function addAIToggleListeners() {
     const toggles = document.querySelectorAll('.ai-toggle');
@@ -4402,29 +4476,13 @@ function displayChats(chats) {
   });
 }
 
-// Open chat modal and load conversation
+// Open chat modal and load conversation (redirects to enhanced viewChat)
 async function openChatModal(chatId) {
-  currentChatId = chatId;
-  const modal = document.getElementById('chatModal');
-  const title = modal.querySelector('.modal-title');
-  const body = modal.querySelector('#chat-messages');
+  console.log(`[ChatModal] openChatModal called with chatId: ${chatId}`);
+  console.log(`[ChatModal] Redirecting to enhanced viewChat function`);
   
-  if (title) title.textContent = `Chat: ${chatId}`;
-  if (body) body.innerHTML = '<div class="text-center"><div class="spinner-border" role="status"></div></div>';
-  
-  try {
-    const response = await fetch(`/api/chats/${encodeURIComponent(chatId)}`);
-    const data = await response.json();
-    
-    if (data.success && data.conversation) {
-      displayChatMessages(data.conversation);
-    } else {
-      body.innerHTML = '<div class="alert alert-warning">No messages found for this chat.</div>';
-    }
-  } catch (error) {
-    console.error('Error loading chat:', error);
-    body.innerHTML = '<div class="alert alert-danger">Error loading chat messages.</div>';
-  }
+  // Use the enhanced viewChat function that includes AI toggle and refresh controls
+  await viewChat(chatId);
 }
 
 // Display chat messages in modal
