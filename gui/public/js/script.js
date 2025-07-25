@@ -1715,6 +1715,8 @@ async function loadRecentChats() {
         
         // Use global AI states (already loaded by loadAIStates())
         console.log(`[RecentChats] Using global AI states for ${aiToggleStates.size} chats`);
+        console.log('[RecentChats] Global aiToggleStates keys:', Array.from(aiToggleStates.keys()));
+        console.log('[RecentChats] Chat IDs from API:', chats.map(c => c.chatId || c.id));
         
         // Clear loading and populate with actual data
         recentChatsBody.innerHTML = '';
@@ -1723,9 +1725,12 @@ async function loadRecentChats() {
             const chatId = chat.chatId || chat.id;
             const lastMessage = chat.lastMessage || chat.content || 'No messages';
             const messageCount = chat.messageCount || chat.messages || 0;
-            const isAIEnabled = aiToggleStates.get(chatId) !== false; // Default to enabled
+            // Check AI state using normalized chat ID
+            const normalizedChatId = normalizeChatIdForAI(chatId);
+            const aiStateValue = aiToggleStates.get(normalizedChatId);
+            const isAIEnabled = aiStateValue !== false; // Default to enabled if undefined
             
-            console.log(`[RecentChats] Chat ${chatId}: aiToggleStates.get() = ${aiToggleStates.get(chatId)}, isAIEnabled = ${isAIEnabled}`);
+            console.log(`[RecentChats] Chat ${chatId}: normalized=${normalizedChatId}, aiState=${aiStateValue}, isAIEnabled=${isAIEnabled}`);
             
             const row = document.createElement('tr');
             row.innerHTML = `
@@ -2032,7 +2037,8 @@ async function initializeChatModalControls(chatId) {
     console.log(`[ChatModal] Initializing controls for chatId: ${chatId}`);
     
     // Get current AI state for this chat from global state first, fallback to API
-    let isAIEnabled = aiToggleStates.get(chatId);
+    const normalizedChatId = normalizeChatIdForAI(chatId);
+    let isAIEnabled = aiToggleStates.get(normalizedChatId);
     
     if (isAIEnabled === undefined) {
       // Fallback to API if not in global state
@@ -2045,8 +2051,8 @@ async function initializeChatModalControls(chatId) {
       console.log(`[ChatModal] All AI states from API:`, aiStates);
       isAIEnabled = aiStates[chatId] !== false; // Default to enabled
       
-      // Update global state
-      aiToggleStates.set(chatId, isAIEnabled);
+      // Update global state using normalized chat ID
+      aiToggleStates.set(normalizedChatId, isAIEnabled);
     }
     
     console.log(`[ChatModal] AI enabled for ${chatId}: ${isAIEnabled}`);
@@ -2160,9 +2166,10 @@ async function handleChatModalAiToggle(event) {
     const result = await toggleChatAI(chatId, enabled);
     console.log(`[ChatModal] toggleChatAI result:`, result);
     
-    // Update global state
-    aiToggleStates.set(chatId, enabled);
-    console.log(`[ChatModal] Updated global AI state for ${chatId}: ${enabled}`);
+    // Update global state using normalized chat ID
+    const normalizedChatId = normalizeChatIdForAI(chatId);
+    aiToggleStates.set(normalizedChatId, enabled);
+    console.log(`[ChatModal] Updated global AI state for ${chatId} (normalized: ${normalizedChatId}): ${enabled}`);
     
     // Update label
     if (label) {
@@ -2438,9 +2445,10 @@ function addAIToggleListeners() {
             try {
                 await toggleChatAI(chatId, enabled);
                 
-                // Update global state
-                aiToggleStates.set(chatId, enabled);
-                console.log(`[AIToggle] Updated global state for ${chatId}: ${enabled}`);
+                // Update global state using normalized chat ID
+                const normalizedChatId = normalizeChatIdForAI(chatId);
+                aiToggleStates.set(normalizedChatId, enabled);
+                console.log(`[AIToggle] Updated global state for ${chatId} (normalized: ${normalizedChatId}): ${enabled}`);
                 console.log('[AIToggle] Current global aiToggleStates Map:', aiToggleStates);
                 
                 // Update the label
@@ -4233,6 +4241,21 @@ let chatsPagination = { offset: 0, limit: 20, total: 0 };
 let currentChatSort = 'desc';
 let aiToggleStates = new Map(); // Track AI toggle state per chat
 
+// Normalize chat ID for AI state lookup
+function normalizeChatIdForAI(chatId) {
+  // If the chatId already has the prefix, return as-is
+  if (chatId.startsWith('chat_whatsapp_')) {
+    return chatId;
+  }
+  // Add the prefix for normalized lookup
+  return `chat_whatsapp_${chatId}`;
+}
+
+// Get original chat ID from normalized format
+function getOriginalChatId(normalizedChatId) {
+  return normalizedChatId.replace('chat_whatsapp_', '');
+}
+
 // Load AI states from backend
 async function loadAIStates() {
   try {
@@ -4349,7 +4372,8 @@ function displayChats(chats) {
     const lastActive = new Date(chat.timestamp).toLocaleString();
     const preview = chat.preview ? escapeHtml(chat.preview.substring(0, 50)) + (chat.preview.length > 50 ? '...' : '') : 'No messages';
     const chatId = escapeHtml(chat.id);
-    const isAIEnabled = aiToggleStates.get(chat.id) !== false; // Default to enabled
+    const normalizedChatId = normalizeChatIdForAI(chat.id);
+    const isAIEnabled = aiToggleStates.get(normalizedChatId) !== false; // Default to enabled
     
     return `
       <tr class="chat-row" data-chat-id="${chatId}">
