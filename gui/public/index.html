@@ -709,9 +709,6 @@
                             </div>
                         </div>
                         
-                        <!-- Hidden file input for workflow upload -->
-                        <input type="file" id="workflow-file-input" accept=".json" style="display: none;" multiple>
-                        
                         <div class="row">
                             <div class="col-md-12 mb-4">
                                 <div class="card shadow">
@@ -747,6 +744,9 @@
                         </div>
                         
                         <!-- Workflows will be displayed in the table above -->
+                        
+                        <!-- Hidden file input for workflow upload -->
+                        <input type="file" id="workflow-file-input" accept=".json" style="display: none; position: absolute; visibility: hidden;" multiple>
                     </div>
                 </div>
             </main>
