@@ -695,6 +695,98 @@
                         </div>
                     </div>
 
+                    <!-- Knowledge Base Tab -->
+                    <div class="tab-pane fade" id="kb" data-admin-only>
+                        <div class="d-flex justify-content-between align-items-center mb-3">
+                            <h4 class="mb-0">Knowledge Base Management</h4>
+                            <div class="btn-group" role="group">
+                                <button class="btn btn-outline-secondary" id="upload-kb-btn">
+                                    <i class="bi bi-upload me-1"></i> Upload Documents
+                                </button>
+                                <button class="btn btn-outline-primary" id="refresh-kb-btn">
+                                    <i class="bi bi-arrow-clockwise me-1"></i> Refresh
+                                </button>
+                            </div>
+                        </div>
+                        
+                        <!-- Hidden file input for document upload -->
+                        <input type="file" id="kb-file-input" accept=".pdf,.txt,.md,.doc,.docx" style="display: none;" multiple>
+                        
+                        <div class="row">
+                            <div class="col-md-12 mb-4">
+                                <div class="card shadow">
+                                    <div class="card-header py-3 d-flex flex-row align-items-center justify-content-between">
+                                        <h6 class="m-0 font-weight-bold">Knowledge Base Status</h6>
+                                        <div class="d-flex align-items-center">
+                                            <span class="badge bg-secondary me-2" id="kb-status-badge">Loading...</span>
+                                            <span class="text-muted small" id="kb-document-count">- documents</span>
+                                        </div>
+                                    </div>
+                                    <div class="card-body">
+                                        <div class="row">
+                                            <div class="col-md-6">
+                                                <div class="mb-3">
+                                                    <label class="form-label small text-muted">Status</label>
+                                                    <div id="kb-status-text" class="fw-bold">Checking...</div>
+                                                </div>
+                                                <div class="mb-3">
+                                                    <label class="form-label small text-muted">Total Documents</label>
+                                                    <div id="kb-total-docs" class="fw-bold">-</div>
+                                                </div>
+                                            </div>
+                                            <div class="col-md-6">
+                                                <div class="mb-3">
+                                                    <label class="form-label small text-muted">Vector Store</label>
+                                                    <div id="kb-vector-status" class="fw-bold">-</div>
+                                                </div>
+                                                <div class="mb-3">
+                                                    <label class="form-label small text-muted">Last Updated</label>
+                                                    <div id="kb-last-updated" class="fw-bold">-</div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="row">
+                            <div class="col-md-12">
+                                <div class="card shadow">
+                                    <div class="card-header py-3">
+                                        <h6 class="m-0 font-weight-bold">Documents</h6>
+                                    </div>
+                                    <div class="card-body">
+                                        <div class="table-responsive">
+                                            <table class="table table-hover">
+                                                <thead>
+                                                    <tr>
+                                                        <th>Document</th>
+                                                        <th>Type</th>
+                                                        <th>Size</th>
+                                                        <th>Chunks</th>
+                                                        <th>Added</th>
+                                                        <th>Actions</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody id="kb-documents-body">
+                                                    <tr>
+                                                        <td colspan="6" class="text-center py-4">
+                                                            <div class="spinner-border spinner-border-sm" role="status">
+                                                                <span class="visually-hidden">Loading...</span>
+                                                            </div>
+                                                            <span class="ms-2">Loading documents...</span>
+                                                        </td>
+                                                    </tr>
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
                     <!-- Workflows Tab -->
                     <div class="tab-pane fade" id="workflows" data-admin-only>
                         <div class="d-flex justify-content-between align-items-center mb-3">
