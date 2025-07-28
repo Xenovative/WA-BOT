@@ -1553,66 +1553,6 @@ app.delete('/api/kb/documents/:filename', async (req, res) => {
   }
 });
 
-// Get KB status information
-app.get('/api/kb/status', async (req, res) => {
-  console.log('[API] GET /api/kb/status request received');
-  try {
-    res.setHeader('Content-Type', 'application/json');
-    
-    const kbManager = require('./kb/kbManager');
-    console.log('[API] Getting KB status');
-    
-    // Get basic status
-    const enabled = kbManager.enabled;
-    const vectorStore = kbManager.vectorStore ? true : false;
-    
-    // Get document count
-    let documentCount = 0;
-    let lastUpdated = null;
-    
-    if (enabled) {
-      try {
-        const documents = await kbManager.listDocuments();
-        documentCount = documents.length;
-        
-        // Find the most recent document date
-        if (documents.length > 0) {
-          const dates = documents
-            .map(doc => doc.createdAt || doc.addedAt)
-            .filter(date => date)
-            .map(date => new Date(date))
-            .sort((a, b) => b - a);
-          
-          if (dates.length > 0) {
-            lastUpdated = dates[0].toISOString();
-          }
-        }
-      } catch (error) {
-        console.warn('[API] Error getting document count:', error);
-      }
-    }
-    
-    const response = {
-      success: true,
-      enabled: enabled,
-      vectorStore: vectorStore,
-      documentCount: documentCount,
-      lastUpdated: lastUpdated
-    };
-    
-    console.log('[API] Sending KB status response:', response);
-    return res.json(response);
-    
-  } catch (error) {
-    console.error('[API] Error getting KB status:', error);
-    return res.status(500).json({ 
-      success: false,
-      error: 'Failed to get KB status',
-      details: error.message
-    });
-  }
-});
-
 // ===============================
 // WORKFLOW ENDPOINTS
 // ===============================

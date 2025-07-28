@@ -61,7 +61,7 @@ class AdminManager {
     // Toggle admin-only tabs and elements
     const adminElements = document.querySelectorAll('[data-admin-only]');
     adminElements.forEach(el => {
-      if (el.classList.contains('tab-pane') || el.closest('.tab-pane')) {
+      if (el.classList.contains('tab-pane')) {
         // For tab panes, we need to handle them specially
         const tabLink = document.querySelector(`[href="#${el.id}"]`);
         if (tabLink) {
@@ -71,7 +71,7 @@ class AdminManager {
           }
         }
       } else {
-        // For other admin-only elements
+        // For other admin-only elements (including those inside tab-panes)
         el.style.display = this.adminMode ? '' : 'none';
       }
     });
