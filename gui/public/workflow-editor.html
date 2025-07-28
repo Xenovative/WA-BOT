@@ -69,21 +69,31 @@
             const statusEl = document.getElementById('status');
             const editorBtn = document.getElementById('editorBtn');
             
+            statusEl.textContent = 'Checking workflow editor status...';
+            statusEl.className = 'status';
+            
             try {
-                // Try to access the Node-RED editor
-                const response = await fetch('/red/');
+                // Try to access the Node-RED editor via proxy
+                const response = await fetch('/red/', { method: 'HEAD' });
                 if (response.ok) {
-                    statusEl.textContent = 'Node-RED is running and accessible.';
+                    statusEl.textContent = 'Workflow editor (Node-RED) is running and accessible.';
                     statusEl.className = 'status online';
                     editorBtn.style.display = 'inline-block';
+                    editorBtn.href = '/red/';
                 } else {
-                    throw new Error('Not accessible');
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
                 }
             } catch (error) {
-                statusEl.textContent = 'Node-RED is not running or not accessible. Please check the server logs.';
+                statusEl.textContent = 'Workflow editor is not available. Please ensure the workflow system is running.';
                 statusEl.className = 'status offline';
                 editorBtn.style.display = 'none';
-                console.error('Error checking Node-RED status:', error);
+                console.error('Error checking workflow editor status:', error);
+                
+                // Show more detailed error information
+                const errorDetails = document.createElement('div');
+                errorDetails.className = 'mt-2 text-muted small';
+                errorDetails.textContent = `Error: ${error.message}`;
+                statusEl.appendChild(errorDetails);
             }
         }
         

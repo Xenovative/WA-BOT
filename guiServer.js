@@ -8,6 +8,7 @@ const http = require('http');
 const fs = require('fs');
 const multer = require('multer');
 const WebSocket = require('ws');
+const { createProxyMiddleware } = require('http-proxy-middleware');
 
 const app = express();
 const server = http.createServer(app);
@@ -17,6 +18,26 @@ const adminUtils = require('./utils/adminUtils');
 
 // Serve static files from the public directory first
 app.use(express.static(path.join(__dirname, 'gui/public')));
+
+// Proxy Node-RED editor requests to the workflow manager
+const workflowPort = process.env.WORKFLOW_PORT || 1880;
+app.use('/red', createProxyMiddleware({
+  target: `http://localhost:${workflowPort}`,
+  changeOrigin: true,
+  pathRewrite: {
+    '^/red': '/red' // Keep the /red path
+  },
+  onError: (err, req, res) => {
+    console.error('Node-RED proxy error:', err.message);
+    res.status(503).json({ 
+      error: 'Node-RED workflow editor is not available', 
+      message: 'Please ensure the workflow system is running' 
+    });
+  },
+  onProxyReq: (proxyReq, req, res) => {
+    console.log(`[Proxy] Forwarding ${req.method} ${req.url} to Node-RED`);
+  }
+}));
 
 // Admin mode middleware
 function checkAdminMode(req, res, next) {
@@ -1528,6 +1549,129 @@ app.delete('/api/kb/documents/:filename', async (req, res) => {
       success: false,
       error: 'Failed to delete document',
       details: error.message 
+    });
+  }
+});
+
+// ===============================
+// WORKFLOW ENDPOINTS
+// ===============================
+
+// Upload workflow files
+app.post('/api/workflows/upload', upload.array('workflows'), async (req, res) => {
+  console.log('[API] Workflow upload request received');
+  res.setHeader('Content-Type', 'application/json');
+  
+  try {
+    if (!req.files || req.files.length === 0) {
+      console.log('[API] No workflow files uploaded');
+      return res.status(400).json({ 
+        success: false,
+        error: 'No workflow files provided' 
+      });
+    }
+    
+    const results = [];
+    const errors = [];
+    
+    for (const file of req.files) {
+      try {
+        console.log(`[API] Processing workflow file: ${file.originalname}`);
+        
+        // Validate file type
+        if (!file.originalname.toLowerCase().endsWith('.json')) {
+          errors.push(`${file.originalname}: Only JSON files are allowed`);
+          continue;
+        }
+        
+        // Parse JSON content
+        let workflowData;
+        try {
+          workflowData = JSON.parse(file.buffer.toString('utf8'));
+        } catch (parseError) {
+          errors.push(`${file.originalname}: Invalid JSON format - ${parseError.message}`);
+          continue;
+        }
+        
+        // Validate workflow structure
+        if (!Array.isArray(workflowData)) {
+          errors.push(`${file.originalname}: Workflow must be a JSON array of nodes`);
+          continue;
+        }
+        
+        // Find workflow ID from tab node or generate one
+        let workflowId = null;
+        const tabNode = workflowData.find(node => node.type === 'tab');
+        if (tabNode) {
+          workflowId = tabNode.id;
+        } else {
+          // Generate workflow ID from filename
+          workflowId = file.originalname.replace('.json', '').replace(/[^a-zA-Z0-9-_]/g, '-');
+        }
+        
+        // Save workflow to the workflow directory
+        const fs = require('fs');
+        const path = require('path');
+        const workflowPath = path.join(__dirname, 'workflow', `${workflowId}.json`);
+        
+        // Create workflow directory if it doesn't exist
+        const workflowDir = path.dirname(workflowPath);
+        if (!fs.existsSync(workflowDir)) {
+          fs.mkdirSync(workflowDir, { recursive: true });
+        }
+        
+        // Write workflow file
+        fs.writeFileSync(workflowPath, JSON.stringify(workflowData, null, 2));
+        
+        // Try to load the workflow into Node-RED if workflow manager is available
+        if (global.workflowManager && global.workflowManager.initialized) {
+          try {
+            const loadResult = await global.workflowManager.loadWorkflowFromPath(workflowPath, workflowId);
+            if (loadResult) {
+              console.log(`[API] Successfully loaded workflow ${workflowId} into Node-RED`);
+            } else {
+              console.warn(`[API] Failed to load workflow ${workflowId} into Node-RED`);
+            }
+          } catch (loadError) {
+            console.error(`[API] Error loading workflow ${workflowId} into Node-RED:`, loadError);
+          }
+        }
+        
+        results.push({
+          filename: file.originalname,
+          workflowId: workflowId,
+          status: 'success',
+          message: 'Workflow uploaded successfully'
+        });
+        
+        console.log(`[API] Successfully uploaded workflow: ${file.originalname} -> ${workflowId}`);
+        
+      } catch (fileError) {
+        console.error(`[API] Error processing workflow file ${file.originalname}:`, fileError);
+        errors.push(`${file.originalname}: ${fileError.message}`);
+      }
+    }
+    
+    const response = {
+      success: results.length > 0,
+      uploaded: results.length,
+      errors: errors.length,
+      results: results
+    };
+    
+    if (errors.length > 0) {
+      response.errorDetails = errors;
+    }
+    
+    console.log(`[API] Workflow upload completed: ${results.length} successful, ${errors.length} errors`);
+    return res.json(response);
+    
+  } catch (error) {
+    console.error('[API] Error uploading workflows:', error);
+    return res.status(500).json({ 
+      success: false,
+      error: 'Failed to upload workflows',
+      details: error.message
     });
   }
 });

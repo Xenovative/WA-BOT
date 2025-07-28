@@ -1539,6 +1539,88 @@ class WorkflowManager extends EventEmitter {
   getBlockedChats() {
     return Array.from(this.blockedChats);
   }
+  
+  /**
+   * Load a workflow from a file path into Node-RED
+   * @param {string} workflowPath - Path to the workflow JSON file
+   * @param {string} workflowId - ID for the workflow
+   * @returns {boolean} - True if successfully loaded
+   */
+  async loadWorkflowFromPath(workflowPath, workflowId) {
+    try {
+      if (!this.initialized) {
+        console.warn('[WorkflowManager] Cannot load workflow - manager not initialized');
+        return false;
+      }
+      
+      if (!fs.existsSync(workflowPath)) {
+        console.error(`[WorkflowManager] Workflow file not found: ${workflowPath}`);
+        return false;
+      }
+      
+      // Read workflow file
+      const workflowData = JSON.parse(fs.readFileSync(workflowPath, 'utf8'));
+      
+      if (!Array.isArray(workflowData)) {
+        console.error('[WorkflowManager] Invalid workflow format - must be an array of nodes');
+        return false;
+      }
+      
+      console.log(`[WorkflowManager] Loading workflow from ${workflowPath} with ID ${workflowId}`);
+      
+      // Get current flows from Node-RED
+      let currentFlows = [];
+      try {
+        if (RED && RED.nodes) {
+          const flows = RED.nodes.getFlows();
+          if (flows && flows.flows) {
+            currentFlows = flows.flows;
+          }
+        }
+      } catch (error) {
+        console.warn('[WorkflowManager] Could not get current flows:', error.message);
+      }
+      
+      // Remove any existing workflow with the same ID
+      const filteredFlows = currentFlows.filter(node => {
+        // Remove nodes that belong to this workflow
+        if (node.type === 'tab' && node.id === workflowId) {
+          return false;
+        }
+        if (node.z === workflowId) {
+          return false;
+        }
+        return true;
+      });
+      
+      // Add the new workflow nodes
+      const updatedFlows = [...filteredFlows, ...workflowData];
+      
+      // Deploy the updated flows to Node-RED
+      if (RED && RED.nodes) {
+        await new Promise((resolve, reject) => {
+          RED.nodes.setFlows(updatedFlows, 'full')
+            .then(() => {
+              console.log(`[WorkflowManager] Successfully loaded workflow ${workflowId}`);
+              resolve();
+            })
+            .catch(error => {
+              console.error(`[WorkflowManager] Error deploying workflow ${workflowId}:`, error);
+              reject(error);
+            });
+        });
+        
+        return true;
+      } else {
+        console.error('[WorkflowManager] Node-RED not available for workflow deployment');
+        return false;
+      }
+      
+    } catch (error) {
+      console.error(`[WorkflowManager] Error loading workflow from ${workflowPath}:`, error);
+      return false;
+    }
+  }
 }
 
 module.exports = WorkflowManager;

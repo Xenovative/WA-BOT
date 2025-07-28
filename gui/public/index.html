@@ -699,10 +699,18 @@
                     <div class="tab-pane fade" id="workflows" data-admin-only>
                         <div class="d-flex justify-content-between align-items-center mb-3">
                             <h4 class="mb-0">Workflow Management</h4>
-                            <a href="http://localhost:1880" target="_blank" class="btn btn-primary">
-                                <i class="bi bi-pencil-square me-1"></i> Open Workflow Editor
-                            </a>
+                            <div class="btn-group" role="group">
+                                <button class="btn btn-outline-secondary" id="upload-workflow-btn">
+                                    <i class="bi bi-upload me-1"></i> Upload Workflow
+                                </button>
+                                <a href="/red/" target="_blank" class="btn btn-primary" id="workflow-editor-btn">
+                                    <i class="bi bi-pencil-square me-1"></i> Open Workflow Editor
+                                </a>
+                            </div>
                         </div>
+                        
+                        <!-- Hidden file input for workflow upload -->
+                        <input type="file" id="workflow-file-input" accept=".json" style="display: none;" multiple>
                         
                         <div class="row">
                             <div class="col-md-12 mb-4">

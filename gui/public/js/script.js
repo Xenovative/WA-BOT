@@ -4811,3 +4811,151 @@ function escapeHtml(text) {
   div.textContent = text;
   return div.innerHTML;
 }
+
+// ===============================
+// WORKFLOW EDITOR FUNCTIONALITY
+// ===============================
+
+// Check if workflow editor is available
+async function checkWorkflowEditorStatus() {
+  try {
+    const response = await fetch('/red/', { method: 'HEAD' });
+    return response.ok;
+  } catch (error) {
+    return false;
+  }
+}
+
+// Initialize workflow editor button
+async function initializeWorkflowEditorButton() {
+  const workflowBtn = document.getElementById('workflow-editor-btn');
+  if (!workflowBtn) return;
+  
+  // Check if workflow editor is available
+  const isAvailable = await checkWorkflowEditorStatus();
+  
+  if (!isAvailable) {
+    // Disable button and show tooltip
+    workflowBtn.classList.add('disabled');
+    workflowBtn.setAttribute('title', 'Workflow editor is not available. Please ensure the workflow system is running.');
+    workflowBtn.style.opacity = '0.6';
+    
+    // Prevent default click behavior
+    workflowBtn.addEventListener('click', (e) => {
+      e.preventDefault();
+      showToast('Workflow editor is not available. Please ensure the workflow system is running.', 'warning');
+    });
+  } else {
+    // Enable button
+    workflowBtn.classList.remove('disabled');
+    workflowBtn.setAttribute('title', 'Open Node-RED workflow editor');
+    workflowBtn.style.opacity = '1';
+  }
+}
+
+// Handle workflow file upload
+async function handleWorkflowUpload(files) {
+  if (!files || files.length === 0) {
+    showToast('Please select workflow files to upload', 'warning');
+    return;
+  }
+  
+  const formData = new FormData();
+  
+  // Add all selected files
+  for (let i = 0; i < files.length; i++) {
+    const file = files[i];
+    
+    // Validate file type
+    if (!file.name.toLowerCase().endsWith('.json')) {
+      showToast(`Invalid file type: ${file.name}. Only JSON files are allowed.`, 'error');
+      return;
+    }
+    
+    formData.append('workflows', file);
+  }
+  
+  try {
+    // Show loading state
+    const uploadBtn = document.getElementById('upload-workflow-btn');
+    const originalText = uploadBtn.innerHTML;
+    uploadBtn.disabled = true;
+    uploadBtn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status"></span> Uploading...';
+    
+    console.log('[Workflow] Uploading workflow files...');
+    
+    const response = await fetch('/api/workflows/upload', {
+      method: 'POST',
+      body: formData
+    });
+    
+    const result = await response.json();
+    
+    if (result.success) {
+      let message = `Successfully uploaded ${result.uploaded} workflow(s)`;
+      if (result.errors > 0) {
+        message += ` (${result.errors} error(s))`;
+      }
+      
+      showToast(message, result.errors > 0 ? 'warning' : 'success');
+      
+      // Show detailed results if there are errors
+      if (result.errorDetails && result.errorDetails.length > 0) {
+        console.error('[Workflow] Upload errors:', result.errorDetails);
+        const errorList = result.errorDetails.join('\n');
+        setTimeout(() => {
+          showToast(`Upload errors:\n${errorList}`, 'error');
+        }, 2000);
+      }
+      
+      // Refresh workflows list if there's a refresh function
+      if (typeof loadWorkflows === 'function') {
+        setTimeout(loadWorkflows, 1000);
+      }
+      
+    } else {
+      showToast(`Upload failed: ${result.error}`, 'error');
+    }
+    
+  } catch (error) {
+    console.error('[Workflow] Error uploading workflows:', error);
+    showToast(`Upload error: ${error.message}`, 'error');
+  } finally {
+    // Reset button state
+    const uploadBtn = document.getElementById('upload-workflow-btn');
+    uploadBtn.disabled = false;
+    uploadBtn.innerHTML = '<i class="bi bi-upload me-1"></i> Upload Workflow';
+  }
+}
+
+// Initialize workflow upload functionality
+function initializeWorkflowUpload() {
+  const uploadBtn = document.getElementById('upload-workflow-btn');
+  const fileInput = document.getElementById('workflow-file-input');
+  
+  if (!uploadBtn || !fileInput) return;
+  
+  // Handle upload button click
+  uploadBtn.addEventListener('click', () => {
+    fileInput.click();
+  });
+  
+  // Handle file selection
+  fileInput.addEventListener('change', (event) => {
+    const files = event.target.files;
+    if (files.length > 0) {
+      handleWorkflowUpload(files);
+    }
+    // Reset file input
+    event.target.value = '';
+  });
+}
+
+// Initialize workflow editor button when page loads
+document.addEventListener('DOMContentLoaded', () => {
+  // Delay initialization to ensure all elements are loaded
+  setTimeout(() => {
+    initializeWorkflowEditorButton();
+    initializeWorkflowUpload();
+  }, 1000);
+});
