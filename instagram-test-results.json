@@ -1,0 +1,51 @@
+{
+  "timestamp": "2025-07-30T08:43:27.290Z",
+  "tests": [
+    {
+      "name": "Unofficial API (instagram-private-api)",
+      "status": "SUCCESS",
+      "duration": 660,
+      "details": {
+        "message": "Service initialized successfully"
+      }
+    },
+    {
+      "name": "Graph API (Official)",
+      "status": "FAILED",
+      "duration": 20,
+      "error": "Missing Graph API credentials"
+    },
+    {
+      "name": "Web Scraping (Playwright)",
+      "status": "SUCCESS",
+      "duration": 198,
+      "details": {
+        "message": "Web scraping service initialized"
+      }
+    },
+    {
+      "name": "Simple HTTP",
+      "status": "SUCCESS",
+      "duration": 20,
+      "details": {
+        "message": "Simple HTTP service initialized"
+      }
+    },
+    {
+      "name": "Browser Availability",
+      "status": "SUCCESS",
+      "duration": 3424,
+      "details": {
+        "message": "Browser working, title: Instagram"
+      }
+    },
+    {
+      "name": "Network Connectivity",
+      "status": "SUCCESS",
+      "duration": 566,
+      "details": {
+        "message": "Instagram reachable (200)"
+      }
+    }
+  ]
+}

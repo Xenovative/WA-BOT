@@ -4,6 +4,46 @@
 let ws = null;
 let wsReconnectInterval = null;
 
+// Initialize language selector
+function initLanguageSelector() {
+    const languageSelector = document.getElementById('language-selector');
+    if (languageSelector && window.i18n) {
+        // Set current language
+        languageSelector.value = window.i18n.getCurrentLanguage();
+        
+        // Handle language change
+        languageSelector.addEventListener('change', function() {
+            const selectedLanguage = this.value;
+            if (window.i18n.setLanguage(selectedLanguage)) {
+                // Show success message
+                showToast('success', window.i18n.t('settings.saved'), 2000);
+                
+                // Update any dynamic content that might need refresh
+                if (typeof loadRecentChats === 'function') {
+                    loadRecentChats();
+                }
+                if (typeof loadWorkflows === 'function') {
+                    loadWorkflows();
+                }
+                
+                // Update AI toggle text in chat modal if it's open
+                updateAiToggleText();
+            }
+        });
+    }
+}
+
+// Update AI toggle text based on current state
+function updateAiToggleText() {
+    const aiToggleLabel = document.getElementById('chatModalAiToggleLabel');
+    const aiToggleCheckbox = document.getElementById('chatModalAiToggle');
+    
+    if (aiToggleLabel && aiToggleCheckbox) {
+        const isChecked = aiToggleCheckbox.checked;
+        aiToggleLabel.textContent = window.i18n.t(isChecked ? 'chat.ai_toggle_on' : 'chat.ai_toggle_off');
+    }
+}
+
 function initWebSocket() {
   const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
   const wsUrl = `${protocol}//${window.location.host}`;
@@ -297,7 +337,7 @@ async function saveProfile(profileName) {
     }
     
     const result = await response.json();
-    showToast(`Profile '${profileName}' saved successfully`, 'success');
+    showToast(`${window.i18n ? window.i18n.t('toast.profile_saved') : 'Profile saved successfully'}: '${profileName}'`, 'success');
     loadSettings(); // Refresh settings to update profile list
     return result;
   } catch (error) {
@@ -324,7 +364,7 @@ async function loadProfile(profileName) {
     }
     
     const result = await response.json();
-    showToast(`Profile '${profileName}' loaded successfully`, 'success');
+    showToast(`${window.i18n ? window.i18n.t('toast.profile_loaded') : 'Profile loaded successfully'}: '${profileName}'`, 'success');
     loadSettings(); // Refresh settings with new profile data
     return result;
   } catch (error) {
@@ -356,7 +396,7 @@ async function deleteProfile(profileName) {
     }
     
     const result = await response.json();
-    showToast(`Profile '${profileName}' deleted successfully`, 'success');
+    showToast(`${window.i18n ? window.i18n.t('toast.profile_deleted') : 'Profile deleted successfully'}: '${profileName}'`, 'success');
     loadSettings(); // Refresh settings to update profile list
     return result;
   } catch (error) {
@@ -528,7 +568,7 @@ document.addEventListener('DOMContentLoaded', () => {
     saveProfileBtn.addEventListener('click', async () => {
       const profileName = newProfileNameInput.value.trim();
       if (!profileName) {
-        showToast('Please enter a profile name', 'warning');
+        showToast(window.i18n ? window.i18n.t('toast.enter_profile_name') : 'Please enter a profile name', 'warning');
         return;
       }
       
@@ -545,7 +585,7 @@ document.addEventListener('DOMContentLoaded', () => {
     deleteProfileBtn.addEventListener('click', async () => {
       const selectedProfile = profileSelect.value;
       if (!selectedProfile) {
-        showToast('Please select a profile to delete', 'warning');
+        showToast(window.i18n ? window.i18n.t('toast.select_profile_delete') : 'Please select a profile to delete', 'warning');
         return;
       }
       
@@ -664,9 +704,11 @@ async function loadStatus() {
     
     // Update status elements
     botStatusElement.textContent = data.status;
-    currentModelElement.textContent = data.model || 'Not set';
-    ragStatusElement.textContent = data.ragEnabled ? 'Enabled' : 'Disabled';
-    providerElement.textContent = data.provider || 'Not set';
+    currentModelElement.textContent = data.model || (window.i18n ? window.i18n.t('dashboard.not_set') : 'Not set');
+    ragStatusElement.textContent = data.ragEnabled ? 
+      (window.i18n ? window.i18n.t('dashboard.enabled') : 'Enabled') : 
+      (window.i18n ? window.i18n.t('dashboard.disabled') : 'Disabled');
+    providerElement.textContent = data.provider || (window.i18n ? window.i18n.t('dashboard.not_set') : 'Not set');
     
     connectionStatus.className = 'badge ' + (data.status === 'online' ? 'bg-success' : 'bg-danger');
   } catch (error) {
@@ -863,7 +905,7 @@ async function saveSettings() {
     const result = await response.json();
     
     if (result.success) {
-      showToast('Settings saved successfully!');
+      showToast(window.i18n ? window.i18n.t('toast.settings_saved') : 'Settings saved successfully!');
       // Reload settings to get properly masked keys from backend
       loadSettings();
       loadStatus(); // Refresh status to show updated settings
@@ -983,7 +1025,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const result = await response.json();
         
         if (result.success) {
-          showToast('Server is restarting. Please wait a moment and refresh the page.', 'info', 10000);
+          showToast(window.i18n ? window.i18n.t('toast.server_restarting') : 'Server is restarting. Please wait a moment and refresh the page.', 'info', 10000);
           // Disable the button to prevent multiple clicks
           restartBtn.disabled = true;
         } else {
@@ -1066,7 +1108,7 @@ document.addEventListener('DOMContentLoaded', () => {
           const result = await response.json();
           if (result.success) {
             loadChats();
-            showToast('All chat history has been cleared', 'success');
+            showToast(window.i18n ? window.i18n.t('toast.chat_history_cleared') : 'All chat history has been cleared', 'success');
           } else {
             throw new Error(result.error || 'Failed to clear all chats');
           }
@@ -1120,7 +1162,7 @@ async function exportCurrentChat() {
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
     
-    showToast('Chat exported successfully', 'success');
+    showToast(window.i18n ? window.i18n.t('toast.chat_exported') : 'Chat exported successfully', 'success');
   } catch (error) {
     console.error('Error exporting chat:', error);
     showToast(`Error exporting chat: ${error.message}`, 'danger');
@@ -1227,7 +1269,7 @@ function saveTriggers() {
         data: JSON.stringify(currentTriggers),
         success: function(response) {
             if (response.success) {
-                showToast('Success', 'Triggers saved successfully');
+                showToast('Success', window.i18n ? window.i18n.t('toast.triggers_saved') : 'Triggers saved successfully');
             } else {
                 showToast('Error', 'Failed to save triggers: ' + (response.error || 'Unknown error'));
             }
@@ -1375,7 +1417,7 @@ async function startQRCodeGeneration() {
         
         // Show loading state
         qrContainer.innerHTML = '<div class="spinner-border text-primary" role="status"><span class="visually-hidden">Loading...</span></div>';
-        qrStatus.textContent = 'Generating QR code...';
+        qrStatus.textContent = window.i18n ? window.i18n.t('qr.generating') : 'Generating QR code...';
         
         // Get QR code data from server
         const response = await fetch('/api/whatsapp/qr');
@@ -1389,7 +1431,7 @@ async function startQRCodeGeneration() {
             // Generate QR code
             qrContainer.innerHTML = '';
             await generateQRCode(data.qr, qrContainer);
-            qrStatus.textContent = 'Scan the QR code with your WhatsApp mobile app';
+            qrStatus.textContent = window.i18n ? window.i18n.t('qr.scan_instruction') : 'Scan the QR code with your WhatsApp mobile app';
             
             // Start checking authentication status
             window.qrCodeInterval = setInterval(async () => {
@@ -1526,7 +1568,7 @@ $(document).ready(function() {
     // Refresh triggers button
     $('#refresh-triggers').on('click', function() {
         loadTriggers();
-        showToast('Info', 'Refreshing triggers...');
+        showToast('Info', window.i18n ? window.i18n.t('toast.refreshing_triggers') : 'Refreshing triggers...');
     });
     
     // Add group trigger
@@ -1548,7 +1590,7 @@ $(document).ready(function() {
         if (newTrigger) {
             // Check if trigger already exists
             if (currentTriggers.groupTriggers.includes(newTrigger)) {
-                showToast('Warning', 'This trigger already exists!');
+                showToast('Warning', window.i18n ? window.i18n.t('toast.trigger_exists') : 'This trigger already exists!');
                 return;
             }
             
@@ -1585,7 +1627,7 @@ $(document).ready(function() {
         if (newTrigger) {
             // Check if trigger already exists
             if (currentTriggers.customTriggers.includes(newTrigger)) {
-                showToast('Warning', 'This trigger already exists!');
+                showToast('Warning', window.i18n ? window.i18n.t('toast.trigger_exists') : 'This trigger already exists!');
                 return;
             }
             
@@ -1673,7 +1715,7 @@ $(document).ready(function() {
         const newTriggerText = inputField.val().trim();
         
         if (!newTriggerText) {
-            showToast('Warning', 'Trigger text cannot be empty');
+            showToast('Warning', window.i18n ? window.i18n.t('toast.trigger_empty') : 'Trigger text cannot be empty');
             return;
         }
         
@@ -1712,7 +1754,7 @@ $(document).ready(function() {
                 </button>
             `);
             
-            showToast('Success', 'Trigger updated');
+            showToast('Success', window.i18n ? window.i18n.t('toast.trigger_updated') : 'Trigger updated');
         }
     }
     
@@ -2060,12 +2102,16 @@ function appendNewMessage(message) {
   const roleClass = message.role === 'user' ? 'bg-primary text-white' : 'bg-light';
   const roleIcon = message.role === 'user' ? 'bi-person-fill' : 'bi-robot';
   
+  const roleText = message.role === 'user' 
+    ? window.i18n.t('chat.role_user') 
+    : window.i18n.t('chat.role_assistant');
+    
   messageDiv.innerHTML = `
     <div class="d-inline-block p-3 rounded ${roleClass}" style="max-width: 70%;">
       <div class="d-flex align-items-center mb-1">
         <i class="bi ${roleIcon} me-2"></i>
         <small class="${message.role === 'user' ? 'text-white-50' : 'text-muted'}">
-          ${message.role === 'user' ? 'User' : 'Assistant'} • ${timestamp}
+          ${roleText} • ${timestamp}
         </small>
       </div>
       <div>${escapeHtml(message.content)}</div>
@@ -2161,7 +2207,8 @@ async function initializeChatModalControls(chatId) {
     
     if (aiToggle && aiToggleLabel) {
       aiToggle.checked = isAIEnabled;
-      aiToggleLabel.textContent = isAIEnabled ? 'On' : 'Off';
+      // Use i18n for toggle text
+      aiToggleLabel.textContent = window.i18n.t(isAIEnabled ? 'chat.ai_toggle_on' : 'chat.ai_toggle_off');
       
       // Store chat ID in toggle for event handler
       aiToggle.setAttribute('data-chat-id', chatId);
@@ -2255,7 +2302,7 @@ async function handleChatModalAiToggle(event) {
     
     // Show loading state
     event.target.disabled = true;
-    if (label) label.textContent = 'Updating...';
+    if (label) label.textContent = window.i18n.t('common.updating');
     
     // Update local state immediately for better UX
     // Check if we need to use the 'chat_' prefixed version
@@ -2286,13 +2333,14 @@ async function handleChatModalAiToggle(event) {
     const result = await toggleChatAI(chatId, enabled);
     console.log(`[ChatModal] toggleChatAI result:`, result);
     
-    // Update label
+    // Update label with i18n translation
     if (label) {
-      label.textContent = enabled ? 'On' : 'Off';
+      label.textContent = window.i18n.t(enabled ? 'chat.ai_toggle_on' : 'chat.ai_toggle_off');
     }
     
-    // Show success message
-    showToast(`AI ${enabled ? 'enabled' : 'disabled'} for this chat`, 'success');
+    // Show success message with i18n translation
+    const message = enabled ? window.i18n.t('chat.ai_enabled') : window.i18n.t('chat.ai_disabled');
+    showToast(message, 'success');
     
     // Refresh the main chat list to sync the toggle state
     if (typeof window.loadRecentChats === 'function') {
@@ -2303,14 +2351,17 @@ async function handleChatModalAiToggle(event) {
   } catch (error) {
     console.error('Error toggling AI in chat modal:', error);
     
-    // Revert the toggle state
-    event.target.checked = !enabled;
+    // Revert the toggle state on error
+    const newState = !enabled;
+    event.target.checked = newState;
     if (label) {
-      label.textContent = !enabled ? 'On' : 'Off';
+      // Use i18n for toggle text
+      label.textContent = window.i18n.t(newState ? 'chat.ai_toggle_on' : 'chat.ai_toggle_off');
     }
     
     showToast(`Error: ${error.message}`, 'danger');
   } finally {
+    // Re-enable the toggle
     event.target.disabled = false;
   }
 }
@@ -2416,7 +2467,7 @@ async function handleChatModalRefresh(event) {
   
   if (!chatId) {
     console.error(`[ChatModal] No current open chat ID found`);
-    showToast('Error: No chat currently open', 'danger');
+    showToast(window.i18n ? window.i18n.t('toast.no_chat_open') : 'Error: No chat currently open', 'danger');
     return;
   }
   
@@ -2432,7 +2483,7 @@ async function handleChatModalRefresh(event) {
     await loadChatMessages(chatId);
     
     console.log(`[ChatModal] Chat messages refreshed successfully`);
-    showToast('Chat refreshed successfully', 'success');
+    showToast(window.i18n ? window.i18n.t('toast.chat_refreshed') : 'Chat refreshed successfully', 'success');
     
     // Restore button state
     refreshBtn.innerHTML = originalHtml;
@@ -2566,7 +2617,10 @@ function addAIToggleListeners() {
                     label.textContent = enabled ? 'On' : 'Off';
                 }
                 
-                showToast(`AI ${enabled ? 'enabled' : 'disabled'} for chat`, 'success');
+                const message = enabled ? 
+                    (window.i18n ? window.i18n.t('toast.ai_enabled') : 'AI enabled for chat') : 
+                    (window.i18n ? window.i18n.t('toast.ai_disabled') : 'AI disabled for chat');
+                showToast(message, 'success');
             } catch (error) {
                 console.error('Error toggling AI:', error);
                 
@@ -2792,13 +2846,13 @@ async function loadRecentChats() {
                             <button class="btn btn-sm btn-outline-primary view-chat" data-chat-id="${chat.id}" 
                                 data-bs-toggle="tooltip" title="View chat">
                                 <i class="bi bi-eye"></i>
-                                <span class="d-none d-md-inline ms-1">View</span>
+                                <span class="d-none d-md-inline ms-1">${window.i18n ? window.i18n.t('common.view') : 'View'}</span>
                             </button>
                             <button class="btn btn-sm btn-outline-danger delete-chat ms-2" 
                                 data-chat-id="${chat.id}"
                                 data-bs-toggle="tooltip" title="Delete chat">
                                 <i class="bi bi-trash"></i>
-                                <span class="d-none d-md-inline ms-1">Delete</span>
+                                <span class="d-none d-md-inline ms-1">${window.i18n ? window.i18n.t('common.delete') : 'Delete'}</span>
                             </button>
                         </div>
                     </td>
@@ -2832,10 +2886,10 @@ async function loadRecentChats() {
                 
                 // Show confirmation dialog
                 const confirmed = await showConfirmationDialog(
-                    'Delete Chat',
-                    'Are you sure you want to delete this chat? This action cannot be undone.',
-                    'Delete',
-                    'Cancel',
+                    window.i18n ? window.i18n.t('common.delete_chat') : 'Delete Chat',
+                    window.i18n ? window.i18n.t('common.delete_chat_confirm') : 'Are you sure you want to delete this chat? This action cannot be undone.',
+                    window.i18n ? window.i18n.t('common.delete') : 'Delete',
+                    window.i18n ? window.i18n.t('common.cancel') : 'Cancel',
                     'danger'
                 );
                 
@@ -3269,7 +3323,7 @@ async function loadChats() {
       
       const viewBtn = document.createElement('button');
       viewBtn.className = 'btn btn-sm btn-outline-primary me-2';
-      viewBtn.innerHTML = '<i class="bi bi-eye"></i> View';
+      viewBtn.innerHTML = `<i class="bi bi-eye"></i> ${window.i18n ? window.i18n.t('common.view') : 'View'}`;
       viewBtn.addEventListener('click', () => viewChat(chat.id));
       
       const deleteBtn = document.createElement('button');
@@ -3277,10 +3331,10 @@ async function loadChats() {
       deleteBtn.innerHTML = '<i class="bi bi-trash"></i>';
       deleteBtn.addEventListener('click', async () => {
         const confirmed = await showConfirmDialog(
-          'Delete Chat',
-          `Are you sure you want to delete this chat history? This action cannot be undone.`,
-          'Delete',
-          'Cancel',
+          window.i18n ? window.i18n.t('common.delete_chat') : 'Delete Chat',
+          window.i18n ? window.i18n.t('common.delete_chat_confirm') : 'Are you sure you want to delete this chat history? This action cannot be undone.',
+          window.i18n ? window.i18n.t('common.delete') : 'Delete',
+          window.i18n ? window.i18n.t('common.cancel') : 'Cancel',
           'danger'
         );
         
@@ -3633,7 +3687,7 @@ async function loadKbDocuments() {
     renderKnowledgeBase(Array.isArray(documents) ? documents : []);
   } catch (error) {
     console.error('Error loading KB documents:', error);
-    kbContainer.innerHTML = `<div class="alert alert-danger">Failed to load knowledge base: ${error.message}</div>`;
+    kbContainer.innerHTML = `<div class="alert alert-danger">${window.i18n ? window.i18n.t('kb.failed_load') : 'Failed to load knowledge base'}: ${error.message}</div>`;
   }
 }
 
@@ -3642,7 +3696,7 @@ function renderKnowledgeBase(documents) {
   if (!kbContainer) return;
   
   if (!documents || documents.length === 0) {
-    kbContainer.innerHTML = `<div class="alert alert-info">No documents found in knowledge base</div>`;
+    kbContainer.innerHTML = `<div class="alert alert-info">${window.i18n ? window.i18n.t('kb.no_documents') : 'No documents found in knowledge base'}</div>`;
     return;
   }
   
@@ -3654,12 +3708,12 @@ function renderKnowledgeBase(documents) {
   const thead = document.createElement('thead');
   thead.innerHTML = `
     <tr>
-      <th>Filename</th>
-      <th>Size</th>
-      <th>Chunks</th>
-      <th>Uploaded</th>
-      <th>Use in RAG</th>
-      <th>Actions</th>
+      <th>${window.i18n ? window.i18n.t('kb.filename') : 'Filename'}</th>
+      <th>${window.i18n ? window.i18n.t('kb.size') : 'Size'}</th>
+      <th>${window.i18n ? window.i18n.t('kb.chunks') : 'Chunks'}</th>
+      <th>${window.i18n ? window.i18n.t('kb.uploaded') : 'Uploaded'}</th>
+      <th>${window.i18n ? window.i18n.t('kb.use_in_rag') : 'Use in RAG'}</th>
+      <th>${window.i18n ? window.i18n.t('kb.actions') : 'Actions'}</th>
     </tr>
   `;
   table.appendChild(thead);
@@ -3701,13 +3755,13 @@ function renderKnowledgeBase(documents) {
                  ${isEnabled ? 'checked' : ''} 
                  onchange="toggleKbDocument('${doc.name}', this.checked)">
           <label class="form-check-label" for="${toggleId}">
-            ${isEnabled ? 'Enabled' : 'Disabled'}
+            ${isEnabled ? (window.i18n ? window.i18n.t('kb.enabled') : 'Enabled') : (window.i18n ? window.i18n.t('kb.disabled') : 'Disabled')}
           </label>
         </div>
       </td>
       <td>
         <button class="btn btn-sm btn-danger" onclick="deleteKbDocument('${doc.name}')">
-          <i class="bi bi-trash"></i> Delete
+          <i class="bi bi-trash"></i> ${window.i18n ? window.i18n.t('kb.delete') : 'Delete'}
         </button>
       </td>
     `;
@@ -3721,7 +3775,7 @@ function renderKnowledgeBase(documents) {
 }
 
 async function deleteKbDocument(filename) {
-  if (!confirm(`Are you sure you want to delete ${filename}?`)) {
+  if (!confirm(`${window.i18n ? window.i18n.t('kb.delete_confirm') : 'Are you sure you want to delete'} ${filename}?`)) {
     return;
   }
   
@@ -3746,13 +3800,13 @@ async function deleteKbDocument(filename) {
     }
     
     // Show success message
-    showToast('Document deleted successfully', 'success');
+    showToast(window.i18n ? window.i18n.t('kb.document_deleted') : 'Document deleted successfully', 'success');
     
     // Reload the KB documents list
     loadKbDocuments();
   } catch (error) {
     console.error('Error deleting document:', error);
-    showToast(`Delete failed: ${error.message}`, 'error');
+    showToast(`${window.i18n ? window.i18n.t('kb.delete_failed') : 'Delete failed'}: ${error.message}`, 'error');
     
     // Reload the KB documents list
     loadKbDocuments();
@@ -3785,9 +3839,12 @@ async function toggleKbDocument(fileName, enabled) {
     
     const result = await response.json();
     if (result.success) {
-      showToast(`Document ${fileName} ${enabled ? 'enabled' : 'disabled'} for RAG operations`, 'success');
+      const statusText = enabled ? 
+        (window.i18n ? window.i18n.t('kb.document_enabled') : 'enabled for RAG operations') : 
+        (window.i18n ? window.i18n.t('kb.document_disabled') : 'disabled for RAG operations');
+      showToast(`Document ${fileName} ${statusText}`, 'success');
     } else {
-      throw new Error(result.message || 'Failed to toggle document status');
+      throw new Error(result.message || (window.i18n ? window.i18n.t('kb.toggle_failed') : 'Failed to toggle document status'));
     }
     
     // Update the document list to reflect the change
@@ -3829,9 +3886,13 @@ function showToast(message, type = 'info') {
   toastEl.setAttribute('aria-live', 'assertive');
   toastEl.setAttribute('aria-atomic', 'true');
   
+  // Check branding state to determine toast header text
+  const brandingEnabled = window.brandingManager ? window.brandingManager.brandingEnabled : true;
+  const headerText = brandingEnabled ? 'WhatsXENO' : (window.i18n ? window.i18n.t('common.notification') : 'Notification');
+  
   toastEl.innerHTML = `
     <div class="toast-header">
-      <strong class="me-auto">WhatsXENO</strong>
+      <strong class="me-auto">${headerText}</strong>
       <button type="button" class="btn-close" data-bs-dismiss="toast" aria-label="Close"></button>
     </div>
     <div class="toast-body">
@@ -4345,6 +4406,91 @@ function formatBytes(bytes) {
 // CHAT FUNCTIONALITY
 // ===============================
 
+// Send manual message from chat modal
+async function sendManualMessage() {
+    const input = document.getElementById('manual-message-input');
+    const message = input.value.trim();
+    const chatId = currentOpenChatId;
+    
+    if (!message) return;
+    
+    // Get the AI toggle state
+    const aiToggle = document.getElementById('chatModalAiToggle');
+    const useAI = aiToggle ? aiToggle.checked : false;
+    
+    // Clear input
+    input.value = '';
+    
+    // Add message to chat UI immediately for better UX
+    const messagesContainer = document.getElementById('chat-messages');
+    if (messagesContainer) {
+        const messageDiv = document.createElement('div');
+        messageDiv.className = 'message sent';
+        messageDiv.innerHTML = `
+            <div class="message-content">
+                <div class="message-sender">${window.i18n ? window.i18n.t('chat.you') : 'You'}</div>
+                <div class="message-text">${escapeHtml(message)}</div>
+                <div class="message-time">${new Date().toLocaleTimeString()}</div>
+            </div>
+        `;
+        messagesContainer.appendChild(messageDiv);
+        messagesContainer.scrollTop = messagesContainer.scrollHeight;
+    }
+    
+    try {
+        // Show loading state
+        const sendButton = document.getElementById('send-manual-message');
+        const originalButtonContent = sendButton ? sendButton.innerHTML : '';
+        
+        if (sendButton) {
+            sendButton.disabled = true;
+            sendButton.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> ' + 
+                                 (window.i18n ? window.i18n.t('common.sending') : 'Sending...');
+        }
+        
+        // Send message to server
+        const response = await fetch('/api/chat/send', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                chatId: chatId,
+                message: message,
+                useAI: useAI
+            })
+        });
+        
+        if (!response.ok) {
+            throw new Error('Failed to send message');
+        }
+        
+        // Show success message
+        showToast(window.i18n ? window.i18n.t('chat.message_sent') : 'Message sent', 'success');
+        
+        // Refresh chat to show the response
+        if (chatId) {
+            refreshCurrentChat(chatId);
+        }
+        
+    } catch (error) {
+        console.error('Error sending manual message:', error);
+        showToast(window.i18n ? window.i18n.t('chat.message_failed') : 'Failed to send message', 'danger');
+    } finally {
+        // Restore button state
+        const sendButton = document.getElementById('send-manual-message');
+        if (sendButton) {
+            sendButton.disabled = false;
+            sendButton.innerHTML = '<i class="bi bi-send"></i> ' + 
+                                 (window.i18n ? window.i18n.t('chat.send') : 'Send');
+        }
+    }
+}
+
+// Make function globally available
+window.sendManualMessage = sendManualMessage;
+
+
 // currentChatId already declared above, reusing it
 let chatsPagination = { offset: 0, limit: 20, total: 0 };
 let currentChatSort = 'desc';
@@ -4556,7 +4702,7 @@ function displayChats(chats) {
                   data-chat-id="${chatId}" 
                   data-bs-toggle="modal" 
                   data-bs-target="#chatModal">
-            <i class="bi bi-eye"></i> View
+            <i class="bi bi-eye"></i> ${window.i18n ? window.i18n.t('common.view') : 'View'}
           </button>
         </td>
       </tr>
@@ -4953,9 +5099,45 @@ function initializeWorkflowUpload() {
 
 // Initialize workflow editor button when page loads
 document.addEventListener('DOMContentLoaded', () => {
+  // Initialize language selector immediately
+  initLanguageSelector();
+  
+  // Add language change event listener for dynamic content
+  window.addEventListener('languageChanged', function(event) {
+    // Update dynamic content that might not be caught by data-i18n attributes
+    updateDynamicTranslations();
+  });
+  
+  // Initialize WebSocket connection
+  initWebSocket();
+  
   // Delay initialization to ensure all elements are loaded
   setTimeout(() => {
     initializeWorkflowEditorButton();
     initializeWorkflowUpload();
+    
+    // Load initial data
+    if (typeof loadRecentChats === 'function') {
+      loadRecentChats();
+    }
   }, 1000);
 });
+
+// Update dynamic translations that might not be handled by data-i18n attributes
+function updateDynamicTranslations() {
+  if (!window.i18n) return;
+  
+  // Update sort text based on current sort order
+  const sortText = document.getElementById('sort-text');
+  if (sortText) {
+    const currentSort = window.chatHistoryState?.sort || 'desc';
+    if (currentSort === 'desc') {
+      sortText.textContent = window.i18n.t('chat.newest_first');
+    } else {
+      sortText.textContent = window.i18n.t('chat.oldest_first');
+    }
+  }
+  
+  // Update any other dynamic content that needs translation
+  // Add more dynamic content updates here as needed
+}

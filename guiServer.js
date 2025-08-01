@@ -1919,16 +1919,33 @@ app.get('/api/stats', (req, res) => {
 // Branding endpoints
 app.get('/api/settings/branding', (req, res) => {
   try {
-    // Default to true if SHOW_BRANDING is not set, otherwise use the value from environment
-    const showBranding = process.env.SHOW_BRANDING === undefined ? true : process.env.SHOW_BRANDING === 'true';
-    
     // If the environment variable is set to false, it will override any client-side setting
     if (process.env.SHOW_BRANDING === 'false') {
       return res.json({ enabled: false, fromEnv: true });
     }
     
-    // Otherwise, respect the client's saved state
-    res.json({ enabled: showBranding });
+    // Try to load from settings file first
+    const settingsPath = path.join(__dirname, 'data', 'settings.json');
+    let enabled = true; // Default to true
+    
+    if (fs.existsSync(settingsPath)) {
+      try {
+        const settingsData = fs.readFileSync(settingsPath, 'utf8');
+        const settings = JSON.parse(settingsData);
+        if (settings.branding && typeof settings.branding.enabled === 'boolean') {
+          enabled = settings.branding.enabled;
+        }
+      } catch (parseError) {
+        console.warn('Could not parse settings file, using default branding setting');
+      }
+    }
+    
+    // If SHOW_BRANDING environment variable is explicitly set to true, use that
+    if (process.env.SHOW_BRANDING === 'true') {
+      enabled = true;
+    }
+    
+    res.json({ enabled });
   } catch (error) {
     console.error('Error getting branding setting:', error);
     res.status(500).json({ error: 'Failed to get branding setting' });
@@ -1941,8 +1958,40 @@ app.post('/api/settings/branding', express.json(), (req, res) => {
     if (typeof enabled !== 'boolean') {
       return res.status(400).json({ error: 'Invalid request body' });
     }
-    // In a real app, you might want to save this to a database
-    // For now, we'll just return the current state
+    
+    // Don't allow changing if controlled by environment variable
+    if (process.env.SHOW_BRANDING === 'false') {
+      return res.status(403).json({ error: 'Branding setting is controlled by server configuration' });
+    }
+    
+    // Save to settings file
+    const settingsPath = path.join(__dirname, 'data', 'settings.json');
+    let settings = {};
+    
+    // Create data directory if it doesn't exist
+    const dataDir = path.dirname(settingsPath);
+    if (!fs.existsSync(dataDir)) {
+      fs.mkdirSync(dataDir, { recursive: true });
+    }
+    
+    // Load existing settings if file exists
+    if (fs.existsSync(settingsPath)) {
+      try {
+        const settingsData = fs.readFileSync(settingsPath, 'utf8');
+        settings = JSON.parse(settingsData);
+      } catch (parseError) {
+        console.warn('Could not parse existing settings file, creating new one');
+        settings = {};
+      }
+    }
+    
+    // Update branding setting
+    settings.branding = { enabled };
+    
+    // Save settings back to file
+    fs.writeFileSync(settingsPath, JSON.stringify(settings, null, 2));
+    
+    console.log(`Branding setting saved: ${enabled}`);
     res.json({ success: true, enabled });
   } catch (error) {
     console.error('Error updating branding setting:', error);

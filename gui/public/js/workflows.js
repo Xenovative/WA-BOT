@@ -58,12 +58,14 @@ function loadWorkflows() {
             if (data.success) {
                 displayWorkflows(data.workflows);
             } else {
-                showToast('Failed to load workflows: ' + data.error, 'error');
+                const errorMsg = window.i18n ? window.i18n.t('workflow.load_error') + data.error : 'Failed to load workflows: ' + data.error;
+                showToast(errorMsg, 'error');
             }
         })
         .catch(error => {
             console.error('Error loading workflows:', error);
-            showToast('Failed to load workflows', 'error');
+            const errorMsg = window.i18n ? window.i18n.t('workflow.load_failed') : 'Failed to load workflows';
+            showToast(errorMsg, 'error');
         });
 }
 
@@ -80,23 +82,30 @@ function displayWorkflows(workflows) {
             const row = document.createElement('tr');
             
             // Create workflow row
+            const noDescription = window.i18n ? window.i18n.t('workflow.no_description') : 'No description';
+            const enabledText = window.i18n ? window.i18n.t('workflow.enabled') : 'Enabled';
+            const disabledText = window.i18n ? window.i18n.t('workflow.disabled') : 'Disabled';
+            const enableText = window.i18n ? window.i18n.t('workflow.enable') : 'Enable';
+            const disableText = window.i18n ? window.i18n.t('workflow.disable') : 'Disable';
+            const viewText = window.i18n ? window.i18n.t('workflow.view') : 'View';
+            
             row.innerHTML = `
                 <td>${workflow.name}</td>
-                <td>${workflow.description || 'No description'}</td>
+                <td>${workflow.description || noDescription}</td>
                 <td>
                     <span class="badge ${workflow.enabled ? 'bg-success' : 'bg-secondary'}">
-                        ${workflow.enabled ? 'Enabled' : 'Disabled'}
+                        ${workflow.enabled ? enabledText : disabledText}
                     </span>
                 </td>
                 <td>
                     <div class="btn-group btn-group-sm" role="group">
                         <button type="button" class="btn btn-outline-primary workflow-toggle" 
                                 data-id="${workflow.id}" data-enabled="${workflow.enabled}">
-                            ${workflow.enabled ? '<i class="bi bi-toggle-on"></i> Disable' : '<i class="bi bi-toggle-off"></i> Enable'}
+                            ${workflow.enabled ? `<i class="bi bi-toggle-on"></i> ${disableText}` : `<i class="bi bi-toggle-off"></i> ${enableText}`}
                         </button>
                         <button type="button" class="btn btn-outline-secondary workflow-view" 
                                 data-id="${workflow.id}">
-                            <i class="bi bi-eye"></i> View
+                            <i class="bi bi-eye"></i> ${viewText}
                         </button>
                     </div>
                 </td>
@@ -172,7 +181,10 @@ function toggleWorkflow(workflowId, enabled) {
     .then(response => response.json())
     .then(data => {
         if (data.success) {
-            showToast(`Workflow ${enabled ? 'enabled' : 'disabled'} successfully`, 'success');
+            const message = enabled ? 
+                (window.i18n ? window.i18n.t('workflow.enabled') : 'enabled') : 
+                (window.i18n ? window.i18n.t('workflow.disabled') : 'disabled');
+            showToast(`Workflow ${message} successfully`, 'success');
             loadWorkflows(); // Refresh the list
         } else {
             showToast('Failed to update workflow: ' + data.error, 'error');

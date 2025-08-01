@@ -48,6 +48,28 @@ WhatsXENO is a powerful, multi-platform AI assistant that brings the power of la
 - Rate limiting and user blocking capabilities
 - Web-based management console
 
+### Internationalization (i18n)
+- **Multi-language Support**: Full UI internationalization with support for:
+  - **English** (en) - Default language
+  - **Traditional Chinese** (zh-TW) - 繁體中文
+  - **Simplified Chinese** (zh-CN) - 简体中文
+- **Dynamic Language Switching**: Change language on-the-fly without page reload
+- **Comprehensive Coverage**: All UI elements, buttons, messages, and notifications are translated
+- **Toast Notifications**: Multilingual toast messages with branding integration
+- **Persistent Settings**: Language preference saved in browser localStorage
+- **Auto-Detection**: Automatically detects browser language on first visit
+- **Extensible**: Easy to add new languages by extending the translation files
+
+**Supported Areas:**
+- Navigation menus and tab titles
+- Dashboard and system information
+- Chat history and workflow management
+- Knowledge base interface
+- Settings and configuration panels
+- Admin login and system controls
+- Error messages and confirmations
+- Toast notifications and status updates
+
 <a id="quick-start"></a>
 ## ⚡ Quick Start
 
@@ -164,6 +186,46 @@ For each type of trigger, you can:
 - Save changes to persist them
 
 All triggers are case-insensitive. The bot will respond if any configured trigger word appears anywhere in a message.
+
+## 🌐 Web Management Interface
+
+WhatsXENO includes a comprehensive web-based management console accessible at `http://localhost:3000` (or your configured port).
+
+### Language Switching
+
+The web interface supports multiple languages with easy switching:
+
+1. **Automatic Detection**: The interface automatically detects your browser's language preference
+2. **Manual Switching**: Use the language selector in the top navigation bar
+3. **Persistent Settings**: Your language choice is saved and remembered across sessions
+4. **Real-time Updates**: Language changes apply immediately without page reload
+
+### Available Languages
+
+- **English** (en) - Default
+- **Traditional Chinese** (zh-TW) - 繁體中文  
+- **Simplified Chinese** (zh-CN) - 简体中文
+
+### Web Interface Features
+
+- **Dashboard**: System health monitoring and status overview
+- **Chat History**: View and manage conversation history across platforms
+- **Settings**: Configure AI providers, models, and system prompts
+- **Knowledge Base**: Upload and manage RAG documents
+- **Workflows**: Manage Node-RED automation workflows (admin only)
+- **System Info**: Monitor server performance and system details (admin only)
+- **Triggers**: Configure bot activation triggers for group chats
+- **Admin Controls**: Secure admin login for sensitive operations
+
+### Admin Features
+
+Certain features require admin authentication:
+- Workflow management
+- System information and controls
+- Server restart functionality
+- Advanced configuration options
+
+Set the `ADMIN_PASSWORD` environment variable to enable admin features.
 
 ## Development
 

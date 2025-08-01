@@ -11,7 +11,7 @@
     <link rel="manifest" href="/favicon/site.webmanifest">
     <link rel="shortcut icon" href="/favicon/favicon.ico">
     <meta name="theme-color" content="#ffffff">
-    <title>WhatsXENO Management Console</title>
+    <title data-i18n-title-page="dashboard.title">WhatsXENO Management Console</title>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
     <!-- Marked.js for markdown rendering -->
@@ -19,6 +19,8 @@
     <script src="https://cdn.jsdelivr.net/npm/dompurify@3.0.5/dist/purify.min.js"></script>
     <!-- QR Code Generator -->
     <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.1/build/qrcode.min.js"></script></script>
+    <!-- Internationalization -->
+    <script src="/js/i18n.js"></script>
     <link rel="stylesheet" href="/css/style.css">
     <link rel="stylesheet" href="/css/chat.css">
     <!-- Admin Mode CSS -->
@@ -26,6 +28,26 @@
         .admin-only { display: none; }
         .admin-mode .admin-only { display: block; }
         .admin-mode .non-admin-only { display: none; }
+        
+        /* Language selector styling */
+        .language-selector {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            z-index: 1000;
+        }
+        
+        .language-selector select {
+            background: rgba(255, 255, 255, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            color: white;
+            font-size: 0.8rem;
+        }
+        
+        .language-selector select option {
+            background: #343a40;
+            color: white;
+        }
     </style>
 </head>
 <body>
@@ -34,10 +56,19 @@
             <!-- Sidebar -->
             <nav id="sidebar" class="col-md-3 col-lg-2 d-md-block bg-dark sidebar collapse">
                 <div class="position-sticky pt-3">
+                    <!-- Language Selector -->
+                    <div class="language-selector">
+                        <select id="language-selector" class="form-select form-select-sm">
+                            <option value="en">English</option>
+                            <option value="zh-TW">繁體中文</option>
+                            <option value="zh-CN">简体中文</option>
+                        </select>
+                    </div>
+                    
                     <div class="text-center mb-4">
                         <img src="/assets/whatsxeno.png" alt="WhatsXENO Logo" class="img-fluid mb-3" style="max-height: 80px; width: auto;">
                         <h3 class="text-light mb-0">WhatsXENO</h3>
-                        <div id="connection-status" class="badge bg-success mt-1">Online</div>
+                        <div id="connection-status" class="badge bg-success mt-1" data-i18n="dashboard.online">Online</div>
                         <div class="mt-3">
                             <select id="app-selector" class="form-select form-select-sm mb-2">
                                 <option value="whatsapp">WhatsApp</option>
@@ -47,7 +78,7 @@
                             <!-- WhatsApp QR Code Button -->
                             <div id="whatsapp-auth-container">
                                 <button id="show-qr-scanner" class="btn btn-outline-light w-100 btn-sm mb-2" data-bs-toggle="modal" data-bs-target="#qrScannerModal">
-                                    <i class="bi bi-qr-code-scan"></i> Scan WhatsApp QR Code
+                                    <i class="bi bi-qr-code-scan"></i> <span data-i18n="dashboard.qr_code">Scan WhatsApp QR Code</span>
                                 </button>
                             </div>
                             
@@ -68,42 +99,42 @@
                     <ul class="nav flex-column">
                         <li class="nav-item">
                             <a class="nav-link active" href="#dashboard" data-bs-toggle="tab">
-                                <i class="bi bi-speedometer2 me-2"></i>Dashboard
+                                <i class="bi bi-speedometer2 me-2"></i><span data-i18n="nav.dashboard">Dashboard</span>
                             </a>
                         </li>
                         <li class="nav-item">
                             <a class="nav-link" href="#settings" data-bs-toggle="tab">
-                                <i class="bi bi-gear me-2"></i>Settings
+                                <i class="bi bi-gear me-2"></i><span data-i18n="nav.settings">Settings</span>
                             </a>
                         </li>
                         <li class="nav-item">
                             <a class="nav-link" href="#triggers" data-bs-toggle="tab">
-                                <i class="bi bi-lightning me-2"></i>Triggers
+                                <i class="bi bi-lightning me-2"></i><span data-i18n="nav.triggers">Triggers</span>
                             </a>
                         </li>
                         <li class="nav-item">
                             <a class="nav-link" href="#chats" data-bs-toggle="tab">
-                                <i class="bi bi-chat-dots me-2"></i>Chats
+                                <i class="bi bi-chat-dots me-2"></i><span data-i18n="nav.chats">Chats</span>
                             </a>
                         </li>
                         <li class="nav-item">
                             <a class="nav-link" href="#kb" data-bs-toggle="tab">
-                                <i class="bi bi-database me-2"></i>Knowledge Base
+                                <i class="bi bi-database me-2"></i><span data-i18n="nav.knowledge_base">Knowledge Base</span>
                             </a>
                         </li>
                         <li class="nav-item">
                             <a class="nav-link" href="#commands" data-bs-toggle="tab">
-                                <i class="bi bi-terminal me-2"></i>Command History
+                                <i class="bi bi-terminal me-2"></i><span data-i18n="nav.commands">Command History</span>
                             </a>
                         </li>
                         <li class="nav-item">
                             <a class="nav-link" href="#system" data-bs-toggle="tab">
-                                <i class="bi bi-cpu me-2"></i>System
+                                <i class="bi bi-cpu me-2"></i><span data-i18n="nav.system">System</span>
                             </a>
                         </li>
                         <li class="nav-item">
                             <a class="nav-link" href="#workflows" data-bs-toggle="tab">
-                                <i class="bi bi-diagram-3 me-2"></i>Workflows
+                                <i class="bi bi-diagram-3 me-2"></i><span data-i18n="nav.workflows">Workflows</span>
                             </a>
                         </li>
                     </ul>
@@ -112,18 +143,15 @@
 
             <!-- Main Content -->
             <main class="col-md-9 ms-sm-auto col-lg-10 px-md-4">
-                <div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
-                    <h1 class="h2">WhatsXENO Management Console</h1>
-                    <div class="btn-toolbar mb-2 mb-md-0">
+                <div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-2 pb-1 mb-2 border-bottom">
+                    <h1 class="h2" data-i18n="dashboard.title">WhatsXENO Management Console</h1>
+                    <div class="btn-toolbar mb-1 mb-md-0">
                         <div class="btn-group me-2">
                             <button id="login-btn" class="btn btn-sm btn-outline-secondary">
-                                <i class="bi bi-shield-lock"></i> Admin Login
+                                <i class="bi bi-shield-lock"></i> <span data-i18n="button.admin_login">Admin Login</span>
                             </button>
                             <button id="logout-btn" class="btn btn-sm btn-outline-danger" style="display: none;">
-                                <i class="bi bi-shield-lock-fill"></i> Logout Admin
-                            </button>
-                            <button id="refresh-btn" type="button" class="btn btn-sm btn-outline-secondary">
-                                <i class="bi bi-arrow-clockwise"></i> Refresh
+                                <i class="bi bi-shield-lock-fill"></i> <span data-i18n="button.logout_admin">Logout Admin</span>
                             </button>
                         </div>
                     </div>
@@ -137,14 +165,14 @@
                             <div class="col-12">
                                 <div class="card shadow mb-4">
                                     <div class="card-header py-3 d-flex flex-row align-items-center justify-content-between">
-                                        <h6 class="m-0 font-weight-bold">System Health</h6>
+                                        <h6 class="m-0 font-weight-bold" data-i18n="dashboard.system_health">System Health</h6>
                                         <div class="dropdown no-arrow">
                                             <a class="dropdown-toggle" href="#" role="button" id="dropdownMenuLink" data-bs-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
                                                 <i class="bi bi-three-dots-vertical"></i>
                                             </a>
                                             <div class="dropdown-menu dropdown-menu-right shadow animated--fade-in" aria-labelledby="dropdownMenuLink">
-                                                <div class="dropdown-header">Actions:</div>
-                                                <a class="dropdown-item" href="#" id="refresh-dashboard">Refresh</a>
+                                                <div class="dropdown-header" data-i18n="common.actions">Actions:</div>
+                                                <a class="dropdown-item" href="#" id="refresh-dashboard" data-i18n="button.refresh">Refresh</a>
                                             </div>
                                         </div>
                                     </div>
@@ -155,19 +183,19 @@
                                         <div class="mt-4 small">
                                             <div id="system-stats-container" class="row text-center">
                                                 <div class="col-3">
-                                                    <span class="me-2">Uptime:</span>
+                                                    <span class="me-2" data-i18n="dashboard.uptime">Uptime:</span>
                                                     <span id="uptime-value" class="fw-bold">-</span>
                                                 </div>
                                                 <div class="col-3">
-                                                    <span class="me-2">Heap Used:</span>
+                                                    <span class="me-2" data-i18n="dashboard.heap_used">Heap Used:</span>
                                                     <span id="heap-used" class="fw-bold">-</span>
                                                 </div>
                                                 <div class="col-3">
-                                                    <span class="me-2">CPU:</span>
+                                                    <span class="me-2" data-i18n="dashboard.cpu">CPU:</span>
                                                     <span id="cpu-usage" class="fw-bold">-</span>
                                                 </div>
                                                 <div class="col-3">
-                                                    <span class="me-2">Platform:</span>
+                                                    <span class="me-2" data-i18n="dashboard.platform">Platform:</span>
                                                     <span id="platform-info" class="fw-bold">-</span>
                                                 </div>
                                             </div>
@@ -182,8 +210,8 @@
                                     <div class="card-body">
                                         <div class="row no-gutters align-items-center">
                                             <div class="col mr-2">
-                                                <div class="text-xs font-weight-bold text-primary text-uppercase mb-1">Bot Status</div>
-                                                <div id="bot-status" class="h5 mb-0 font-weight-bold">Online</div>
+                                                <div class="text-xs font-weight-bold text-primary text-uppercase mb-1" data-i18n="dashboard.bot_status">Bot Status</div>
+                                                <div id="bot-status" class="h5 mb-0 font-weight-bold" data-i18n="dashboard.online">Online</div>
                                             </div>
                                             <div class="col-auto">
                                                 <i class="bi bi-robot fa-2x text-gray-300"></i>
@@ -198,7 +226,7 @@
                                     <div class="card-body">
                                         <div class="row no-gutters align-items-center">
                                             <div class="col mr-2">
-                                                <div class="text-xs font-weight-bold text-success text-uppercase mb-1">Current Model</div>
+                                                <div class="text-xs font-weight-bold text-success text-uppercase mb-1" data-i18n="dashboard.current_model">Current Model</div>
                                                 <div id="current-model" class="h5 mb-0 font-weight-bold">-</div>
                                             </div>
                                             <div class="col-auto">
@@ -214,7 +242,7 @@
                                     <div class="card-body">
                                         <div class="row no-gutters align-items-center">
                                             <div class="col mr-2">
-                                                <div class="text-xs font-weight-bold text-info text-uppercase mb-1">RAG Status</div>
+                                                <div class="text-xs font-weight-bold text-info text-uppercase mb-1" data-i18n="dashboard.rag_status">RAG Status</div>
                                                 <div id="rag-status" class="h5 mb-0 font-weight-bold">-</div>
                                             </div>
                                             <div class="col-auto">
@@ -230,7 +258,7 @@
                                     <div class="card-body">
                                         <div class="row no-gutters align-items-center">
                                             <div class="col mr-2">
-                                                <div class="text-xs font-weight-bold text-warning text-uppercase mb-1">Provider</div>
+                                                <div class="text-xs font-weight-bold text-warning text-uppercase mb-1" data-i18n="dashboard.provider">Provider</div>
                                                 <div id="provider" class="h5 mb-0 font-weight-bold">-</div>
                                             </div>
                                             <div class="col-auto">
@@ -247,7 +275,7 @@
                             <div class="col-12">
                                 <div class="card shadow h-100">
                                     <div class="card-header py-3 d-flex flex-row align-items-center justify-content-between">
-                                        <h6 class="m-0 font-weight-bold">Recent Chats</h6>
+                                        <h6 class="m-0 font-weight-bold" data-i18n="dashboard.recent_chats">Recent Chats</h6>
                                         <button id="refresh-recent-chats" class="btn btn-sm btn-outline-primary">
                                             <i class="bi bi-arrow-clockwise"></i>
                                         </button>
@@ -257,11 +285,11 @@
                                             <table class="table table-hover mb-0">
                                                 <thead class="table-light">
                                                     <tr>
-                                                        <th>Chat ID</th>
-                                                        <th>Last Message</th>
-                                                        <th>Messages</th>
-                                                        <th>AI</th>
-                                                        <th>Actions</th>
+                                                        <th data-i18n="chat.chat_id">Chat ID</th>
+                                                        <th data-i18n="chat.last_message">Last Message</th>
+                                                        <th data-i18n="chat.messages">Messages</th>
+                                                        <th data-i18n="chat.ai">AI</th>
+                                                        <th data-i18n="common.actions">Actions</th>
                                                     </tr>
                                                 </thead>
                                                 <tbody id="recent-chats-body">
@@ -270,7 +298,7 @@
                                                             <div class="spinner-border spinner-border-sm" role="status">
                                                                 <span class="visually-hidden">Loading...</span>
                                                             </div>
-                                                            <span class="ms-2">Loading recent chats...</span>
+                                                            <span class="ms-2" data-i18n="chat.loading_recent">Loading recent chats...</span>
                                                         </td>
                                                     </tr>
                                                 </tbody>
@@ -278,7 +306,7 @@
                                         </div>
                                         <div class="card-footer bg-transparent border-top-0 text-end">
                                             <a href="#chats" class="btn btn-sm btn-outline-primary" data-bs-toggle="tab" data-bs-target="#chats">
-                                                View All Chats <i class="bi bi-arrow-right ms-1"></i>
+                                                <span data-i18n="chat.view_all">View All Chats</span> <i class="bi bi-arrow-right ms-1"></i>
                                             </a>
                                         </div>
                                     </div>
@@ -290,55 +318,55 @@
                     <!-- Settings Tab -->
                     <div class="tab-pane fade" id="settings">
                         <div class="alert alert-warning non-admin-only">
-                            <i class="bi bi-exclamation-triangle"></i> You are in limited access mode. Log in as admin to access all features.
+                            <i class="bi bi-exclamation-triangle"></i> <span data-i18n="settings.limited_access">You are in limited access mode. Log in as admin to access all features.</span>
                         </div>
-                        <h4>Bot Settings</h4>
+                        <h4 data-i18n="settings.bot_settings">Bot Settings</h4>
                         <div class="alert alert-info">
-                            <i class="bi bi-info-circle"></i> Changes will be applied immediately.
+                            <i class="bi bi-info-circle"></i> <span data-i18n="settings.changes_immediate">Changes will be applied immediately.</span>
                         </div>
                         <form id="settings-form" class="mt-3">
                             <div class="mb-4 border p-3 rounded">
-                                <h5 class="mb-3">Configuration Profiles</h5>
+                                <h5 class="mb-3" data-i18n="settings.config_profiles">Configuration Profiles</h5>
                                 <div class="row mb-3">
                                     <div class="col-md-6">
-                                        <label for="profile-select" class="form-label">Current Profile</label>
+                                        <label for="profile-select" class="form-label" data-i18n="settings.current_profile">Current Profile</label>
                                         <select id="profile-select" class="form-select">
                                             <!-- Profiles will be loaded here -->
                                         </select>
-                                        <div class="form-text">Select a profile to load its settings</div>
+                                        <div class="form-text" data-i18n="settings.select_profile_help">Select a profile to load its settings</div>
                                     </div>
                                     <div class="col-md-6">
-                                        <label for="new-profile-name" class="form-label">New Profile Name</label>
+                                        <label for="new-profile-name" class="form-label" data-i18n="settings.new_profile_name">New Profile Name</label>
                                         <div class="input-group">
-                                            <input type="text" class="form-control" id="new-profile-name" placeholder="Enter profile name">
-                                            <button class="btn btn-outline-primary" type="button" id="save-profile-btn">Save As</button>
+                                            <input type="text" class="form-control" id="new-profile-name" data-i18n-placeholder="settings.enter_profile_name" placeholder="Enter profile name">
+                                            <button class="btn btn-outline-primary" type="button" id="save-profile-btn" data-i18n="settings.save_as">Save As</button>
                                         </div>
-                                        <div class="form-text">Save current settings as a new profile</div>
+                                        <div class="form-text" data-i18n="settings.save_profile_help">Save current settings as a new profile</div>
                                     </div>
                                 </div>
                                 <div class="d-flex justify-content-end">
                                     <button type="button" class="btn btn-outline-danger btn-sm" id="delete-profile-btn">
-                                        <i class="bi bi-trash"></i> Delete Profile
+                                        <i class="bi bi-trash"></i> <span data-i18n="settings.delete_profile">Delete Profile</span>
                                     </button>
                                 </div>
                             </div>
                             
                             <div class="mb-3 form-check">
                                 <input type="checkbox" class="form-check-input" id="rag-enabled">
-                                <label class="form-check-label" for="rag-enabled">Enable RAG</label>
+                                <label class="form-check-label" for="rag-enabled" data-i18n="settings.enable_rag">Enable RAG</label>
                             </div>
                             
                             <div class="mb-3">
-                                <label for="system-prompt" class="form-label">System Prompt</label>
+                                <label for="system-prompt" class="form-label" data-i18n="settings.system_prompt">System Prompt</label>
                                 <textarea class="form-control" id="system-prompt" rows="5"></textarea>
                             </div>
                             
                             <!-- Advanced Configuration Section -->
                             <div id="advanced-config" class="mt-4">
-                                <div class="d-flex justify-content-between align-items-center mb-3">
-                                    <h5>Advanced Configuration</h5>
+                                <div class="d-flex justify-content-between align-items-center mb-2">
+                                    <h5 data-i18n="settings.advanced_config">Advanced Configuration</h5>
                                     <button type="button" class="btn btn-sm btn-outline-secondary" id="toggle-advanced">
-                                        <i class="bi bi-chevron-down"></i> Show Advanced
+                                        <i class="bi bi-chevron-down"></i> <span data-i18n="settings.show_advanced">Show Advanced</span>
                                     </button>
                                 </div>
                                 
@@ -387,21 +415,21 @@
                                 </div>
                             </div>
                         <div class="mt-4">
-                            <button type="submit" class="btn btn-primary">Save Settings</button>
+                            <button type="submit" class="btn btn-primary" data-i18n="settings.save">Save Settings</button>
                         </div>
                         </form>
                     </div>
 
                     <!-- Chats Tab -->
                     <div class="tab-pane fade" id="chats">
-                        <div class="d-flex justify-content-between align-items-center mb-3">
-                            <h4 class="mb-0">Chat History</h4>
+                        <div class="d-flex justify-content-between align-items-center mb-2">
+                            <h4 class="mb-0" data-i18n="chat.title">Chat History</h4>
                             <div>
                                 <button id="refresh-chats" class="btn btn-outline-secondary btn-sm">
-                                    <i class="bi bi-arrow-clockwise"></i> Refresh
+                                    <i class="bi bi-arrow-clockwise"></i> <span data-i18n="button.refresh">Refresh</span>
                                 </button>
                                 <button id="clear-all-chats" class="btn btn-outline-danger btn-sm ms-2">
-                                    <i class="bi bi-trash"></i> Clear All
+                                    <i class="bi bi-trash"></i> <span data-i18n="chat.clear_all">Clear All</span>
                                 </button>
                             </div>
                         </div>
@@ -409,10 +437,10 @@
                         <div class="card shadow-sm mb-3">
                             <div class="card-header d-flex justify-content-between align-items-center py-2">
                                 <div class="d-flex align-items-center">
-                                    <span class="me-2">Sort by:</span>
+                                    <span class="me-2" data-i18n="chat.sort_by">Sort by:</span>
                                     <button class="btn btn-sm btn-outline-secondary" onclick="toggleChatSort()">
                                         <i id="sort-chats" class="bi bi-sort-down"></i>
-                                        <span id="sort-text">Newest First</span>
+                                        <span id="sort-text" data-i18n="chat.newest_first">Newest First</span>
                                     </button>
                                 </div>
                                 <div id="chats-count" class="text-muted small"></div>
@@ -422,11 +450,11 @@
                                     <table class="table table-hover mb-0">
                                         <thead class="table-light">
                                             <tr>
-                                                <th>Chat ID</th>
-                                                <th>Preview</th>
-                                                <th>Last Active</th>
-                                                <th class="text-center">Messages</th>
-                                                <th class="text-end">Actions</th>
+                                                <th data-i18n="chat.chat_id">Chat ID</th>
+                                                <th data-i18n="chat.preview">Preview</th>
+                                                <th data-i18n="chat.last_active">Last Active</th>
+                                                <th class="text-center" data-i18n="chat.messages">Messages</th>
+                                                <th class="text-end" data-i18n="common.actions">Actions</th>
                                             </tr>
                                         </thead>
                                         <tbody id="chats-table-body">
@@ -435,7 +463,7 @@
                                                     <div class="spinner-border text-secondary" role="status">
                                                         <span class="visually-hidden">Loading...</span>
                                                     </div>
-                                                    <p class="mt-2 mb-0">Loading chat history...</p>
+                                                    <p class="mt-2 mb-0" data-i18n="chat.loading">Loading chat history...</p>
                                                 </td>
                                             </tr>
                                         </tbody>
@@ -450,20 +478,19 @@
                         </div>
                     </div>
 
-                    <!-- Knowledge Base Tab -->
                     <div class="tab-pane fade" id="kb">
-                        <h4>Knowledge Base Documents</h4>
+                        <h4 data-i18n="kb.title">Knowledge Base Documents</h4>
                         <div class="d-flex justify-content-between mb-3">
                             <div>
                                 <button id="refresh-kb" class="btn btn-outline-secondary btn-sm">
-                                    <i class="bi bi-arrow-clockwise"></i> Refresh
+                                    <i class="bi bi-arrow-clockwise"></i> <span data-i18n="button.refresh">Refresh</span>
                                 </button>
                             </div>
                             <div data-admin-only>
                                 <form id="upload-form" class="d-inline">
                                     <input type="file" id="kb-file-input" class="form-control form-control-sm d-none">
                                     <label for="kb-file-input" class="btn btn-primary btn-sm">
-                                        <i class="bi bi-upload"></i> Upload Document
+                                        <i class="bi bi-upload"></i> <span data-i18n="button.upload_document">Upload Document</span>
                                     </label>
                                 </form>
                             </div>
@@ -472,27 +499,27 @@
                             <!-- Knowledge base documents will be rendered here -->
                             <div class="text-center">
                                 <div class="spinner-border" role="status"></div>
-                                <p>Loading documents...</p>
+                                <p data-i18n="button.loading_documents">Loading documents...</p>
                             </div>
                         </div>
                     </div>
 
                     <!-- Command History Tab -->
                     <div class="tab-pane fade" id="commands">
-                        <h4>Command History</h4>
+                        <h4 data-i18n="commands.title">Command History</h4>
                         <div class="card shadow mb-4">
                             <div class="card-header py-3">
-                                <h6 class="m-0 font-weight-bold">Recent Commands</h6>
+                                <h6 class="m-0 font-weight-bold" data-i18n="commands.recent">Recent Commands</h6>
                             </div>
                             <div class="card-body">
                                 <div class="table-responsive">
                                     <table class="table table-striped">
                                         <thead>
                                             <tr>
-                                                <th>Time</th>
-                                                <th>Sender</th>
-                                                <th>Command</th>
-                                                <th>Arguments</th>
+                                                <th data-i18n="commands.time">Time</th>
+                                                <th data-i18n="commands.sender">Sender</th>
+                                                <th data-i18n="commands.command">Command</th>
+                                                <th data-i18n="commands.arguments">Arguments</th>
                                             </tr>
                                         </thead>
                                         <tbody id="command-history-body">
@@ -506,23 +533,23 @@
 
                     <!-- Triggers Tab -->
                     <div class="tab-pane fade" id="triggers" data-admin-only>
-                        <h4 class="mb-3">Bot Triggers</h4>
-                        <p>Configure words or phrases that will trigger the bot to respond in group chats.</p>
+                        <h4 class="mb-3" data-i18n="triggers.title">Bot Triggers</h4>
+                        <p data-i18n="triggers.description">Configure words or phrases that will trigger the bot to respond in group chats.</p>
                         
                         <div class="card shadow mb-4">
                             <div class="card-header py-3">
-                                <h6 class="m-0 font-weight-bold">Group Chat Triggers</h6>
+                                <h6 class="m-0 font-weight-bold" data-i18n="triggers.group_chat">Group Chat Triggers</h6>
                             </div>
                             <div class="card-body">
-                                <p>These words will activate the bot in group chats when mentioned anywhere in a message.</p>
+                                <p data-i18n="triggers.group_help">These words will activate the bot in group chats when mentioned anywhere in a message.</p>
                                 
                                 <div class="mb-3">
                                     <div class="d-flex align-items-center mb-2">
-                                        <input type="text" class="form-control" id="newGroupTrigger" placeholder="Add new trigger word...">
-                                        <button class="btn btn-primary ms-2" id="addGroupTrigger">Add</button>
+                                        <input type="text" class="form-control" id="newGroupTrigger" data-i18n-placeholder="triggers.add_trigger" placeholder="Add new trigger word...">
+                                        <button class="btn btn-primary ms-2" id="addGroupTrigger" data-i18n="common.add">Add</button>
                                     </div>
                                     <div class="alert alert-info" role="alert">
-                                        <i class="bi bi-info-circle me-2"></i> Triggers are case-insensitive. The bot will respond if any of these words appear in a message.
+                                        <i class="bi bi-info-circle me-2"></i> <span data-i18n="triggers.case_insensitive_help">Triggers are case-insensitive. The bot will respond if any of these words appear in a message.</span>
                                     </div>
                                 </div>
                                 
@@ -534,15 +561,15 @@
                         
                         <div class="card shadow mb-4">
                             <div class="card-header py-3">
-                                <h6 class="m-0 font-weight-bold">Custom Triggers</h6>
+                                <h6 class="m-0 font-weight-bold" data-i18n="triggers.custom">Custom Triggers</h6>
                             </div>
                             <div class="card-body">
-                                <p>Add custom triggers for specific use cases.</p>
+                                <p data-i18n="triggers.custom_help">Add custom triggers for specific use cases.</p>
                                 
                                 <div class="mb-3">
                                     <div class="d-flex align-items-center mb-2">
-                                        <input type="text" class="form-control" id="newCustomTrigger" placeholder="Add new custom trigger...">
-                                        <button class="btn btn-primary ms-2" id="addCustomTrigger">Add</button>
+                                        <input type="text" class="form-control" id="newCustomTrigger" data-i18n-placeholder="triggers.add_custom" placeholder="Add new custom trigger...">
+                                        <button class="btn btn-primary ms-2" id="addCustomTrigger" data-i18n="common.add">Add</button>
                                     </div>
                                 </div>
                                 
@@ -553,50 +580,50 @@
                         </div>
                         
                         <div class="d-flex justify-content-end">
-                            <button class="btn btn-success" id="saveTriggers">Save Triggers</button>
+                            <button class="btn btn-success" id="saveTriggers" data-i18n="triggers.save">Save Triggers</button>
                         </div>
                     </div>
                     
                     <!-- System Tab -->
                     <div class="tab-pane fade" id="system" data-admin-only>
-                        <div class="d-flex justify-content-between align-items-center mb-3">
-                            <h4 class="mb-0">System Information</h4>
+                        <div class="d-flex justify-content-between align-items-center mb-2">
+                            <h4 class="mb-0" data-i18n="system.title">System Information</h4>
                             <button id="restart-server" class="btn btn-warning" data-admin-only>
-                                <i class="bi bi-arrow-clockwise me-1"></i> Restart Server
+                                <i class="bi bi-arrow-clockwise me-1"></i> <span data-i18n="system.restart_server">Restart Server</span>
                             </button>
                         </div>
                         <div class="row">
                             <div class="col-md-6">
                                 <div class="card shadow mb-4">
                                     <div class="card-header py-3">
-                                        <h6 class="m-0 font-weight-bold">Environment</h6>
+                                        <h6 class="m-0 font-weight-bold" data-i18n="system.environment">Environment</h6>
                                     </div>
                                     <div class="card-body">
                                         <div class="table-responsive">
                                             <table class="table">
                                                 <tbody id="system-env-body">
                                                     <tr>
-                                                        <td>Node.js Version</td>
+                                                        <td data-i18n="system.nodejs_version">Node.js Version</td>
                                                         <td id="node-version">-</td>
                                                     </tr>
                                                     <tr>
-                                                        <td>Platform</td>
+                                                        <td data-i18n="system.platform">Platform</td>
                                                         <td id="system-platform">-</td>
                                                     </tr>
                                                     <tr>
-                                                        <td>CPU</td>
+                                                        <td data-i18n="system.cpu">CPU</td>
                                                         <td id="cpu-model">-</td>
                                                     </tr>
                                                     <tr>
-                                                        <td>Uptime</td>
+                                                        <td data-i18n="system.uptime">Uptime</td>
                                                         <td id="system-uptime">-</td>
                                                     </tr>
                                                     <tr>
-                                                        <td>Show Branding</td>
+                                                        <td data-i18n="system.show_branding">Show Branding</td>
                                                         <td>
                                                             <div class="form-check form-switch">
                                                                 <input class="form-check-input" type="checkbox" id="toggle-branding" checked>
-                                                                <label class="form-check-label" for="toggle-branding">Show WhatsXENO Logo & Favicon</label>
+                                                                <label class="form-check-label" for="toggle-branding" data-i18n="system.show_whatsxeno_logo">Show WhatsXENO Logo & Favicon</label>
                                                             </div>
                                                         </td>
                                                     </tr>
@@ -609,26 +636,26 @@
                             <div class="col-md-6">
                                 <div class="card shadow mb-4">
                                     <div class="card-header py-3">
-                                        <h6 class="m-0 font-weight-bold">Memory Usage</h6>
+                                        <h6 class="m-0 font-weight-bold" data-i18n="system.memory_usage">Memory Usage</h6>
                                     </div>
                                     <div class="card-body">
                                         <div class="table-responsive">
                                             <table class="table">
                                                 <tbody id="memory-usage-body">
                                                     <tr>
-                                                        <td>RSS</td>
+                                                        <td data-i18n="system.rss">RSS</td>
                                                         <td id="memory-rss">-</td>
                                                     </tr>
                                                     <tr>
-                                                        <td>Heap Total</td>
+                                                        <td data-i18n="system.heap_total">Heap Total</td>
                                                         <td id="memory-heap-total">-</td>
                                                     </tr>
                                                     <tr>
-                                                        <td>Heap Used</td>
+                                                        <td data-i18n="system.heap_used">Heap Used</td>
                                                         <td id="memory-heap-used">-</td>
                                                     </tr>
                                                     <tr>
-                                                        <td>External</td>
+                                                        <td data-i18n="system.external">External</td>
                                                         <td id="memory-external">-</td>
                                                     </tr>
                                                 </tbody>
@@ -642,29 +669,29 @@
                             <div class="col-12">
                                 <div class="card shadow mb-4">
                                     <div class="card-header py-3">
-                                        <h6 class="m-0 font-weight-bold">GPU Information</h6>
+                                        <h6 class="m-0 font-weight-bold" data-i18n="system.gpu_info">GPU Information</h6>
                                     </div>
                                     <div class="card-body">
                                         <div id="gpu-loading" class="text-center">
                                             <div class="spinner-border spinner-border-sm" role="status">
                                                 <span class="visually-hidden">Loading...</span>
                                             </div>
-                                            <span class="ms-2">Loading GPU information...</span>
+                                            <span class="ms-2" data-i18n="system.loading_gpu">Loading GPU information...</span>
                                         </div>
                                         <div id="gpu-info" style="display: none;">
                                             <div class="table-responsive">
                                                 <table class="table">
                                                     <tbody id="gpu-info-body">
                                                         <tr>
-                                                            <td>Model</td>
+                                                            <td data-i18n="system.model">Model</td>
                                                             <td id="gpu-model">-</td>
                                                         </tr>
                                                         <tr>
-                                                            <td>Vendor</td>
+                                                            <td data-i18n="system.vendor">Vendor</td>
                                                             <td id="gpu-vendor">-</td>
                                                         </tr>
                                                         <tr>
-                                                            <td>VRAM</td>
+                                                            <td data-i18n="system.vram">VRAM</td>
                                                             <td id="gpu-vram">-</td>
                                                         </tr>
                                                         <tr>
@@ -697,14 +724,14 @@
 
                     <!-- Workflows Tab -->
                     <div class="tab-pane fade" id="workflows" data-admin-only>
-                        <div class="d-flex justify-content-between align-items-center mb-3">
-                            <h4 class="mb-0">Workflow Management</h4>
+                        <div class="d-flex justify-content-between align-items-center mb-2">
+                            <h4 class="mb-0" data-i18n="workflow.title">Workflow Management</h4>
                             <div class="btn-group" role="group">
                                 <button class="btn btn-outline-secondary" id="upload-workflow-btn">
-                                    <i class="bi bi-upload me-1"></i> Upload Workflow
+                                    <i class="bi bi-upload me-1"></i> <span data-i18n="workflow.upload">Upload Workflow</span>
                                 </button>
                                 <a href="/red/" target="_blank" class="btn btn-primary" id="workflow-editor-btn">
-                                    <i class="bi bi-pencil-square me-1"></i> Open Workflow Editor
+                                    <i class="bi bi-pencil-square me-1"></i> <span data-i18n="workflow.open_editor">Open Workflow Editor</span>
                                 </a>
                             </div>
                         </div>
@@ -713,9 +740,9 @@
                             <div class="col-md-12 mb-4">
                                 <div class="card shadow">
                                     <div class="card-header py-3 d-flex flex-row align-items-center justify-content-between">
-                                        <h6 class="m-0 font-weight-bold">Available Workflows</h6>
+                                        <h6 class="m-0 font-weight-bold" data-i18n="workflow.available">Available Workflows</h6>
                                         <button id="refresh-workflows" class="btn btn-sm btn-outline-primary">
-                                            <i class="bi bi-arrow-clockwise"></i> Refresh
+                                            <i class="bi bi-arrow-clockwise"></i> <span data-i18n="workflow.refresh">Refresh</span>
                                         </button>
                                     </div>
                                     <div class="card-body">
@@ -723,10 +750,10 @@
                                             <table class="table table-hover">
                                                 <thead>
                                                     <tr>
-                                                        <th>Name</th>
-                                                        <th>Description</th>
-                                                        <th>Status</th>
-                                                        <th>Actions</th>
+                                                        <th data-i18n="workflow.name">Name</th>
+                                                        <th data-i18n="workflow.description">Description</th>
+                                                        <th data-i18n="workflow.status">Status</th>
+                                                        <th data-i18n="workflow.actions">Actions</th>
                                                     </tr>
                                                 </thead>
                                                 <tbody id="workflows-table-body">
@@ -736,7 +763,7 @@
                                         </div>
                                         <div id="no-workflows" class="text-center p-4" style="display: none;">
                                             <i class="bi bi-exclamation-circle text-muted mb-3" style="font-size: 2rem;"></i>
-                                            <p class="text-muted">No workflows available. Create workflows in the Node-RED editor.</p>
+                                            <p class="text-muted" data-i18n="workflow.no_workflows">No workflows available. Create workflows in the Node-RED editor.</p>
                                         </div>
                                     </div>
                                 </div>
@@ -758,20 +785,20 @@
         <div class="modal-dialog">
             <div class="modal-content">
                 <div class="modal-header">
-                    <h5 class="modal-title">Admin Login</h5>
+                    <h5 class="modal-title" data-i18n="admin.modal_title">Admin Login</h5>
                     <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
                 </div>
                 <div class="modal-body">
                     <form id="admin-login-form">
                         <div class="mb-3">
-                            <label for="admin-password" class="form-label">Admin Password</label>
+                            <label for="admin-password" class="form-label" data-i18n="admin.password_label">Admin Password</label>
                             <input type="password" class="form-control" id="admin-password" required>
                         </div>
                     </form>
                 </div>
                 <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                    <button type="button" id="submit-login" class="btn btn-primary">Login</button>
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal" data-i18n="common.cancel">Cancel</button>
+                    <button type="button" id="submit-login" class="btn btn-primary" data-i18n="admin.login_button">Login</button>
                 </div>
             </div>
         </div>
@@ -782,22 +809,22 @@
         <div class="modal-dialog">
             <div class="modal-content">
                 <div class="modal-header bg-primary text-white">
-                    <h5 class="modal-title" id="qrScannerModalLabel">Scan WhatsApp QR Code</h5>
+                    <h5 class="modal-title" id="qrScannerModalLabel" data-i18n="qr.modal_title">Scan WhatsApp QR Code</h5>
                     <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
                 </div>
                 <div class="modal-body text-center">
                     <div id="qr-code-container" class="mb-3">
-                        <p>Loading QR code...</p>
+                        <p data-i18n="qr.loading">Loading QR code...</p>
                     </div>
                     <div id="qr-status" class="alert alert-info">
-                        <i class="bi bi-qr-code-scan"></i> Scan the QR code with your WhatsApp mobile app
+                        <i class="bi bi-qr-code-scan"></i> <span data-i18n="qr.scan_instruction">Scan the QR code with your WhatsApp mobile app</span>
                     </div>
                     <button id="refresh-qr" class="btn btn-primary">
-                        <i class="bi bi-arrow-clockwise"></i> Refresh QR Code
+                        <i class="bi bi-arrow-clockwise"></i> <span data-i18n="button.refresh_qr">Refresh QR Code</span>
                     </button>
                 </div>
                 <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal" data-i18n="button.close">Close</button>
                 </div>
             </div>
         </div>
@@ -809,13 +836,13 @@
             <div class="modal-content h-100">
                 <div class="modal-header bg-light">
                     <div class="d-flex align-items-center w-100">
-                        <h5 class="modal-title me-auto" id="chatModalTitle">Chat Details</h5>
+                        <h5 class="modal-title me-auto" id="chatModalTitle" data-i18n="chat.chat_details">Chat Details</h5>
                         
                         <!-- Chat Controls -->
                         <div class="d-flex align-items-center gap-3 me-3">
                             <!-- AI Toggle -->
                             <div class="d-flex align-items-center">
-                                <label class="form-label small me-2 mb-0">AI:</label>
+                                <label class="form-label small me-2 mb-0" data-i18n="chat.ai_toggle_label">AI:</label>
                                 <div class="form-check form-switch mb-0">
                                     <input class="form-check-input" 
                                            type="checkbox" 
@@ -823,7 +850,8 @@
                                            checked>
                                     <label class="form-check-label small text-muted" 
                                            id="chatModalAiToggleLabel"
-                                           for="chatModalAiToggle">
+                                           for="chatModalAiToggle"
+                                           data-i18n="chat.ai_toggle_on">
                                         On
                                     </label>
                                 </div>
@@ -833,6 +861,7 @@
                             <button type="button" 
                                     class="btn btn-outline-secondary btn-sm" 
                                     id="chatModalRefreshBtn"
+                                    data-i18n-title="chat.refresh_chat"
                                     title="Refresh Chat">
                                 <i class="bi bi-arrow-clockwise"></i>
                             </button>
@@ -855,18 +884,19 @@
                                     <input type="text" 
                                            id="manual-message-input" 
                                            class="form-control" 
+                                           data-i18n-placeholder="chat.manual_message_placeholder"
                                            placeholder="Type a message to send manually..." 
                                            onkeypress="if(event.key==='Enter') sendManualMessage()">
                                     <button class="btn btn-primary" 
                                             id="send-manual-message" 
                                             type="button" 
                                             onclick="sendManualMessage()">
-                                        <i class="bi bi-send"></i> Send
+                                        <i class="bi bi-send"></i> <span data-i18n="chat.send">Send</span>
                                     </button>
                                 </div>
                                 <div class="form-text small mt-1">
                                     <i class="bi bi-info-circle"></i> 
-                                    Send messages manually through the bot. AI response depends on the toggle in the chat list.
+                                    <span data-i18n="chat.manual_message_help">Send messages manually through the bot. AI response depends on the toggle in the chat list.</span>
                                 </div>
                             </div>
                         </div>
@@ -874,10 +904,10 @@
                 </div>
                 <div class="modal-footer bg-light">
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
-                        <i class="bi bi-x-circle me-1"></i> Close
+                        <i class="bi bi-x-circle me-1"></i> <span data-i18n="button.close">Close</span>
                     </button>
                     <button type="button" class="btn btn-outline-primary" id="exportChatBtn">
-                        <i class="bi bi-download me-1"></i> Export
+                        <i class="bi bi-download me-1"></i> <span data-i18n="button.export">Export</span>
                     </button>
                 </div>
             </div>
