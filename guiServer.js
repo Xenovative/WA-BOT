@@ -16,6 +16,41 @@ const wss = new WebSocket.Server({ server });
 const port = process.env.GUI_PORT || 3000;
 const adminUtils = require('./utils/adminUtils');
 
+// Function to save environment variables to .env file
+function saveEnvVariable(key, value) {
+  try {
+    const envPath = path.join(__dirname, '.env');
+    let envContent = '';
+    
+    // Read existing .env file if it exists
+    if (fs.existsSync(envPath)) {
+      envContent = fs.readFileSync(envPath, 'utf8');
+    }
+    
+    // Update or add the environment variable
+    const envLines = envContent.split('\n');
+    let found = false;
+    
+    for (let i = 0; i < envLines.length; i++) {
+      if (envLines[i].startsWith(`${key}=`)) {
+        envLines[i] = `${key}=${value}`;
+        found = true;
+        break;
+      }
+    }
+    
+    if (!found) {
+      envLines.push(`${key}=${value}`);
+    }
+    
+    // Write back to .env file
+    fs.writeFileSync(envPath, envLines.join('\n'));
+    console.log(`Environment variable ${key} saved to .env file`);
+  } catch (error) {
+    console.error(`Error saving environment variable ${key}:`, error);
+  }
+}
+
 // Serve static files from the public directory first
 app.use(express.static(path.join(__dirname, 'gui/public')));
 
@@ -984,7 +1019,7 @@ app.post('/api/chat/send-manual', express.json(), async (req, res) => {
     
     console.log('[Manual-Debug] Platform detection for chatId:', chatId);
     
-    // Check for both telegram: and telegram_ formats
+    // Check for platform formats
     if (chatId.startsWith('telegram:') || chatId.startsWith('telegram_')) {
       platform = 'telegram';
       console.log('[Manual-Debug] Detected platform: telegram');
@@ -993,6 +1028,25 @@ app.post('/api/chat/send-manual', express.json(), async (req, res) => {
       if (!client) {
         console.log('[Manual-Debug] Telegram bot not available, returning error');
         return res.status(500).json({ success: false, error: 'Telegram bot not available' });
+      }
+    } else if (chatId.startsWith('facebook:') || chatId.startsWith('facebook_')) {
+      platform = 'facebook';
+      console.log('[Manual-Debug] Detected platform: facebook');
+      console.log('[Manual-Debug] global.facebookMessenger available:', !!global.facebookMessenger);
+      client = global.facebookMessenger;
+      if (!client) {
+        console.log('[Manual-Debug] Facebook Messenger not available, returning error');
+        return res.status(500).json({ success: false, error: 'Facebook Messenger not available' });
+      }
+    } else if (chatId.startsWith('instagram:') || chatId.startsWith('instagram_')) {
+      platform = 'instagram';
+      console.log('[Manual-Debug] Detected platform: instagram');
+      // Try official Instagram service first, then private API, then web service
+      client = global.instagramService || global.instagramPrivateService || global.instagramWebService;
+      console.log('[Manual-Debug] Instagram client available:', !!client);
+      if (!client) {
+        console.log('[Manual-Debug] Instagram service not available, returning error');
+        return res.status(500).json({ success: false, error: 'Instagram service not available' });
       }
     } else {
       console.log('[Manual-Debug] Detected platform: whatsapp');
@@ -1038,6 +1092,24 @@ app.post('/api/chat/send-manual', express.json(), async (req, res) => {
         console.log('[Manual-Debug] Telegram client sendMessage method:', typeof client.sendMessage);
         await client.sendMessage(cleanChatId, message);
         console.log('[Manual-Debug] Telegram message sent successfully');
+      } else if (platform === 'facebook') {
+        console.log(`[Manual-Debug] Sending to Facebook chatId: "${cleanChatId}"`);
+        console.log('[Manual-Debug] Facebook client sendMessage method:', typeof client.sendMessage);
+        await client.sendMessage(cleanChatId, message);
+        console.log('[Manual-Debug] Facebook message sent successfully');
+      } else if (platform === 'instagram') {
+        console.log(`[Manual-Debug] Sending to Instagram chatId: "${cleanChatId}"`);
+        if (global.instagramService) {
+          console.log('[Manual-Debug] Using official Instagram API');
+          await client.sendMessage(cleanChatId, message);
+        } else if (global.instagramPrivateService) {
+          console.log('[Manual-Debug] Using Instagram Private API');
+          await client.sendDirectMessageToUser(cleanChatId, message);
+        } else if (global.instagramWebService) {
+          console.log('[Manual-Debug] Using Instagram Web service');
+          await client.sendMessageToUser(cleanChatId, message);
+        }
+        console.log('[Manual-Debug] Instagram message sent successfully');
       } else {
         // For WhatsApp, use the cleaned chat ID and convert to proper format
         const whatsappChatId = cleanChatId.replace('_c.us', '@c.us');
@@ -2150,6 +2222,333 @@ function broadcastUpdate(type, data) {
 
 // Make broadcast function globally available
 global.broadcastUpdate = broadcastUpdate;
+
+// Platform Management API Endpoints
+
+// Get platform status
+app.get('/api/platforms/status', (req, res) => {
+  try {
+    const status = {
+      whatsapp: {
+        status: global.whatsappBot && global.whatsappBot.info ? 'connected' : 'not_connected',
+        method: 'web',
+        lastActivity: global.whatsappBot?.lastActivity || null,
+        enabled: process.env.WHATSAPP_ENABLED !== 'false',
+        credentials: {
+          // WhatsApp uses QR code, no stored credentials
+        }
+      },
+      telegram: {
+        status: global.telegramBot ? 'connected' : 'not_connected',
+        method: 'api',
+        lastActivity: global.telegramBot?.lastActivity || null,
+        enabled: process.env.TELEGRAM_ENABLED !== 'false',
+        credentials: {
+          token: process.env.TELEGRAM_BOT_TOKEN || ''
+        }
+      },
+      facebook: {
+        status: (global.facebookMessenger || global.facebookChatService) ? 'connected' : 'not_connected',
+        method: global.facebookMessenger ? 'official' : (global.facebookChatService ? 'easy' : 'unknown'),
+        lastActivity: (global.facebookMessenger?.lastActivity || global.facebookChatService?.lastActivity) || null,
+        enabled: process.env.FACEBOOK_ENABLED !== 'false',
+        credentials: {
+          // Official API
+          pageAccessToken: process.env.FACEBOOK_PAGE_ACCESS_TOKEN || '',
+          verifyToken: process.env.FACEBOOK_VERIFY_TOKEN || '',
+          appSecret: process.env.FACEBOOK_APP_SECRET || '',
+          // Easy Setup
+          email: process.env.FACEBOOK_EMAIL || '',
+          password: process.env.FACEBOOK_PASSWORD || ''
+        }
+      },
+      instagram: {
+        status: (global.instagramService || global.instagramPrivateService || global.instagramWebService) ? 'connected' : 'not_connected',
+        method: global.instagramService ? 'official' : (global.instagramPrivateService ? 'private' : (global.instagramWebService ? 'web' : 'unknown')),
+        lastActivity: (global.instagramService?.lastActivity || global.instagramPrivateService?.lastActivity || global.instagramWebService?.lastActivity) || null,
+        enabled: process.env.INSTAGRAM_ENABLED !== 'false',
+        credentials: {
+          // Official API
+          accessToken: process.env.INSTAGRAM_ACCESS_TOKEN || '',
+          verifyToken: process.env.INSTAGRAM_VERIFY_TOKEN || '',
+          appSecret: process.env.INSTAGRAM_APP_SECRET || '',
+          // Private API
+          username: process.env.INSTAGRAM_USERNAME || '',
+          password: process.env.INSTAGRAM_PASSWORD || '',
+          sessionId: process.env.INSTAGRAM_SESSION_ID || '',
+          // Web Automation
+          webUsername: process.env.INSTAGRAM_WEB_USERNAME || '',
+          webPassword: process.env.INSTAGRAM_WEB_PASSWORD || ''
+        }
+      }
+    };
+    
+    res.json(status);
+  } catch (error) {
+    console.error('Error getting platform status:', error);
+    res.status(500).json({ error: 'Failed to get platform status' });
+  }
+});
+
+// Set platform enabled/disabled state
+app.post('/api/platforms/:platform/enabled', (req, res) => {
+  const { platform } = req.params;
+  const { enabled } = req.body;
+  
+  try {
+    // Store platform enabled state in environment variables
+    const envKey = `${platform.toUpperCase()}_ENABLED`;
+    process.env[envKey] = enabled ? 'true' : 'false';
+    saveEnvVariable(envKey, enabled ? 'true' : 'false');
+    
+    console.log(`Platform ${platform} ${enabled ? 'enabled' : 'disabled'}`);
+    res.json({ success: true, enabled });
+  } catch (error) {
+    console.error(`Error setting ${platform} enabled state:`, error);
+    res.status(500).json({ error: 'Failed to set platform enabled state' });
+  }
+});
+
+// Connect platform
+app.post('/api/platforms/:platform/connect', async (req, res) => {
+  const { platform } = req.params;
+  const config = req.body;
+  
+  try {
+    let success = false;
+    let message = '';
+    
+    switch (platform) {
+      case 'telegram':
+        if (config.token) {
+          // Update environment variable
+          process.env.TELEGRAM_BOT_TOKEN = config.token;
+          saveEnvVariable('TELEGRAM_BOT_TOKEN', config.token);
+          
+          // Reinitialize Telegram bot
+          if (global.telegramBot) {
+            global.telegramBot.stopPolling();
+          }
+          
+          const TelegramBot = require('./services/telegramBot');
+          global.telegramBot = new TelegramBot();
+          await global.telegramBot.initialize();
+          
+          success = true;
+          message = 'Telegram bot connected successfully';
+        } else {
+          message = 'Bot token is required';
+        }
+        break;
+        
+      case 'facebook':
+        if (config.method === 'official') {
+          if (config.pageAccessToken && config.verifyToken && config.appSecret) {
+            // Update environment variables
+            process.env.FACEBOOK_PAGE_ACCESS_TOKEN = config.pageAccessToken;
+            process.env.FACEBOOK_VERIFY_TOKEN = config.verifyToken;
+            process.env.FACEBOOK_APP_SECRET = config.appSecret;
+            saveEnvVariable('FACEBOOK_PAGE_ACCESS_TOKEN', config.pageAccessToken);
+            saveEnvVariable('FACEBOOK_VERIFY_TOKEN', config.verifyToken);
+            saveEnvVariable('FACEBOOK_APP_SECRET', config.appSecret);
+            
+            // Reinitialize Facebook Messenger
+            const FacebookMessenger = require('./services/facebookMessenger');
+            global.facebookMessenger = new FacebookMessenger();
+            await global.facebookMessenger.initialize();
+            
+            success = true;
+            message = 'Facebook Messenger connected successfully';
+          } else {
+            message = 'Page access token, verify token, and app secret are required';
+          }
+        } else if (config.method === 'easy') {
+          if (config.email && config.password) {
+            // Update environment variables
+            process.env.FACEBOOK_EMAIL = config.email;
+            process.env.FACEBOOK_PASSWORD = config.password;
+            saveEnvVariable('FACEBOOK_EMAIL', config.email);
+            saveEnvVariable('FACEBOOK_PASSWORD', config.password);
+            
+            // Reinitialize Facebook Chat Service
+            const FacebookChatService = require('./services/facebookChatService');
+            global.facebookChatService = new FacebookChatService();
+            await global.facebookChatService.initialize();
+            
+            success = true;
+            message = 'Facebook Chat connected successfully';
+          } else {
+            message = 'Email and password are required';
+          }
+        }
+        break;
+        
+      case 'instagram':
+        if (config.method === 'official') {
+          if (config.accessToken && config.verifyToken && config.appSecret) {
+            // Update environment variables
+            process.env.INSTAGRAM_ACCESS_TOKEN = config.accessToken;
+            process.env.INSTAGRAM_VERIFY_TOKEN = config.verifyToken;
+            process.env.INSTAGRAM_APP_SECRET = config.appSecret;
+            saveEnvVariable('INSTAGRAM_ACCESS_TOKEN', config.accessToken);
+            saveEnvVariable('INSTAGRAM_VERIFY_TOKEN', config.verifyToken);
+            saveEnvVariable('INSTAGRAM_APP_SECRET', config.appSecret);
+            
+            // Reinitialize Instagram Service
+            const InstagramService = require('./services/instagramService');
+            global.instagramService = new InstagramService();
+            await global.instagramService.initialize();
+            
+            success = true;
+            message = 'Instagram connected successfully';
+          } else {
+            message = 'Access token, verify token, and app secret are required';
+          }
+        } else if (config.method === 'private') {
+          if (config.authMethod === 'session' && config.sessionId) {
+            // Update environment variables for session ID
+            process.env.INSTAGRAM_SESSION_ID = config.sessionId;
+            saveEnvVariable('INSTAGRAM_SESSION_ID', config.sessionId);
+            // Clear username/password if using session
+            delete process.env.INSTAGRAM_USERNAME;
+            delete process.env.INSTAGRAM_PASSWORD;
+            saveEnvVariable('INSTAGRAM_USERNAME', '');
+            saveEnvVariable('INSTAGRAM_PASSWORD', '');
+            
+            // Reinitialize Instagram Private Service
+            const InstagramPrivateService = require('./services/instagramPrivateService');
+            global.instagramPrivateService = new InstagramPrivateService();
+            await global.instagramPrivateService.initialize();
+            
+            success = true;
+            message = 'Instagram Private API connected successfully with session ID';
+          } else if (config.authMethod === 'login' && config.username && config.password) {
+            // Update environment variables for login
+            process.env.INSTAGRAM_USERNAME = config.username;
+            process.env.INSTAGRAM_PASSWORD = config.password;
+            saveEnvVariable('INSTAGRAM_USERNAME', config.username);
+            saveEnvVariable('INSTAGRAM_PASSWORD', config.password);
+            // Clear session ID if using login
+            delete process.env.INSTAGRAM_SESSION_ID;
+            saveEnvVariable('INSTAGRAM_SESSION_ID', '');
+            
+            // Reinitialize Instagram Private Service
+            const InstagramPrivateService = require('./services/instagramPrivateService');
+            global.instagramPrivateService = new InstagramPrivateService();
+            await global.instagramPrivateService.initialize();
+            
+            success = true;
+            message = 'Instagram Private API connected successfully with login credentials';
+          } else {
+            message = config.authMethod === 'session' ? 'Session ID is required' : 'Username and password are required';
+          }
+        } else if (config.method === 'web') {
+          if (config.username && config.password) {
+            // Update environment variables
+            process.env.INSTAGRAM_USERNAME = config.username;
+            process.env.INSTAGRAM_PASSWORD = config.password;
+            
+            // Reinitialize Instagram Web Service
+            const InstagramWebService = require('./services/instagramWebService');
+            global.instagramWebService = new InstagramWebService();
+            await global.instagramWebService.initialize();
+            
+            success = true;
+            message = 'Instagram Web Automation connected successfully';
+          } else {
+            message = 'Username and password are required';
+          }
+        }
+        break;
+        
+      default:
+        message = 'Unsupported platform';
+    }
+    
+    res.json({ success, message });
+  } catch (error) {
+    console.error(`Error connecting ${platform}:`, error);
+    res.status(500).json({ success: false, message: error.message || 'Connection failed' });
+  }
+});
+
+// Disconnect platform
+app.post('/api/platforms/:platform/disconnect', async (req, res) => {
+  const { platform } = req.params;
+  
+  try {
+    let success = false;
+    let message = '';
+    
+    switch (platform) {
+      case 'telegram':
+        if (global.telegramBot) {
+          global.telegramBot.stopPolling();
+          global.telegramBot = null;
+          success = true;
+          message = 'Telegram bot disconnected successfully';
+        } else {
+          message = 'Telegram bot is not connected';
+        }
+        break;
+        
+      case 'facebook':
+        if (global.facebookMessenger) {
+          global.facebookMessenger = null;
+          success = true;
+          message = 'Facebook Messenger disconnected successfully';
+        } else if (global.facebookChatService) {
+          if (global.facebookChatService.api) {
+            global.facebookChatService.api.logout();
+          }
+          global.facebookChatService = null;
+          success = true;
+          message = 'Facebook Chat disconnected successfully';
+        } else {
+          message = 'Facebook is not connected';
+        }
+        break;
+        
+      case 'instagram':
+        if (global.instagramService) {
+          global.instagramService = null;
+          success = true;
+          message = 'Instagram disconnected successfully';
+        } else if (global.instagramPrivateService) {
+          global.instagramPrivateService = null;
+          success = true;
+          message = 'Instagram Private API disconnected successfully';
+        } else if (global.instagramWebService) {
+          if (global.instagramWebService.browser) {
+            await global.instagramWebService.browser.close();
+          }
+          global.instagramWebService = null;
+          success = true;
+          message = 'Instagram Web Automation disconnected successfully';
+        } else {
+          message = 'Instagram is not connected';
+        }
+        break;
+        
+      default:
+        message = 'Unsupported platform';
+    }
+    
+    res.json({ success, message });
+  } catch (error) {
+    console.error(`Error disconnecting ${platform}:`, error);
+    res.status(500).json({ success: false, message: error.message || 'Disconnect failed' });
+  }
+});
+
+// Setup webhook routes for Facebook and Instagram
+if (global.facebookMessenger) {
+  global.facebookMessenger.setupWebhookRoutes(app);
+}
+
+if (global.instagramService) {
+  global.instagramService.setupWebhookRoutes(app);
+}
 
 // Start server
 server.listen(port, () => {

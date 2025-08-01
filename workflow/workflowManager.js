@@ -1343,7 +1343,7 @@ class WorkflowManager extends EventEmitter {
     }
     
     // Handle platform-prefixed IDs without chat_ prefix
-    if (chatId.match(/^(whatsapp|telegram)_/i)) {
+    if (chatId.match(/^(whatsapp|telegram|facebook|instagram)_/i)) {
       // Already has proper platform prefix format (whatsapp_123456)
       // Just add chat_ prefix
       return `chat_${chatId}`;
@@ -1351,10 +1351,10 @@ class WorkflowManager extends EventEmitter {
     
     // Extract platform prefix if present in other formats
     let platform = '';
-    const platformMatch = chatId.match(/^(whatsapp|telegram)[:.\-_]?/i);
+    const platformMatch = chatId.match(/^(whatsapp|telegram|facebook|instagram)[:.-_]?/i);
     if (platformMatch) {
       platform = platformMatch[1].toLowerCase();
-      chatId = chatId.replace(/^(whatsapp|telegram)[:.\-_]?/i, '');
+      chatId = chatId.replace(/^(whatsapp|telegram|facebook|instagram)[:.-_]?/i, '');
     }
     
     // Clean up the ID

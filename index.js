@@ -16,6 +16,11 @@ const { handleTimeDateQuery } = require('./utils/timeUtils');
 
 // Import bots
 const TelegramBotService = require('./services/telegramBot');
+const FacebookMessengerService = require('./services/facebookMessenger');
+const FacebookChatService = require('./services/facebookChatService');
+const InstagramService = require('./services/instagramService');
+const InstagramPrivateService = require('./services/instagramPrivateService');
+const InstagramWebService = require('./services/instagramWebService');
 
 // Import GUI server
 const guiServer = require('./guiServer');
@@ -36,10 +41,116 @@ if (process.env.TELEGRAM_BOT_TOKEN) {
   }
 }
 
-// Make chatHandler, workflowManager, and telegramBot globally available
+// Initialize Facebook Messenger if credentials are provided
+let facebookMessenger = null;
+if (process.env.FACEBOOK_PAGE_ACCESS_TOKEN && process.env.FACEBOOK_VERIFY_TOKEN) {
+  try {
+    facebookMessenger = new FacebookMessengerService(
+      process.env.FACEBOOK_PAGE_ACCESS_TOKEN,
+      process.env.FACEBOOK_VERIFY_TOKEN,
+      process.env.FACEBOOK_APP_SECRET
+    );
+    console.log('Facebook Messenger service (official API) initialized');
+  } catch (error) {
+    console.error('Failed to initialize Facebook Messenger:', error);
+  }
+} else if (process.env.FACEBOOK_EMAIL && process.env.FACEBOOK_PASSWORD) {
+  try {
+    facebookMessenger = new FacebookChatService(
+      process.env.FACEBOOK_EMAIL,
+      process.env.FACEBOOK_PASSWORD
+    );
+    
+    // Initialize in background
+    facebookMessenger.initialize().then(success => {
+      if (success) {
+        console.log('Facebook Chat service (unofficial) started successfully');
+      } else {
+        console.error('Failed to login to Facebook Chat');
+      }
+    }).catch(error => {
+      console.error('Facebook Chat initialization error:', error);
+    });
+  } catch (error) {
+    console.error('Failed to initialize Facebook Chat:', error);
+  }
+}
+
+// Initialize Instagram service if credentials are provided
+let instagramService = null;
+if (process.env.INSTAGRAM_ACCESS_TOKEN && process.env.INSTAGRAM_VERIFY_TOKEN) {
+  try {
+    instagramService = new InstagramService(
+      process.env.INSTAGRAM_ACCESS_TOKEN,
+      process.env.INSTAGRAM_VERIFY_TOKEN,
+      process.env.INSTAGRAM_APP_SECRET
+    );
+    console.log('Instagram service (official API) initialized');
+  } catch (error) {
+    console.error('Failed to initialize Instagram service:', error);
+  }
+}
+
+// Initialize Instagram Private API as fallback if credentials are provided
+let instagramPrivateService = null;
+let instagramWebService = null;
+
+if ((process.env.INSTAGRAM_USERNAME && process.env.INSTAGRAM_PASSWORD) || process.env.INSTAGRAM_SESSION_ID) {
+  // Try Instagram Private API first
+  try {
+    instagramPrivateService = new InstagramPrivateService();
+    
+    // Initialize in background
+    instagramPrivateService.initialize().then(success => {
+      if (success) {
+        console.log('Instagram Private API service started successfully');
+      } else {
+        console.error('Instagram Private API failed, trying web automation...');
+        // If Private API fails, try web automation
+        initializeInstagramWeb();
+      }
+    }).catch(error => {
+      console.error('Instagram Private API initialization error:', error);
+      // If Private API fails, try web automation
+      initializeInstagramWeb();
+    });
+  } catch (error) {
+    console.error('Failed to initialize Instagram Private API:', error);
+    // If Private API fails, try web automation
+    initializeInstagramWeb();
+  }
+}
+
+// Function to initialize Instagram Web Service as fallback
+function initializeInstagramWeb() {
+  try {
+    instagramWebService = new InstagramWebService(
+      process.env.INSTAGRAM_USERNAME,
+      process.env.INSTAGRAM_PASSWORD
+    );
+    
+    instagramWebService.initialize().then(success => {
+      if (success) {
+        console.log('Instagram Web service started successfully');
+      } else {
+        console.error('Failed to initialize Instagram Web service');
+      }
+    }).catch(error => {
+      console.error('Instagram Web initialization error:', error);
+    });
+  } catch (error) {
+    console.error('Failed to initialize Instagram Web service:', error);
+  }
+}
+
+// Make services globally available
 global.chatHandler = chatHandler;
 global.workflowManager = workflowManager;
 global.telegramBot = telegramBot;
+global.facebookMessenger = facebookMessenger;
+global.instagramService = instagramService;
+global.instagramPrivateService = instagramPrivateService;
+global.instagramWebService = instagramWebService;
 
 // Flag to track if shutdown is in progress
 let isShuttingDown = false;
@@ -156,6 +267,9 @@ function updateLLMClient() {
       console.error('Failed to update Telegram bot LLM client:', error);
     }
   }
+  
+  // Make the current LLM client globally available
+  global.currentLLMClient = currentLLMClient;
   
   console.log(`LLM client updated - Provider: ${settings.provider}, Model: ${settings.model}`);
   console.log(`System prompt: ${settings.systemPrompt.substring(0, 50)}${settings.systemPrompt.length > 50 ? '...' : ''}`);

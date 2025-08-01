@@ -16,7 +16,7 @@
 
 ## 🤖 About WhatsXENO
 
-WhatsXENO is a powerful, multi-platform AI assistant that brings the power of large language models to your favorite messaging platforms. With support for WhatsApp, Telegram, and more, it offers a seamless AI experience across all your devices.
+WhatsXENO is a powerful, multi-platform AI assistant that brings the power of large language models to your favorite messaging platforms. With support for WhatsApp, Telegram, Facebook Messenger, and Instagram, it offers a seamless AI experience across all your devices.
 
 ### 🌟 Key Highlights
 - **Multi-Platform**: Works on WhatsApp, Telegram, and more
@@ -31,6 +31,8 @@ WhatsXENO is a powerful, multi-platform AI assistant that brings the power of la
 ### Multi-Platform Support
 - **WhatsApp** integration using whatsapp-web.js (unofficial API)
 - **Telegram** bot integration with full feature parity
+- **Facebook Messenger** integration using official Messenger Platform API
+- **Instagram** integration with official API and private API fallback
 
 ### AI Capabilities
 - Multiple LLM provider support:

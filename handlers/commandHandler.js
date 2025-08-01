@@ -27,6 +27,31 @@ class CommandHandler {
     this.currentProfileName = 'default';
     this.configProfilesFile = path.join(__dirname, '../data/config_profiles.json');
     
+    // Initialize default settings BEFORE loading profiles
+    // Store current provider and model settings
+    this.currentProvider = process.env.LLM_PROVIDER || 'openai';
+    this.currentModel = this.getModelForProvider(this.currentProvider);
+    
+    // System prompt setting
+    this.systemPrompt = process.env.DEFAULT_SYSTEM_PROMPT || 'You are a helpful WhatsApp assistant. Be concise in your responses.';
+    
+    // LLM parameters
+    this.parameters = {
+      temperature: parseFloat(process.env.DEFAULT_TEMPERATURE || '0.7'),
+      max_tokens: parseInt(process.env.DEFAULT_MAX_TOKENS || '500'),
+      top_p: parseFloat(process.env.DEFAULT_TOP_P || '1.0'),
+      frequency_penalty: parseFloat(process.env.DEFAULT_FREQUENCY_PENALTY || '0.0'),
+      presence_penalty: parseFloat(process.env.DEFAULT_PRESENCE_PENALTY || '0.0')
+    };
+    
+    // MCP settings
+    this.mcpServerName = process.env.MCP_SERVER_NAME || 'localhost:8080';
+    this.mcpResourceUri = null;
+    
+    // RAG settings
+    this.ragEnabled = process.env.KB_ENABLED === 'true';
+    this.showCitations = process.env.KB_SHOW_CITATIONS === 'true';
+    
     this.commands = {
       help: this.handleHelp,
       clear: this.handleClear,
@@ -52,32 +77,9 @@ class CommandHandler {
       blockstatus: this.handleBlockStatus
     };
     
-    // Load configuration profiles
+    // Load configuration profiles AFTER initializing defaults
+    // This allows profiles to override the default settings
     this.loadConfigProfiles();
-    
-    // Store current provider and model settings
-    this.currentProvider = process.env.LLM_PROVIDER || 'openai';
-    this.currentModel = this.getModelForProvider(this.currentProvider);
-    
-    // System prompt setting
-    this.systemPrompt = process.env.DEFAULT_SYSTEM_PROMPT || 'You are a helpful WhatsApp assistant. Be concise in your responses.';
-    
-    // LLM parameters
-    this.parameters = {
-      temperature: parseFloat(process.env.DEFAULT_TEMPERATURE || '0.7'),
-      max_tokens: parseInt(process.env.DEFAULT_MAX_TOKENS || '500'),
-      top_p: parseFloat(process.env.DEFAULT_TOP_P || '1.0'),
-      frequency_penalty: parseFloat(process.env.DEFAULT_FREQUENCY_PENALTY || '0.0'),
-      presence_penalty: parseFloat(process.env.DEFAULT_PRESENCE_PENALTY || '0.0')
-    };
-    
-    // MCP settings
-    this.mcpServerName = process.env.MCP_SERVER_NAME || 'localhost:8080';
-    this.mcpResourceUri = null;
-    
-    // RAG settings
-    this.ragEnabled = process.env.KB_ENABLED === 'true';
-    this.showCitations = process.env.KB_SHOW_CITATIONS === 'true';
   }
 
   /**
@@ -988,9 +990,11 @@ Show Citations: ${this.showCitations ? 'Yes' : 'No'}`;
         const data = fs.readFileSync(this.configProfilesFile, 'utf8');
         this.configProfiles = JSON.parse(data);
         
-        // Load the default profile if it exists and we don't have a current profile
-        if (this.configProfiles.default && !this.configProfiles[this.currentProfileName]) {
+        // Load the default profile if it exists
+        if (this.configProfiles.default) {
+          console.log('[CommandHandler] Loading default profile...');
           this.loadProfile('default', false);
+          console.log('[CommandHandler] Default profile loaded. System prompt:', this.systemPrompt.substring(0, 100) + '...');
         }
       } else {
         // Create a default profile with current settings

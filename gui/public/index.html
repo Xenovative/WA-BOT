@@ -133,6 +133,11 @@
                             </a>
                         </li>
                         <li class="nav-item">
+                            <a class="nav-link" href="#platforms" data-bs-toggle="tab">
+                                <i class="bi bi-share me-2"></i><span data-i18n="nav.platforms">Platforms</span>
+                            </a>
+                        </li>
+                        <li class="nav-item">
                             <a class="nav-link" href="#workflows" data-bs-toggle="tab">
                                 <i class="bi bi-diagram-3 me-2"></i><span data-i18n="nav.workflows">Workflows</span>
                             </a>
@@ -722,6 +727,289 @@
                         </div>
                     </div>
 
+                    <!-- Platforms Tab -->
+                    <div class="tab-pane fade" id="platforms" data-admin-only>
+                        <div class="d-flex justify-content-between align-items-center mb-2">
+                            <h4 class="mb-0" data-i18n="platforms.title">Platform Management</h4>
+                            <button class="btn btn-outline-primary" id="refresh-platforms-btn">
+                                <i class="bi bi-arrow-clockwise me-1"></i> <span data-i18n="platforms.refresh">Refresh Status</span>
+                            </button>
+                        </div>
+                        
+                        <div class="row">
+                            <!-- WhatsApp Platform -->
+                            <div class="col-md-6 mb-4">
+                                <div class="card shadow">
+                                    <div class="card-header py-3 d-flex flex-row align-items-center justify-content-between">
+                                        <h6 class="m-0 font-weight-bold d-flex align-items-center">
+                                            <i class="bi bi-whatsapp text-success me-2"></i>
+                                            <span data-i18n="platforms.whatsapp">WhatsApp</span>
+                                        </h6>
+                                        <div class="d-flex align-items-center gap-2">
+                                            <span id="whatsapp-status" class="badge bg-secondary" data-i18n="platforms.status.not_connected">Not connected</span>
+                                            <div class="form-check form-switch">
+                                                <input class="form-check-input" type="checkbox" id="whatsapp-enabled" checked>
+                                                <label class="form-check-label visually-hidden" for="whatsapp-enabled">Enable WhatsApp</label>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="card-body">
+                                        <div class="mb-3">
+                                            <label class="form-label" data-i18n="platforms.connection_method">Connection Method:</label>
+                                            <p class="text-muted small mb-2" data-i18n="platforms.whatsapp_method">WhatsApp Web (QR Code)</p>
+                                        </div>
+                                        <div class="d-grid gap-2">
+                                            <button class="btn btn-primary" id="whatsapp-connect-btn" data-i18n="platforms.connect">Connect</button>
+                                            <button class="btn btn-outline-danger" id="whatsapp-disconnect-btn" style="display: none;" data-i18n="platforms.disconnect">Disconnect</button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <!-- Telegram Platform -->
+                            <div class="col-md-6 mb-4">
+                                <div class="card shadow">
+                                    <div class="card-header py-3 d-flex flex-row align-items-center justify-content-between">
+                                        <h6 class="m-0 font-weight-bold d-flex align-items-center">
+                                            <i class="bi bi-telegram text-primary me-2"></i>
+                                            <span data-i18n="platforms.telegram">Telegram</span>
+                                        </h6>
+                                        <div class="d-flex align-items-center gap-2">
+                                            <span id="telegram-status" class="badge bg-secondary" data-i18n="platforms.status.not_connected">Not connected</span>
+                                            <div class="form-check form-switch">
+                                                <input class="form-check-input" type="checkbox" id="telegram-enabled" checked>
+                                                <label class="form-check-label visually-hidden" for="telegram-enabled">Enable Telegram</label>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="card-body">
+                                        <div class="mb-3">
+                                            <label class="form-label" data-i18n="platforms.connection_method">Connection Method:</label>
+                                            <p class="text-muted small mb-2" data-i18n="platforms.telegram_method">Bot API Token</p>
+                                        </div>
+                                        <div class="mb-3">
+                                            <label for="telegram-token" class="form-label" data-i18n="platforms.bot_token">Bot Token:</label>
+                                            <div class="input-group">
+                                                <input type="password" class="form-control" id="telegram-token" placeholder="1234567890:ABCdefGHIjklMNOpqrsTUVwxyz">
+                                                <button class="btn btn-outline-secondary" type="button" id="telegram-token-toggle">
+                                                    <i class="bi bi-eye"></i>
+                                                </button>
+                                            </div>
+                                        </div>
+                                        <div class="d-grid gap-2">
+                                            <button class="btn btn-primary" id="telegram-connect-btn" data-i18n="platforms.connect">Connect</button>
+                                            <button class="btn btn-outline-danger" id="telegram-disconnect-btn" style="display: none;" data-i18n="platforms.disconnect">Disconnect</button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <!-- Facebook Messenger Platform -->
+                            <div class="col-md-6 mb-4">
+                                <div class="card shadow">
+                                    <div class="card-header py-3 d-flex flex-row align-items-center justify-content-between">
+                                        <h6 class="m-0 font-weight-bold d-flex align-items-center">
+                                            <i class="bi bi-messenger text-primary me-2"></i>
+                                            <span data-i18n="platforms.facebook">Facebook Messenger</span>
+                                        </h6>
+                                        <div class="d-flex align-items-center gap-2">
+                                            <span id="facebook-status" class="badge bg-secondary" data-i18n="platforms.status.not_connected">Not connected</span>
+                                            <div class="form-check form-switch">
+                                                <input class="form-check-input" type="checkbox" id="facebook-enabled" checked>
+                                                <label class="form-check-label visually-hidden" for="facebook-enabled">Enable Facebook</label>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="card-body">
+                                        <div class="mb-3">
+                                            <label class="form-label" data-i18n="platforms.connection_method">Connection Method:</label>
+                                            <select class="form-select" id="facebook-method">
+                                                <option value="official" data-i18n="platforms.facebook_official">Official API (Recommended)</option>
+                                                <option value="easy" data-i18n="platforms.facebook_easy">Easy Setup (Login)</option>
+                                            </select>
+                                        </div>
+                                        
+                                        <!-- Official API Method -->
+                                        <div id="facebook-official-config" class="method-config">
+                                            <div class="mb-3">
+                                                <label for="facebook-page-token" class="form-label" data-i18n="platforms.page_access_token">Page Access Token:</label>
+                                                <input type="password" class="form-control" id="facebook-page-token" placeholder="EAAxxxxxxxxxxxxx">
+                                            </div>
+                                            <div class="mb-3">
+                                                <label for="facebook-verify-token" class="form-label" data-i18n="platforms.verify_token">Verify Token:</label>
+                                                <input type="text" class="form-control" id="facebook-verify-token" placeholder="your_verify_token">
+                                            </div>
+                                            <div class="mb-3">
+                                                <label for="facebook-app-secret" class="form-label" data-i18n="platforms.app_secret">App Secret:</label>
+                                                <input type="password" class="form-control" id="facebook-app-secret" placeholder="xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx">
+                                            </div>
+                                        </div>
+                                        
+                                        <!-- Easy Setup Method -->
+                                        <div id="facebook-easy-config" class="method-config" style="display: none;">
+                                            <div class="mb-3">
+                                                <label for="facebook-email" class="form-label" data-i18n="platforms.email">Email:</label>
+                                                <input type="email" class="form-control" id="facebook-email" placeholder="your-bot-account@example.com">
+                                            </div>
+                                            <div class="mb-3">
+                                                <label for="facebook-password" class="form-label" data-i18n="platforms.password">Password:</label>
+                                                <input type="password" class="form-control" id="facebook-password" placeholder="password">
+                                            </div>
+                                            <div class="alert alert-warning small">
+                                                <i class="bi bi-exclamation-triangle me-1"></i>
+                                                <span data-i18n="platforms.facebook_warning">Use a dedicated bot account. Avoid 2FA.</span>
+                                            </div>
+                                        </div>
+                                        
+                                        <div class="d-grid gap-2">
+                                            <button class="btn btn-primary" id="facebook-connect-btn" data-i18n="platforms.connect">Connect</button>
+                                            <button class="btn btn-outline-danger" id="facebook-disconnect-btn" style="display: none;" data-i18n="platforms.disconnect">Disconnect</button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <!-- Instagram Platform -->
+                            <div class="col-md-6 mb-4">
+                                <div class="card shadow">
+                                    <div class="card-header py-3 d-flex flex-row align-items-center justify-content-between">
+                                        <h6 class="m-0 font-weight-bold d-flex align-items-center">
+                                            <i class="bi bi-instagram text-danger me-2"></i>
+                                            <span data-i18n="platforms.instagram">Instagram</span>
+                                        </h6>
+                                        <div class="d-flex align-items-center gap-2">
+                                            <span id="instagram-status" class="badge bg-secondary" data-i18n="platforms.status.not_connected">Not connected</span>
+                                            <div class="form-check form-switch">
+                                                <input class="form-check-input" type="checkbox" id="instagram-enabled" checked>
+                                                <label class="form-check-label visually-hidden" for="instagram-enabled">Enable Instagram</label>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="card-body">
+                                        <div class="mb-3">
+                                            <label class="form-label" data-i18n="platforms.connection_method">Connection Method:</label>
+                                            <select class="form-select" id="instagram-method">
+                                                <option value="official" data-i18n="platforms.instagram_official">Official API (Business)</option>
+                                                <option value="private" data-i18n="platforms.instagram_private">Private API (Unofficial)</option>
+                                                <option value="web" data-i18n="platforms.instagram_web">Web Automation</option>
+                                            </select>
+                                        </div>
+                                        
+                                        <!-- Official API Method -->
+                                        <div id="instagram-official-config" class="method-config">
+                                            <div class="mb-3">
+                                                <label for="instagram-access-token" class="form-label" data-i18n="platforms.access_token">Access Token:</label>
+                                                <input type="password" class="form-control" id="instagram-access-token" placeholder="IGQVJxxxxxxxxxxxxx">
+                                            </div>
+                                            <div class="mb-3">
+                                                <label for="instagram-verify-token" class="form-label" data-i18n="platforms.verify_token">Verify Token:</label>
+                                                <input type="text" class="form-control" id="instagram-verify-token" placeholder="your_verify_token">
+                                            </div>
+                                            <div class="mb-3">
+                                                <label for="instagram-app-secret" class="form-label" data-i18n="platforms.app_secret">App Secret:</label>
+                                                <input type="password" class="form-control" id="instagram-app-secret" placeholder="xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx">
+                                            </div>
+                                        </div>
+                                        
+                                        <!-- Private API Method -->
+                                        <div id="instagram-private-config" class="method-config" style="display: none;">
+                                            <div class="mb-3">
+                                                <label class="form-label" data-i18n="platforms.auth_method">Authentication Method:</label>
+                                                <select class="form-select" id="instagram-auth-method">
+                                                    <option value="login" data-i18n="platforms.login_credentials">Login Credentials</option>
+                                                    <option value="session" data-i18n="platforms.session_id">Session ID (Recommended)</option>
+                                                </select>
+                                            </div>
+                                            
+                                            <!-- Login Credentials -->
+                                            <div id="instagram-login-config">
+                                                <div class="mb-3">
+                                                    <label for="instagram-username" class="form-label" data-i18n="platforms.username">Username:</label>
+                                                    <input type="text" class="form-control" id="instagram-username" placeholder="your_bot_account">
+                                                </div>
+                                                <div class="mb-3">
+                                                    <label for="instagram-password" class="form-label" data-i18n="platforms.password">Password:</label>
+                                                    <input type="password" class="form-control" id="instagram-password" placeholder="password">
+                                                </div>
+                                            </div>
+                                            
+                                            <!-- Session ID -->
+                                            <div id="instagram-session-config" style="display: none;">
+                                                <div class="mb-3">
+                                                    <label for="instagram-session-id" class="form-label" data-i18n="platforms.session_id">Session ID:</label>
+                                                    <textarea class="form-control" id="instagram-session-id" rows="3" placeholder="sessionid=12345678%3A..."></textarea>
+                                                    <div class="form-text small">
+                                                        <i class="bi bi-info-circle me-1"></i>
+                                                        <span data-i18n="platforms.session_help">Extract sessionid cookie from browser after logging into Instagram</span>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            
+                                            <div class="alert alert-info small">
+                                                <i class="bi bi-info-circle me-1"></i>
+                                                <span data-i18n="platforms.instagram_private_info">Session ID method is more stable and avoids login challenges.</span>
+                                            </div>
+                                            <div class="alert alert-warning small">
+                                                <i class="bi bi-exclamation-triangle me-1"></i>
+                                                <span data-i18n="platforms.instagram_warning">Use a dedicated bot account. Risk of restrictions.</span>
+                                            </div>
+                                        </div>
+                                        
+                                        <!-- Web Automation Method -->
+                                        <div id="instagram-web-config" class="method-config" style="display: none;">
+                                            <div class="mb-3">
+                                                <label for="instagram-web-username" class="form-label" data-i18n="platforms.username">Username:</label>
+                                                <input type="text" class="form-control" id="instagram-web-username" placeholder="your_bot_account">
+                                            </div>
+                                            <div class="mb-3">
+                                                <label for="instagram-web-password" class="form-label" data-i18n="platforms.password">Password:</label>
+                                                <input type="password" class="form-control" id="instagram-web-password" placeholder="password">
+                                            </div>
+                                            <div class="alert alert-info small">
+                                                <i class="bi bi-info-circle me-1"></i>
+                                                <span data-i18n="platforms.instagram_web_info">Browser automation fallback method.</span>
+                                            </div>
+                                        </div>
+                                        
+                                        <div class="d-grid gap-2">
+                                            <button class="btn btn-primary" id="instagram-connect-btn" data-i18n="platforms.connect">Connect</button>
+                                            <button class="btn btn-outline-danger" id="instagram-disconnect-btn" style="display: none;" data-i18n="platforms.disconnect">Disconnect</button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Platform Status Summary -->
+                        <div class="row mt-4">
+                            <div class="col-12">
+                                <div class="card shadow">
+                                    <div class="card-header py-3">
+                                        <h6 class="m-0 font-weight-bold" data-i18n="platforms.status_summary">Platform Status Summary</h6>
+                                    </div>
+                                    <div class="card-body">
+                                        <div class="table-responsive">
+                                            <table class="table table-hover">
+                                                <thead>
+                                                    <tr>
+                                                        <th data-i18n="platforms.platform">Platform</th>
+                                                        <th data-i18n="platforms.status">Status</th>
+                                                        <th data-i18n="platforms.method">Method</th>
+                                                        <th data-i18n="platforms.last_activity">Last Activity</th>
+                                                        <th data-i18n="platforms.actions">Actions</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody id="platforms-status-table">
+                                                    <!-- Platform status rows will be populated here -->
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
                     <!-- Workflows Tab -->
                     <div class="tab-pane fade" id="workflows" data-admin-only>
                         <div class="d-flex justify-content-between align-items-center mb-2">
@@ -928,5 +1216,6 @@
     <script src="/js/script.js"></script>
     <script src="/js/admin.js"></script>
     <script src="/js/branding.js"></script>
+    <script src="/js/platforms.js"></script>
 </body>
 </html>
