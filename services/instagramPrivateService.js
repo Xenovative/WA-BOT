@@ -2,6 +2,8 @@ const { IgApiClient } = require('instagram-private-api');
 const LLMFactory = require('../llm/llmFactory');
 const commandHandler = require('../handlers/commandHandler');
 const ragProcessor = require('../kb/ragProcessor');
+const voiceHandler = require('../utils/voiceHandler');
+const fetch = require('node-fetch');
 
 class InstagramPrivateService {
     constructor() {
@@ -342,7 +344,56 @@ class InstagramPrivateService {
             } else if (message.item_type === 'media_share') {
                 messageText = '[SHARED_MEDIA]';
             } else if (message.item_type === 'voice_media') {
-                messageText = '[VOICE_MESSAGE]';
+                console.log('📢 Processing Instagram voice message...');
+                
+                try {
+                    // Create a mock message object for voiceHandler compatibility
+                    const mockMessage = {
+                        downloadMedia: async () => {
+                            // Instagram Private API voice media handling
+                            if (message.voice_media && message.voice_media.media) {
+                                // Get voice media URL and download
+                                const mediaUrl = message.voice_media.media.audio?.audio_src;
+                                if (mediaUrl) {
+                                    const response = await fetch(mediaUrl);
+                                    const buffer = await response.buffer();
+                                    return {
+                                        data: buffer.toString('base64'),
+                                        mimetype: 'audio/mp4'
+                                    };
+                                }
+                            }
+                            throw new Error('Voice media not accessible');
+                        }
+                    };
+                    
+                    // Extract voice duration (if available)
+                    const voiceData = {
+                        seconds: message.voice_media?.media?.audio?.duration || 60 // Default to 60s if unknown
+                    };
+                    
+                    // Process voice message with voiceHandler
+                    const result = await voiceHandler.processVoiceMessage(voiceData, mockMessage);
+                    
+                    if (result.text) {
+                        messageText = result.text;
+                        console.log(`🎤 Instagram voice transcribed: ${result.text}`);
+                        
+                        // Send transcription confirmation to user
+                        try {
+                            const threadId = thread.thread_id;
+                            await this.sendDirectMessage(threadId, `🎤 *Voice transcribed:* ${result.text}\n\n_Processing your message..._`);
+                        } catch (confirmError) {
+                            console.error('Error sending transcription confirmation:', confirmError);
+                        }
+                    } else {
+                        messageText = `[VOICE_MESSAGE - Transcription failed: ${result.error || 'Unknown error'}]`;
+                        console.error('Instagram voice transcription failed:', result.error);
+                    }
+                } catch (voiceError) {
+                    console.error('Error processing Instagram voice message:', voiceError);
+                    messageText = '[VOICE_MESSAGE - Processing failed]';
+                }
             } else {
                 messageText = `[${message.item_type.toUpperCase()}]`;
             }
