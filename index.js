@@ -54,11 +54,12 @@ if (process.env.FACEBOOK_PAGE_ACCESS_TOKEN && process.env.FACEBOOK_VERIFY_TOKEN)
   } catch (error) {
     console.error('Failed to initialize Facebook Messenger:', error);
   }
-} else if (process.env.FACEBOOK_EMAIL && process.env.FACEBOOK_PASSWORD) {
+} else if (process.env.FACEBOOK_APP_STATE || (process.env.FACEBOOK_EMAIL && process.env.FACEBOOK_PASSWORD)) {
   try {
     facebookMessenger = new FacebookChatService(
       process.env.FACEBOOK_EMAIL,
-      process.env.FACEBOOK_PASSWORD
+      process.env.FACEBOOK_PASSWORD,
+      process.env.FACEBOOK_APP_STATE
     );
     
     // Initialize in background
