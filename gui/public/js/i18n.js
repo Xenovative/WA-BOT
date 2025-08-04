@@ -181,6 +181,8 @@ class I18n {
             'platforms.app_state': 'App State (Recommended)',
             'platforms.facebook_app_state_help': 'Extract app state cookies from browser after logging into Facebook',
             'platforms.facebook_app_state_info': 'App State method is more stable and avoids login challenges',
+            'platforms.facebook_template': 'Fill Template',
+            'platforms.facebook_template_help': 'Fill textarea with template format for easy copy-paste',
             'platforms.facebook_warning': 'Use a dedicated bot account. Avoid 2FA.',
             'platforms.instagram_warning': 'Use a dedicated bot account. Risk of restrictions.',
             'platforms.instagram_web_info': 'Browser automation fallback method.',

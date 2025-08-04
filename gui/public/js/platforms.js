@@ -759,17 +759,23 @@ function handleFacebookAuthMethodChange() {
 // Initialize Facebook App State helper functions
 function initializeFacebookAppStateHelpers() {
     const textarea = document.getElementById('facebook-app-state');
+    const templateBtn = document.getElementById('facebook-template-btn');
     const validateBtn = document.getElementById('facebook-validate-btn');
     const formatBtn = document.getElementById('facebook-format-btn');
     const helpBtn = document.getElementById('facebook-help-btn');
     const statusDiv = document.getElementById('facebook-app-state-status');
     const resultDiv = document.getElementById('facebook-validation-result');
     
-    if (!textarea || !validateBtn || !formatBtn || !helpBtn) return;
+    if (!textarea || !templateBtn || !validateBtn || !formatBtn || !helpBtn) return;
     
     // Real-time validation on input
     textarea.addEventListener('input', () => {
         validateFacebookAppState(false);
+    });
+    
+    // Template button
+    templateBtn.addEventListener('click', () => {
+        fillFacebookAppStateTemplate();
     });
     
     // Validate button
@@ -786,6 +792,64 @@ function initializeFacebookAppStateHelpers() {
     helpBtn.addEventListener('click', () => {
         showFacebookAppStateHelp();
     });
+}
+
+// Fill Facebook App State template
+function fillFacebookAppStateTemplate() {
+    const textarea = document.getElementById('facebook-app-state');
+    if (!textarea) return;
+    
+    const template = `[
+  {
+    "key": "c_user",
+    "value": "PASTE_YOUR_C_USER_VALUE_HERE",
+    "domain": ".facebook.com"
+  },
+  {
+    "key": "xs",
+    "value": "PASTE_YOUR_XS_VALUE_HERE",
+    "domain": ".facebook.com"
+  },
+  {
+    "key": "datr",
+    "value": "PASTE_YOUR_DATR_VALUE_HERE",
+    "domain": ".facebook.com"
+  },
+  {
+    "key": "sb",
+    "value": "PASTE_YOUR_SB_VALUE_HERE",
+    "domain": ".facebook.com"
+  }
+]`;
+    
+    textarea.value = template;
+    textarea.focus();
+    
+    // Clear validation status
+    const statusDiv = document.getElementById('facebook-app-state-status');
+    const resultDiv = document.getElementById('facebook-validation-result');
+    if (statusDiv) statusDiv.innerHTML = '';
+    if (resultDiv) resultDiv.style.display = 'none';
+    
+    // Show helpful message
+    if (resultDiv) {
+        resultDiv.innerHTML = `
+            <div class="alert alert-info small">
+                <i class="bi bi-info-circle me-1"></i>
+                <strong>Template loaded!</strong> Now replace each <code>PASTE_YOUR_..._HERE</code> placeholder with the actual cookie value from your browser.
+                <br><br>
+                <strong>Steps:</strong>
+                <ol class="mb-0 mt-2">
+                    <li>Login to <strong>facebook.com</strong> in your browser</li>
+                    <li>Press <kbd>F12</kbd> to open Developer Tools</li>
+                    <li>Go to <strong>Application</strong> tab → <strong>Cookies</strong> → <strong>facebook.com</strong></li>
+                    <li>Find each cookie (c_user, xs, datr, sb) and copy its <strong>Value</strong></li>
+                    <li>Replace the corresponding placeholder in the template above</li>
+                </ol>
+            </div>
+        `;
+        resultDiv.style.display = 'block';
+    }
 }
 
 // Validate Facebook App State
@@ -818,10 +882,25 @@ function validateFacebookAppState(showDetails = false) {
             throw new Error('App state must be an array of cookie objects');
         }
         
-        // Required cookies
+        // Check for required cookies
         const requiredCookies = ['c_user', 'xs', 'datr', 'sb'];
-        const foundCookies = appState.map(cookie => cookie.key || cookie.name).filter(Boolean);
-        const missingCookies = requiredCookies.filter(required => !foundCookies.includes(required));
+        const foundCookies = [];
+        const missingCookies = [];
+        const templatePlaceholders = [];
+        
+        requiredCookies.forEach(cookieName => {
+            const cookie = appState.find(c => c.key === cookieName);
+            if (cookie && cookie.value && cookie.value.trim() !== '') {
+                // Check if it's still a template placeholder
+                if (cookie.value.includes('PASTE_YOUR_') && cookie.value.includes('_HERE')) {
+                    templatePlaceholders.push(cookieName);
+                } else {
+                    foundCookies.push(cookieName);
+                }
+            } else {
+                missingCookies.push(cookieName);
+            }
+        });
         
         // Check cookie structure
         const invalidCookies = appState.filter(cookie => {
@@ -833,7 +912,21 @@ function validateFacebookAppState(showDetails = false) {
         }
         
         // Show status
-        if (missingCookies.length === 0) {
+        if (templatePlaceholders.length > 0) {
+            statusDiv.innerHTML = '<span class="badge bg-warning"><i class="bi bi-exclamation-triangle"></i> Template</span>';
+            if (showDetails && resultDiv) {
+                resultDiv.innerHTML = `
+                    <div class="alert alert-warning small">
+                        <i class="bi bi-exclamation-triangle me-1"></i>
+                        <strong>Template placeholders detected!</strong> Please replace the following placeholders with actual cookie values:
+                        <ul class="mb-0 mt-2">
+                            ${templatePlaceholders.map(cookie => `<li><code>${cookie}</code>: Replace <code>PASTE_YOUR_${cookie.toUpperCase()}_VALUE_HERE</code></li>`).join('')}
+                        </ul>
+                    </div>
+                `;
+                resultDiv.style.display = 'block';
+            }
+        } else if (missingCookies.length === 0) {
             statusDiv.innerHTML = '<span class="badge bg-success"><i class="bi bi-check-circle"></i> Valid</span>';
             if (showDetails && resultDiv) {
                 resultDiv.innerHTML = `

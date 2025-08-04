@@ -861,6 +861,9 @@
                                                     <div class="d-flex justify-content-between align-items-center mb-2">
                                                         <label for="facebook-app-state" class="form-label mb-0" data-i18n="platforms.app_state">App State:</label>
                                                         <div class="btn-group btn-group-sm" role="group">
+                                                            <button type="button" class="btn btn-outline-success" id="facebook-template-btn" data-i18n="platforms.facebook_template_help" title="Fill Template">
+                                                                <i class="bi bi-clipboard"></i> <span data-i18n="platforms.facebook_template">Template</span>
+                                                            </button>
                                                             <button type="button" class="btn btn-outline-primary" id="facebook-validate-btn" title="Validate App State">
                                                                 <i class="bi bi-check-circle"></i> Validate
                                                             </button>
@@ -873,12 +876,18 @@
                                                         </div>
                                                     </div>
                                                     <div class="position-relative">
-                                                        <textarea class="form-control font-monospace" id="facebook-app-state" rows="6" 
-                                                                  placeholder='Paste your Facebook app state JSON here...
+                                                        <textarea class="form-control font-monospace" id="facebook-app-state" rows="8" 
+                                                                  placeholder='Copy your Facebook cookie values and paste them below:
 
-Example format:
-[{"key":"c_user","value":"123456789","domain":".facebook.com"},{"key":"xs","value":"abc123def456","domain":".facebook.com"},{"key":"datr","value":"xyz789","domain":".facebook.com"},{"key":"sb","value":"def456","domain":".facebook.com"}]'
-                                                                  style="resize: vertical; min-height: 120px;"></textarea>
+[{"key":"c_user","value":"PASTE_YOUR_C_USER_VALUE_HERE","domain":".facebook.com"},{"key":"xs","value":"PASTE_YOUR_XS_VALUE_HERE","domain":".facebook.com"},{"key":"datr","value":"PASTE_YOUR_DATR_VALUE_HERE","domain":".facebook.com"},{"key":"sb","value":"PASTE_YOUR_SB_VALUE_HERE","domain":".facebook.com"}]
+
+Instructions:
+1. Login to facebook.com in your browser
+2. Open Developer Tools (F12)
+3. Go to Application/Storage → Cookies → facebook.com
+4. Find the 4 cookies above and copy their VALUES
+5. Replace the PASTE_YOUR_..._HERE text with your actual values'
+                                                                  style="resize: vertical; min-height: 160px;"></textarea>
                                                         <div id="facebook-app-state-status" class="position-absolute top-0 end-0 me-2 mt-2" style="z-index: 5;"></div>
                                                     </div>
                                                     <div class="form-text mt-2">
