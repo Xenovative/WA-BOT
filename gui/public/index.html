@@ -913,41 +913,30 @@
                                         
                                         <!-- Private API Method -->
                                         <div id="instagram-private-config" class="method-config" style="display: none;">
+                                            <!-- Session ID Only -->
                                             <div class="mb-3">
-                                                <label class="form-label" data-i18n="platforms.auth_method">Authentication Method:</label>
-                                                <select class="form-select" id="instagram-auth-method">
-                                                    <option value="login" data-i18n="platforms.login_credentials">Login Credentials</option>
-                                                    <option value="session" data-i18n="platforms.session_id">Session ID (Recommended)</option>
-                                                </select>
-                                            </div>
-                                            
-                                            <!-- Login Credentials -->
-                                            <div id="instagram-login-config">
-                                                <div class="mb-3">
-                                                    <label for="instagram-username" class="form-label" data-i18n="platforms.username">Username:</label>
-                                                    <input type="text" class="form-control" id="instagram-username" placeholder="your_bot_account">
+                                                <label for="instagram-session-id" class="form-label" data-i18n="platforms.session_id">Session ID:</label>
+                                                <div class="input-group mb-2">
+                                                    <textarea class="form-control" id="instagram-session-id" rows="3" placeholder="sessionid=12345678%3A..." required></textarea>
+                                                    <button class="btn btn-outline-primary" type="button" id="extract-session-btn" title="Extract Session ID from Browser">
+                                                        <i class="bi bi-download"></i> Extract
+                                                    </button>
                                                 </div>
-                                                <div class="mb-3">
-                                                    <label for="instagram-password" class="form-label" data-i18n="platforms.password">Password:</label>
-                                                    <input type="password" class="form-control" id="instagram-password" placeholder="password">
+                                                <div class="form-text small">
+                                                    <i class="bi bi-info-circle me-1"></i>
+                                                    <span data-i18n="platforms.session_help">Extract sessionid cookie from browser after logging into Instagram</span>
                                                 </div>
-                                            </div>
-                                            
-                                            <!-- Session ID -->
-                                            <div id="instagram-session-config" style="display: none;">
-                                                <div class="mb-3">
-                                                    <label for="instagram-session-id" class="form-label" data-i18n="platforms.session_id">Session ID:</label>
-                                                    <textarea class="form-control" id="instagram-session-id" rows="3" placeholder="sessionid=12345678%3A..."></textarea>
-                                                    <div class="form-text small">
-                                                        <i class="bi bi-info-circle me-1"></i>
-                                                        <span data-i18n="platforms.session_help">Extract sessionid cookie from browser after logging into Instagram</span>
-                                                    </div>
+                                                <div class="d-grid gap-2 mt-2">
+                                                    <button class="btn btn-sm btn-outline-info" id="session-extractor-help-btn">
+                                                        <i class="bi bi-question-circle me-1"></i>
+                                                        <span data-i18n="platforms.session_extractor_help">How to Extract Session ID</span>
+                                                    </button>
                                                 </div>
                                             </div>
                                             
-                                            <div class="alert alert-info small">
-                                                <i class="bi bi-info-circle me-1"></i>
-                                                <span data-i18n="platforms.instagram_private_info">Session ID method is more stable and avoids login challenges.</span>
+                                            <div class="alert alert-success small">
+                                                <i class="bi bi-shield-check me-1"></i>
+                                                <span data-i18n="platforms.instagram_session_only">Session ID is the only supported authentication method for stability and security.</span>
                                             </div>
                                             <div class="alert alert-warning small">
                                                 <i class="bi bi-exclamation-triangle me-1"></i>

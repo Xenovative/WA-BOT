@@ -123,6 +123,10 @@ if ((process.env.INSTAGRAM_USERNAME && process.env.INSTAGRAM_PASSWORD) || proces
 
 // Function to initialize Instagram Web Service as fallback
 function initializeInstagramWeb() {
+  console.log('Instagram Web Service fallback disabled - Private API should be used instead');
+  console.log('If you need Instagram Web automation, enable it manually in the code');
+  return;
+  
   try {
     instagramWebService = new InstagramWebService(
       process.env.INSTAGRAM_USERNAME,

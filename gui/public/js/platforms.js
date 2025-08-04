@@ -23,13 +23,7 @@ class PlatformManager {
             }
         });
         
-        // Instagram authentication method change
-        const instagramAuthMethod = document.getElementById('instagram-auth-method');
-        if (instagramAuthMethod) {
-            instagramAuthMethod.addEventListener('change', (e) => {
-                this.handleInstagramAuthMethodChange(e.target.value);
-            });
-        }
+        // Instagram authentication method change removed - session ID only
 
         // Connect/disconnect buttons
         this.platforms.forEach(platform => {
@@ -59,6 +53,15 @@ class PlatformManager {
             this.showQRModal();
         });
         
+        // Instagram session extraction buttons
+        document.getElementById('extract-session-btn')?.addEventListener('click', () => {
+            this.extractInstagramSession();
+        });
+        
+        document.getElementById('session-extractor-help-btn')?.addEventListener('click', () => {
+            this.showSessionExtractorHelp();
+        });
+        
         // Platform enable/disable toggles
         this.platforms.forEach(platform => {
             const enableToggle = document.getElementById(`${platform}-enabled`);
@@ -84,21 +87,7 @@ class PlatformManager {
         }
     }
 
-    handleInstagramAuthMethodChange(authMethod) {
-        // Hide all Instagram auth configs
-        const loginConfig = document.getElementById('instagram-login-config');
-        const sessionConfig = document.getElementById('instagram-session-config');
-        
-        if (loginConfig && sessionConfig) {
-            if (authMethod === 'session') {
-                loginConfig.style.display = 'none';
-                sessionConfig.style.display = 'block';
-            } else {
-                loginConfig.style.display = 'block';
-                sessionConfig.style.display = 'none';
-            }
-        }
-    }
+    // handleInstagramAuthMethodChange method removed - session ID only authentication
 
     togglePasswordVisibility(inputId) {
         const input = document.getElementById(inputId);
@@ -187,27 +176,16 @@ class PlatformManager {
                 break;
                 
             case 'instagram':
-                // Official API credentials
-                this.setInputValue('instagram-access-token', credentials.accessToken);
-                this.setInputValue('instagram-verify-token', credentials.verifyToken);
-                this.setInputValue('instagram-app-secret', credentials.appSecret);
-                // Private API credentials
-                this.setInputValue('instagram-username', credentials.username);
-                this.setInputValue('instagram-password', credentials.password);
-                this.setInputValue('instagram-session-id', credentials.sessionId);
-                // Web Automation credentials
-                this.setInputValue('instagram-web-username', credentials.webUsername);
-                this.setInputValue('instagram-web-password', credentials.webPassword);
-                
-                // Set Instagram authentication method based on available credentials
-                if (credentials.sessionId) {
-                    this.setInputValue('instagram-auth-method', 'session');
-                    this.handleInstagramAuthMethodChange('session');
-                } else if (credentials.username && credentials.password) {
-                    this.setInputValue('instagram-auth-method', 'login');
-                    this.handleInstagramAuthMethodChange('login');
-                }
-                break;
+            // Official API credentials
+            this.setInputValue('instagram-access-token', credentials.accessToken);
+            this.setInputValue('instagram-verify-token', credentials.verifyToken);
+            this.setInputValue('instagram-app-secret', credentials.appSecret);
+            // Private API credentials - Session ID only
+            this.setInputValue('instagram-session-id', credentials.sessionId);
+            // Web Automation credentials
+            this.setInputValue('instagram-web-username', credentials.webUsername);
+            this.setInputValue('instagram-web-password', credentials.webPassword);
+            break;
                 
             case 'whatsapp':
                 // WhatsApp uses QR code, no stored credentials to populate
@@ -472,15 +450,9 @@ class PlatformManager {
                     config.verifyToken = document.getElementById('instagram-verify-token')?.value;
                     config.appSecret = document.getElementById('instagram-app-secret')?.value;
                 } else if (method === 'private') {
-                    const authMethod = document.getElementById('instagram-auth-method')?.value || 'login';
-                    config.authMethod = authMethod;
-                    
-                    if (authMethod === 'session') {
-                        config.sessionId = document.getElementById('instagram-session-id')?.value;
-                    } else {
-                        config.username = document.getElementById('instagram-username')?.value;
-                        config.password = document.getElementById('instagram-password')?.value;
-                    }
+                    // Private API only supports session ID authentication
+                    config.authMethod = 'session';
+                    config.sessionId = document.getElementById('instagram-session-id')?.value;
                 } else if (method === 'web') {
                     config.username = document.getElementById('instagram-web-username')?.value;
                     config.password = document.getElementById('instagram-web-password')?.value;
@@ -516,6 +488,248 @@ class PlatformManager {
             console.log(`${type.toUpperCase()}: ${message}`);
         }
     }
+    
+    /**
+     * Extract Instagram session ID from browser
+     */
+    async extractInstagramSession() {
+        const extractBtn = document.getElementById('extract-session-btn');
+        const sessionTextarea = document.getElementById('instagram-session-id');
+        
+        if (!extractBtn || !sessionTextarea) return;
+        
+        // Disable button and show loading
+        extractBtn.disabled = true;
+        extractBtn.innerHTML = '<i class="bi bi-hourglass-split"></i> Extracting...';
+        
+        try {
+            // Method 1: Try to extract from current browser cookies
+            const sessionId = await this.extractSessionFromCookies();
+            
+            if (sessionId) {
+                sessionTextarea.value = sessionId;
+                this.showToast('✅ Session ID extracted successfully!', 'success');
+                
+                // Validate the session
+                this.validateExtractedSession(sessionId);
+            } else {
+                // Method 2: Open session extractor tool
+                this.openSessionExtractorTool();
+            }
+            
+        } catch (error) {
+            console.error('Session extraction error:', error);
+            this.showToast('❌ Failed to extract session. Try the manual method.', 'error');
+            this.openSessionExtractorTool();
+        } finally {
+            // Re-enable button
+            extractBtn.disabled = false;
+            extractBtn.innerHTML = '<i class="bi bi-download"></i> Extract';
+        }
+    }
+    
+    /**
+     * Extract session ID from browser cookies
+     */
+    async extractSessionFromCookies() {
+        try {
+            // Check if we can access Instagram cookies
+            const cookies = document.cookie.split(';');
+            
+            for (let cookie of cookies) {
+                const [name, value] = cookie.trim().split('=');
+                if (name === 'sessionid') {
+                    return decodeURIComponent(value);
+                }
+            }
+            
+            // If no direct cookie access, try iframe method
+            return await this.extractSessionFromIframe();
+            
+        } catch (error) {
+            console.error('Cookie extraction failed:', error);
+            return null;
+        }
+    }
+    
+    /**
+     * Extract session using iframe method
+     */
+    async extractSessionFromIframe() {
+        return new Promise((resolve) => {
+            // Create hidden iframe to Instagram
+            const iframe = document.createElement('iframe');
+            iframe.style.display = 'none';
+            iframe.src = 'https://www.instagram.com';
+            
+            iframe.onload = () => {
+                try {
+                    // Try to access iframe cookies (may be blocked by CORS)
+                    const iframeDoc = iframe.contentDocument || iframe.contentWindow.document;
+                    const cookies = iframeDoc.cookie.split(';');
+                    
+                    for (let cookie of cookies) {
+                        const [name, value] = cookie.trim().split('=');
+                        if (name === 'sessionid') {
+                            document.body.removeChild(iframe);
+                            resolve(decodeURIComponent(value));
+                            return;
+                        }
+                    }
+                } catch (error) {
+                    console.log('Iframe method blocked by CORS:', error);
+                }
+                
+                document.body.removeChild(iframe);
+                resolve(null);
+            };
+            
+            iframe.onerror = () => {
+                document.body.removeChild(iframe);
+                resolve(null);
+            };
+            
+            document.body.appendChild(iframe);
+            
+            // Timeout after 5 seconds
+            setTimeout(() => {
+                if (document.body.contains(iframe)) {
+                    document.body.removeChild(iframe);
+                    resolve(null);
+                }
+            }, 5000);
+        });
+    }
+    
+    /**
+     * Validate extracted session ID
+     */
+    async validateExtractedSession(sessionId) {
+        try {
+            // Simple validation - check if it looks like a valid session ID
+            if (sessionId.length < 20) {
+                this.showToast('⚠️ Session ID seems too short. Please verify.', 'warning');
+                return;
+            }
+            
+            // You could add more validation here, like testing the session
+            this.showToast('✅ Session ID appears valid', 'success');
+            
+        } catch (error) {
+            console.error('Session validation error:', error);
+        }
+    }
+    
+    /**
+     * Open session extractor tool in new window
+     */
+    openSessionExtractorTool() {
+        const extractorUrl = '/utils/instagram-session-extractor.html';
+        const extractorWindow = window.open(
+            extractorUrl,
+            'instagram-session-extractor',
+            'width=900,height=700,scrollbars=yes,resizable=yes'
+        );
+        
+        if (extractorWindow) {
+            this.showToast('📱 Session extractor opened in new window', 'info');
+            
+            // Listen for messages from the extractor window
+            window.addEventListener('message', (event) => {
+                if (event.origin !== window.location.origin) return;
+                
+                if (event.data.type === 'instagram-session-extracted') {
+                    const sessionTextarea = document.getElementById('instagram-session-id');
+                    if (sessionTextarea && event.data.sessionId) {
+                        sessionTextarea.value = event.data.sessionId;
+                        this.showToast('✅ Session ID received from extractor!', 'success');
+                        extractorWindow.close();
+                    }
+                }
+            });
+        } else {
+            this.showToast('❌ Please allow popups and try again', 'error');
+        }
+    }
+    
+    /**
+     * Show session extractor help modal
+     */
+    showSessionExtractorHelp() {
+        const helpModal = `
+            <div class="modal fade" id="sessionExtractorHelpModal" tabindex="-1">
+                <div class="modal-dialog modal-lg">
+                    <div class="modal-content">
+                        <div class="modal-header">
+                            <h5 class="modal-title">
+                                <i class="bi bi-question-circle me-2"></i>
+                                How to Extract Instagram Session ID
+                            </h5>
+                            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                        </div>
+                        <div class="modal-body">
+                            <div class="alert alert-info">
+                                <i class="bi bi-info-circle me-2"></i>
+                                <strong>Session ID is more stable than username/password login</strong>
+                            </div>
+                            
+                            <h6><i class="bi bi-1-circle me-2"></i>Method 1: Automatic Extraction</h6>
+                            <ol>
+                                <li>Make sure you're logged into Instagram in this browser</li>
+                                <li>Click the "Extract" button above</li>
+                                <li>If successful, the session ID will be filled automatically</li>
+                            </ol>
+                            
+                            <h6 class="mt-4"><i class="bi bi-2-circle me-2"></i>Method 2: Manual Browser Extraction</h6>
+                            <ol>
+                                <li>Go to <a href="https://www.instagram.com" target="_blank">instagram.com</a> and login</li>
+                                <li>Press <kbd>F12</kbd> to open Developer Tools</li>
+                                <li>Go to <strong>Application</strong> tab → <strong>Cookies</strong> → <strong>https://www.instagram.com</strong></li>
+                                <li>Find the cookie named <code>sessionid</code></li>
+                                <li>Copy the <strong>Value</strong> and paste it above</li>
+                            </ol>
+                            
+                            <h6 class="mt-4"><i class="bi bi-3-circle me-2"></i>Method 3: Session Extractor Tool</h6>
+                            <ol>
+                                <li>Click the "Extract" button to open the session extractor tool</li>
+                                <li>Follow the instructions in the new window</li>
+                                <li>The session ID will be automatically filled when extracted</li>
+                            </ol>
+                            
+                            <div class="alert alert-warning mt-3">
+                                <i class="bi bi-exclamation-triangle me-2"></i>
+                                <strong>Security Note:</strong> Only use this on your own computer. Session IDs provide full account access.
+                            </div>
+                        </div>
+                        <div class="modal-footer">
+                            <button type="button" class="btn btn-primary" onclick="window.platformManager.openSessionExtractorTool()">
+                                <i class="bi bi-tools me-1"></i> Open Session Extractor Tool
+                            </button>
+                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
+        
+        // Remove existing modal if present
+        const existingModal = document.getElementById('sessionExtractorHelpModal');
+        if (existingModal) {
+            existingModal.remove();
+        }
+        
+        // Add modal to body
+        document.body.insertAdjacentHTML('beforeend', helpModal);
+        
+        // Show modal
+        const modal = new bootstrap.Modal(document.getElementById('sessionExtractorHelpModal'));
+        modal.show();
+        
+        // Clean up modal when hidden
+        document.getElementById('sessionExtractorHelpModal').addEventListener('hidden.bs.modal', function() {
+            this.remove();
+        });
+    }
 }
 
 // Initialize platform manager when DOM is loaded
@@ -534,10 +748,6 @@ document.addEventListener('shown.bs.tab', (event) => {
             }
         });
         
-        // Initialize Instagram authentication method
-        const instagramAuthMethod = document.getElementById('instagram-auth-method');
-        if (instagramAuthMethod) {
-            window.platformManager.handleInstagramAuthMethodChange(instagramAuthMethod.value);
-        }
+        // Instagram authentication method initialization removed - session ID only
     }
 });

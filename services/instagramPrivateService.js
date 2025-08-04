@@ -66,16 +66,36 @@ class InstagramPrivateService {
                 password: !!this.password
             });
             
-            if (this.sessionId) {
-                // Use session ID authentication
-                console.log('Using Instagram session ID authentication');
-                
-                // Parse session ID cookie
-                const sessionData = this.parseSessionId(this.sessionId);
-                if (!sessionData) {
-                    throw new Error('Invalid session ID format');
-                }
-                
+            // Only proceed if we have a valid session ID
+            if (!this.sessionId) {
+                console.log('Instagram Private API: No session ID provided, skipping login');
+                console.log('To connect Instagram, please provide a valid session ID through the platform management interface');
+                console.log('Session ID authentication is the only supported method for stability and security');
+                this.isLoggedIn = false;
+                return false;
+            }
+            
+            // Use session ID authentication only
+            console.log('Using Instagram session ID authentication');
+            
+            // Parse session ID cookie
+            const sessionData = this.parseSessionId(this.sessionId);
+            if (!sessionData) {
+                console.error('Instagram Private API: Invalid session ID format');
+                console.log('Please provide a valid session ID. Use the session extractor tool in the platform management interface.');
+                this.isLoggedIn = false;
+                return false;
+            }
+            
+            // Validate session ID length and format
+            if (sessionData.sessionid.length < 20) {
+                console.error('Instagram Private API: Session ID appears to be too short or invalid');
+                console.log('Please extract a fresh session ID from your browser after logging into Instagram');
+                this.isLoggedIn = false;
+                return false;
+            }
+            
+            try {
                 // Set session data
                 await this.ig.state.deserialize(JSON.stringify({
                     cookies: JSON.stringify([{
@@ -86,42 +106,21 @@ class InstagramPrivateService {
                     }])
                 }));
                 
-                // Verify session is valid
+                // Verify session is valid by getting current user
                 this.user = await this.ig.account.currentUser();
                 this.isLoggedIn = true;
                 
                 console.log(`Instagram session authentication successful for user: ${this.user.username}`);
-            } else if (this.username && this.password) {
-                // Use username/password authentication
-                console.log('Using Instagram username/password authentication');
                 
-                // Generate device ID based on username
-                this.ig.state.generateDevice(this.username);
-                
-                // Set proxy if configured
-                if (process.env.IG_PROXY) {
-                    this.ig.state.proxyUrl = process.env.IG_PROXY;
-                }
-
-                // Simulate pre-login flow
-                await this.ig.simulate.preLoginFlow();
-                
-                // Login
-                this.user = await this.ig.account.login(this.username, this.password);
-                this.isLoggedIn = true;
-                
-                console.log(`Instagram login successful for user: ${this.user.username}`);
-                
-                // Simulate post-login flow
-                process.nextTick(async () => {
-                    try {
-                        await this.ig.simulate.postLoginFlow();
-                    } catch (error) {
-                        console.warn('Post-login flow error (non-critical):', error.message);
-                    }
-                });
-            } else {
-                throw new Error('No authentication method provided. Please set either INSTAGRAM_SESSION_ID or INSTAGRAM_USERNAME/INSTAGRAM_PASSWORD');
+            } catch (sessionError) {
+                console.error('Instagram Private API: Session validation failed:', sessionError.message);
+                console.log('The provided session ID may be expired or invalid');
+                console.log('Please extract a fresh session ID from your browser:');
+                console.log('1. Go to instagram.com and login');
+                console.log('2. Use the session extractor tool in the platform management interface');
+                console.log('3. Or manually extract the sessionid cookie from browser developer tools');
+                this.isLoggedIn = false;
+                return false;
             }
 
             // Start listening for direct messages

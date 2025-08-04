@@ -54,6 +54,11 @@ function saveEnvVariable(key, value) {
 // Serve static files from the public directory first
 app.use(express.static(path.join(__dirname, 'gui/public')));
 
+// Serve Instagram session extractor from utils directory
+app.get('/utils/instagram-session-extractor.html', (req, res) => {
+  res.sendFile(path.join(__dirname, 'utils', 'instagram-session-extractor.html'));
+});
+
 // Proxy Node-RED editor requests to the workflow manager
 const workflowPort = process.env.WORKFLOW_PORT || 1880;
 app.use('/red', createProxyMiddleware({
