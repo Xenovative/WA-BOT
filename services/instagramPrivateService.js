@@ -15,6 +15,7 @@ class InstagramPrivateService {
         this.user = null;
         this.processedMessages = new Set();
         this.lastMessageTimestamp = {}; // Track last message timestamp per thread
+        this.lastSendTime = {}; // Track last send time per thread for rate limiting
         this.llmClient = null;
         
         console.log('Instagram Private API service initialized');
@@ -440,6 +441,10 @@ class InstagramPrivateService {
                         try {
                             const threadId = thread.thread_id;
                             await this.sendDirectMessage(threadId, `🎤 *Voice transcribed:* ${result.text}\n\n_Processing your message..._`);
+                            console.log('✅ Transcription confirmation sent, waiting before AI processing...');
+                            
+                            // Add delay to avoid rate limiting between transcription and AI response
+                            await new Promise(resolve => setTimeout(resolve, 2000)); // 2 second delay
                         } catch (confirmError) {
                             console.error('Error sending transcription confirmation:', confirmError);
                         }
@@ -602,29 +607,67 @@ class InstagramPrivateService {
     /**
      * Send direct message
      */
-    async sendDirectMessage(threadId, messageText) {
+    async sendDirectMessage(threadId, messageText, retryCount = 0) {
+        const maxRetries = 3;
+        const retryDelay = 1000; // 1 second
+        
         try {
-            console.log(`📨 SendDirectMessage called - ThreadID: ${threadId}, MessageLength: ${messageText?.length}`);
+            console.log(`📨 SendDirectMessage called - ThreadID: ${threadId}, MessageLength: ${messageText?.length}, Retry: ${retryCount}`);
             
             if (!this.isLoggedIn) {
                 throw new Error('Not logged in to Instagram');
+            }
+
+            // Rate limiting: ensure minimum 1 second between messages to same thread
+            const now = Date.now();
+            const lastSend = this.lastSendTime[threadId] || 0;
+            const timeSinceLastSend = now - lastSend;
+            const minInterval = 1000; // 1 second minimum
+            
+            if (timeSinceLastSend < minInterval) {
+                const waitTime = minInterval - timeSinceLastSend;
+                console.log(`⏱️ Rate limiting: waiting ${waitTime}ms before sending to thread ${threadId}`);
+                await new Promise(resolve => setTimeout(resolve, waitTime));
+            }
+            
+            // Add additional delay for retries
+            if (retryCount > 0) {
+                console.log(`⏳ Waiting ${retryDelay * retryCount}ms before retry ${retryCount}`);
+                await new Promise(resolve => setTimeout(resolve, retryDelay * retryCount));
             }
 
             console.log(`🔗 Creating thread entity for threadId: ${threadId}`);
             const thread = this.ig.entity.directThread(threadId);
             
             console.log(`📤 Broadcasting text message: "${messageText.substring(0, 50)}${messageText.length > 50 ? '...' : ''}"`);
-            await thread.broadcastText(messageText);
+            
+            // Add timeout to prevent hanging
+            const sendPromise = thread.broadcastText(messageText);
+            const timeoutPromise = new Promise((_, reject) => 
+                setTimeout(() => reject(new Error('Send timeout after 10 seconds')), 10000)
+            );
+            
+            await Promise.race([sendPromise, timeoutPromise]);
+            
+            // Track send time for rate limiting
+            this.lastSendTime[threadId] = Date.now();
             
             console.log(`✅ Instagram DM sent successfully to thread ${threadId}`);
             return true;
         } catch (error) {
-            console.error(`❌ Error sending Instagram DM to thread ${threadId}:`, error);
+            console.error(`❌ Error sending Instagram DM to thread ${threadId} (attempt ${retryCount + 1}):`, error);
             console.error('Send DM error details:', {
                 message: error.message,
                 name: error.name,
                 stack: error.stack?.split('\n')[0] // First line of stack
             });
+            
+            // Retry logic
+            if (retryCount < maxRetries && !error.message.includes('Not logged in')) {
+                console.log(`🔄 Retrying message send (${retryCount + 1}/${maxRetries})`);
+                return await this.sendDirectMessage(threadId, messageText, retryCount + 1);
+            }
+            
             throw error;
         }
     }
