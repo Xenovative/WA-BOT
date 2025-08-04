@@ -346,34 +346,79 @@ class InstagramPrivateService {
             } else if (message.item_type === 'voice_media') {
                 console.log('📢 Processing Instagram voice message...');
                 
+                // Check voiceHandler status first
+                console.log('🔧 VoiceHandler status:', {
+                    enabled: voiceHandler.enabled,
+                    maxDuration: voiceHandler.maxDuration,
+                    activeProvider: voiceHandler.activeProvider,
+                    openaiEnabled: voiceHandler.providers?.openai?.enabled,
+                    ollamaEnabled: voiceHandler.providers?.ollama?.enabled
+                });
+                
+                // Check environment variables
+                console.log('🌍 Voice environment variables:', {
+                    ENABLE_VOICE_MESSAGES: process.env.ENABLE_VOICE_MESSAGES,
+                    OPENAI_API_KEY: process.env.OPENAI_API_KEY ? 'Set' : 'Not set',
+                    LLM_PROVIDER: process.env.LLM_PROVIDER,
+                    MAX_VOICE_DURATION: process.env.MAX_VOICE_DURATION
+                });
+                
                 try {
+                    // Log voice message structure for debugging
+                    console.log('📋 Instagram voice message structure:', {
+                        hasVoiceMedia: !!message.voice_media,
+                        hasMedia: !!message.voice_media?.media,
+                        hasAudio: !!message.voice_media?.media?.audio,
+                        audioSrc: message.voice_media?.media?.audio?.audio_src,
+                        duration: message.voice_media?.media?.audio?.duration
+                    });
+                    
                     // Create a mock message object for voiceHandler compatibility
                     const mockMessage = {
+                        from: senderId, // Add from property for voiceHandler logging
                         downloadMedia: async () => {
+                            console.log('🔽 Attempting to download Instagram voice media...');
+                            
                             // Instagram Private API voice media handling
                             if (message.voice_media && message.voice_media.media) {
                                 // Get voice media URL and download
                                 const mediaUrl = message.voice_media.media.audio?.audio_src;
+                                console.log('🔗 Voice media URL:', mediaUrl ? 'Found' : 'Not found');
+                                
                                 if (mediaUrl) {
+                                    console.log('📥 Downloading voice media from Instagram...');
                                     const response = await fetch(mediaUrl);
+                                    
+                                    if (!response.ok) {
+                                        throw new Error(`Failed to download voice media: ${response.status} ${response.statusText}`);
+                                    }
+                                    
                                     const buffer = await response.buffer();
+                                    console.log(`✅ Downloaded ${buffer.length} bytes of voice data`);
+                                    
                                     return {
                                         data: buffer.toString('base64'),
                                         mimetype: 'audio/mp4'
                                     };
                                 }
                             }
-                            throw new Error('Voice media not accessible');
+                            throw new Error('Voice media URL not accessible in message structure');
                         }
                     };
                     
-                    // Extract voice duration (if available)
+                    // Extract voice duration (if available) - be more conservative with default
+                    const actualDuration = message.voice_media?.media?.audio?.duration;
                     const voiceData = {
-                        seconds: message.voice_media?.media?.audio?.duration || 60 // Default to 60s if unknown
+                        seconds: actualDuration || 30 // Use 30s default instead of 60s
                     };
                     
+                    console.log(`⏱️ Voice message duration: ${voiceData.seconds}s (actual: ${actualDuration || 'unknown'})`);
+                    
                     // Process voice message with voiceHandler
+                    console.log('🎤 Processing voice with voiceHandler...');
                     const result = await voiceHandler.processVoiceMessage(voiceData, mockMessage);
+                    
+                    console.log('📋 VoiceHandler result:', result);
                     
                     if (result.text) {
                         messageText = result.text;
@@ -387,12 +432,39 @@ class InstagramPrivateService {
                             console.error('Error sending transcription confirmation:', confirmError);
                         }
                     } else {
-                        messageText = `[VOICE_MESSAGE - Transcription failed: ${result.error || 'Unknown error'}]`;
-                        console.error('Instagram voice transcription failed:', result.error);
+                        // Provide more specific error messages
+                        let errorMsg = result.error || 'Unknown error';
+                        
+                        if (errorMsg.includes('Voice messages are disabled')) {
+                            errorMsg = 'Voice messages are disabled. Set ENABLE_VOICE_MESSAGES=true in environment variables.';
+                        } else if (errorMsg.includes('too long')) {
+                            errorMsg = `Voice message exceeds ${voiceHandler.maxDuration}s limit. Current duration: ${voiceData.seconds}s`;
+                        } else if (errorMsg.includes('No transcription provider')) {
+                            errorMsg = 'No transcription provider available. Check OPENAI_API_KEY or Ollama setup.';
+                        }
+                        
+                        messageText = `[VOICE_MESSAGE - ${errorMsg}]`;
+                        console.error('❌ Instagram voice transcription failed:', {
+                            originalError: result.error,
+                            processedError: errorMsg,
+                            voiceHandlerEnabled: voiceHandler.enabled,
+                            duration: voiceData.seconds
+                        });
                     }
                 } catch (voiceError) {
-                    console.error('Error processing Instagram voice message:', voiceError);
-                    messageText = '[VOICE_MESSAGE - Processing failed]';
+                    console.error('❌ Error processing Instagram voice message:', voiceError);
+                    console.error('Voice error stack:', voiceError.stack);
+                    
+                    let errorMsg = 'Processing failed';
+                    if (voiceError.message.includes('downloadMedia is not a function')) {
+                        errorMsg = 'Download method not compatible';
+                    } else if (voiceError.message.includes('Voice media URL not accessible')) {
+                        errorMsg = 'Voice media URL not accessible in Instagram message';
+                    } else if (voiceError.message.includes('Failed to download')) {
+                        errorMsg = 'Failed to download voice media from Instagram';
+                    }
+                    
+                    messageText = `[VOICE_MESSAGE - ${errorMsg}]`;
                 }
             } else {
                 messageText = `[${message.item_type.toUpperCase()}]`;
