@@ -440,8 +440,16 @@ class PlatformManager {
                     config.verifyToken = document.getElementById('facebook-verify-token')?.value;
                     config.appSecret = document.getElementById('facebook-app-secret')?.value;
                 } else {
-                    config.email = document.getElementById('facebook-email')?.value;
-                    config.password = document.getElementById('facebook-password')?.value;
+                    // Easy setup method - check authentication method
+                    const authMethod = document.getElementById('facebook-auth-method')?.value || 'app_state';
+                    config.authMethod = authMethod;
+                    
+                    if (authMethod === 'app_state') {
+                        config.appState = document.getElementById('facebook-app-state')?.value;
+                    } else {
+                        config.email = document.getElementById('facebook-email')?.value;
+                        config.password = document.getElementById('facebook-password')?.value;
+                    }
                 }
                 break;
             case 'instagram':
@@ -732,6 +740,21 @@ class PlatformManager {
     }
 }
 
+// Global function for Facebook authentication method change
+function handleFacebookAuthMethodChange() {
+    const authMethod = document.getElementById('facebook-auth-method').value;
+    const appStateAuth = document.getElementById('facebook-app-state-auth');
+    const loginAuth = document.getElementById('facebook-login-auth');
+    
+    if (authMethod === 'app_state') {
+        appStateAuth.style.display = 'block';
+        loginAuth.style.display = 'none';
+    } else {
+        appStateAuth.style.display = 'none';
+        loginAuth.style.display = 'block';
+    }
+}
+
 // Initialize platform manager when DOM is loaded
 document.addEventListener('DOMContentLoaded', () => {
     window.platformManager = new PlatformManager();
@@ -747,6 +770,12 @@ document.addEventListener('shown.bs.tab', (event) => {
                 window.platformManager.handleMethodChange(platform, methodSelect.value);
             }
         });
+        
+        // Initialize Facebook authentication method
+        const facebookAuthMethod = document.getElementById('facebook-auth-method');
+        if (facebookAuthMethod) {
+            handleFacebookAuthMethodChange();
+        }
         
         // Instagram authentication method initialization removed - session ID only
     }

@@ -2368,22 +2368,61 @@ app.post('/api/platforms/:platform/connect', async (req, res) => {
             message = 'Page access token, verify token, and app secret are required';
           }
         } else if (config.method === 'easy') {
-          if (config.email && config.password) {
-            // Update environment variables
+          // Handle both app state and email/password authentication
+          if (config.authMethod === 'app_state' && config.appState) {
+            // App State authentication
+            process.env.FACEBOOK_APP_STATE = config.appState;
+            saveEnvVariable('FACEBOOK_APP_STATE', config.appState);
+            
+            // Clear email/password if switching to app state
+            delete process.env.FACEBOOK_EMAIL;
+            delete process.env.FACEBOOK_PASSWORD;
+            
+            // Reinitialize Facebook Chat Service with app state
+            const FacebookChatService = require('./services/facebookChatService');
+            global.facebookChatService = new FacebookChatService(
+              process.env.FACEBOOK_EMAIL,
+              process.env.FACEBOOK_PASSWORD,
+              config.appState
+            );
+            const initResult = await global.facebookChatService.initialize();
+            
+            if (initResult) {
+              success = true;
+              message = 'Facebook Chat connected successfully using App State';
+            } else {
+              message = 'Failed to connect using App State. Check if the app state is valid.';
+            }
+          } else if (config.authMethod === 'login' && config.email && config.password) {
+            // Email/Password authentication
             process.env.FACEBOOK_EMAIL = config.email;
             process.env.FACEBOOK_PASSWORD = config.password;
             saveEnvVariable('FACEBOOK_EMAIL', config.email);
             saveEnvVariable('FACEBOOK_PASSWORD', config.password);
             
-            // Reinitialize Facebook Chat Service
-            const FacebookChatService = require('./services/facebookChatService');
-            global.facebookChatService = new FacebookChatService();
-            await global.facebookChatService.initialize();
+            // Clear app state if switching to email/password
+            delete process.env.FACEBOOK_APP_STATE;
             
-            success = true;
-            message = 'Facebook Chat connected successfully';
+            // Reinitialize Facebook Chat Service with credentials
+            const FacebookChatService = require('./services/facebookChatService');
+            global.facebookChatService = new FacebookChatService(
+              config.email,
+              config.password
+            );
+            const initResult = await global.facebookChatService.initialize();
+            
+            if (initResult) {
+              success = true;
+              message = 'Facebook Chat connected successfully using Email/Password';
+            } else {
+              message = 'Failed to connect using Email/Password. Check credentials or try App State method.';
+            }
           } else {
-            message = 'Email and password are required';
+            if (config.authMethod === 'app_state') {
+              message = 'App State is required for App State authentication';
+            } else {
+              message = 'Email and password are required for credential authentication';
+            }
           }
         }
         break;

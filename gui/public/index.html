@@ -848,16 +848,40 @@
                                         <!-- Easy Setup Method -->
                                         <div id="facebook-easy-config" class="method-config" style="display: none;">
                                             <div class="mb-3">
-                                                <label for="facebook-email" class="form-label" data-i18n="platforms.email">Email:</label>
-                                                <input type="email" class="form-control" id="facebook-email" placeholder="your-bot-account@example.com">
+                                                <label class="form-label" data-i18n="platforms.auth_method">Authentication Method:</label>
+                                                <select class="form-select" id="facebook-auth-method" onchange="handleFacebookAuthMethodChange()">
+                                                    <option value="app_state" data-i18n="platforms.app_state">App State (Recommended)</option>
+                                                    <option value="login" data-i18n="platforms.login_credentials">Login Credentials</option>
+                                                </select>
                                             </div>
-                                            <div class="mb-3">
-                                                <label for="facebook-password" class="form-label" data-i18n="platforms.password">Password:</label>
-                                                <input type="password" class="form-control" id="facebook-password" placeholder="password">
+                                            
+                                            <!-- App State Authentication -->
+                                            <div id="facebook-app-state-auth" class="auth-method-config">
+                                                <div class="mb-3">
+                                                    <label for="facebook-app-state" class="form-label" data-i18n="platforms.app_state">App State:</label>
+                                                    <textarea class="form-control" id="facebook-app-state" rows="4" placeholder='[{"key":"c_user","value":"123456789","domain":".facebook.com"},{"key":"xs","value":"abc123def456","domain":".facebook.com"}]'></textarea>
+                                                    <div class="form-text" data-i18n="platforms.facebook_app_state_help">Extract app state cookies from browser after logging into Facebook</div>
+                                                </div>
+                                                <div class="alert alert-info small">
+                                                    <i class="bi bi-info-circle me-1"></i>
+                                                    <span data-i18n="platforms.facebook_app_state_info">App State method is more stable and avoids login challenges</span>
+                                                </div>
                                             </div>
-                                            <div class="alert alert-warning small">
-                                                <i class="bi bi-exclamation-triangle me-1"></i>
-                                                <span data-i18n="platforms.facebook_warning">Use a dedicated bot account. Avoid 2FA.</span>
+                                            
+                                            <!-- Login Credentials Authentication -->
+                                            <div id="facebook-login-auth" class="auth-method-config" style="display: none;">
+                                                <div class="mb-3">
+                                                    <label for="facebook-email" class="form-label" data-i18n="platforms.email">Email:</label>
+                                                    <input type="email" class="form-control" id="facebook-email" placeholder="your-bot-account@example.com">
+                                                </div>
+                                                <div class="mb-3">
+                                                    <label for="facebook-password" class="form-label" data-i18n="platforms.password">Password:</label>
+                                                    <input type="password" class="form-control" id="facebook-password" placeholder="password">
+                                                </div>
+                                                <div class="alert alert-warning small">
+                                                    <i class="bi bi-exclamation-triangle me-1"></i>
+                                                    <span data-i18n="platforms.facebook_warning">Use a dedicated bot account. Avoid 2FA.</span>
+                                                </div>
                                             </div>
                                         </div>
                                         
