@@ -96,15 +96,11 @@ class InstagramPrivateService {
             }
             
             try {
-                // Set session data
-                await this.ig.state.deserialize(JSON.stringify({
-                    cookies: JSON.stringify([{
-                        key: 'sessionid',
-                        value: sessionData.sessionid,
-                        domain: '.instagram.com',
-                        path: '/'
-                    }])
-                }));
+                // Set session cookie directly
+                this.ig.state.cookieJar.setCookieSync(
+                    `sessionid=${sessionData.sessionid}; Domain=.instagram.com; Path=/; HttpOnly; Secure`,
+                    'https://www.instagram.com'
+                );
                 
                 // Verify session is valid by getting current user
                 this.user = await this.ig.account.currentUser();
