@@ -50,11 +50,20 @@ class FacebookChatService {
             try {
                 console.log('Attempting Facebook login...');
                 
+                // Try multiple user agents to avoid detection
+                const userAgents = [
+                    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                    'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                    'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:109.0) Gecko/20100101 Firefox/121.0'
+                ];
+                
+                const randomUserAgent = userAgents[Math.floor(Math.random() * userAgents.length)];
+                
                 const loginOptions = {
                     email: this.email,
                     password: this.password,
                     forceLogin: true,  // Force login even with 2FA
-                    userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                    userAgent: randomUserAgent,
                     // Additional options to bypass Facebook restrictions
                     pauseLog: true,
                     logLevel: 'silent',
@@ -67,7 +76,7 @@ class FacebookChatService {
                     appState: this.loadAppState()
                 };
 
-                console.log('🔑 Attempting Facebook login with enhanced options...');
+                console.log(`🔑 Attempting Facebook login with enhanced options (User-Agent: ${randomUserAgent.includes('Chrome') ? 'Chrome' : randomUserAgent.includes('Firefox') ? 'Firefox' : 'Safari'})...`);
                 
                 login(loginOptions, (err, api) => {
                     if (err) {
@@ -87,15 +96,32 @@ class FacebookChatService {
                             console.log('');
                         } else if (err.error && err.error.includes('blocked')) {
                             console.log('');
-                            console.log('🚫 FACEBOOK ACCOUNT BLOCKED:');
-                            console.log('   • Facebook has temporarily blocked this account');
-                            console.log('   • This happens with repeated login attempts');
+                            console.log('🚫 FACEBOOK UNOFFICIAL API BLOCKED:');
+                            console.log('   • Facebook has detected and blocked the unofficial API');
+                            console.log('   • This is NOT a problem with your account - you can still login normally');
+                            console.log('   • Facebook actively blocks third-party chat APIs for security');
                             console.log('');
-                            console.log('🔧 SOLUTIONS:');
-                            console.log('   1. Wait 24-48 hours before trying again');
-                            console.log('   2. Login manually via browser first');
-                            console.log('   3. Use a different Facebook account');
-                            console.log('   4. Switch to Facebook Messenger Official API');
+                            console.log('🔧 SOLUTIONS (in order of recommendation):');
+                            console.log('   1. 🌟 Use Facebook Messenger Official API (recommended)');
+                            console.log('      - More reliable and officially supported');
+                            console.log('      - Requires Facebook Developer setup');
+                            console.log('      - Set FACEBOOK_PAGE_ACCESS_TOKEN in .env');
+                            console.log('');
+                            console.log('   2. 🔄 Try different unofficial API workarounds:');
+                            console.log('      - Use a VPN or different IP address');
+                            console.log('      - Create a brand new Facebook account');
+                            console.log('      - Wait 24-48 hours and try again');
+                            console.log('');
+                            console.log('   3. 📱 Alternative: Use Instagram Private API instead');
+                            console.log('      - Instagram messaging works more reliably');
+                            console.log('      - Set INSTAGRAM_SESSION_ID in .env');
+                            console.log('');
+                            console.log('📚 FACEBOOK OFFICIAL API SETUP GUIDE:');
+                            console.log('   1. Go to https://developers.facebook.com/');
+                            console.log('   2. Create a new app and add Messenger product');
+                            console.log('   3. Get Page Access Token from your Facebook page');
+                            console.log('   4. Set FACEBOOK_PAGE_ACCESS_TOKEN in your .env file');
+                            console.log('   5. Configure webhook URL for message receiving');
                             console.log('');
                         }
                         
