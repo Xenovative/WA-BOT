@@ -128,7 +128,8 @@
 
         <div class="step">
             <h3>🔍 Session Extraction</h3>
-            <button id="extractBtn" onclick="extractSessionId()">Extract Session ID</button>
+            <p><strong>Note:</strong> Instagram uses HttpOnly cookies for security, so automatic extraction may not work. Manual extraction is usually required.</p>
+            <button id="extractBtn" onclick="extractSessionId()">Try Automatic Extraction</button>
             <button id="testBtn" onclick="testSession()" disabled>Test Session</button>
             
             <div id="status"></div>
@@ -153,16 +154,25 @@
             </div>
         </div>
 
-        <div class="step">
-            <h3>🛠️ Manual Extraction (Alternative)</h3>
-            <p>If the automatic extraction doesn't work, you can manually extract the session ID:</p>
+        <div class="step" id="manualExtraction">
+            <h3>🔠️ Manual Session ID Extraction</h3>
+            <div class="warning">
+                <strong>⚠️ Important:</strong> Instagram sessionid cookies are HttpOnly, so manual extraction is required.
+            </div>
+            <p><strong>Step-by-step guide:</strong></p>
             <ol>
-                <li>Go to <a href="https://www.instagram.com" target="_blank">instagram.com</a> and login</li>
-                <li>Press <span class="code">F12</span> to open Developer Tools</li>
-                <li>Go to the <span class="code">Application</span> tab (or <span class="code">Storage</span> in Firefox)</li>
-                <li>Click on <span class="code">Cookies</span> → <span class="code">https://www.instagram.com</span></li>
-                <li>Find the cookie named <span class="code">sessionid</span></li>
-                <li>Copy the <span class="code">Value</span> of that cookie</li>
+                <li><strong>Open Instagram:</strong> Go to <a href="https://www.instagram.com" target="_blank" style="color: #007bff;">instagram.com</a> and make sure you're logged in</li>
+                <li><strong>Open Developer Tools:</strong> Press <span class="code">F12</span> (or right-click → "Inspect")</li>
+                <li><strong>Navigate to Cookies:</strong>
+                    <ul>
+                        <li><strong>Chrome/Edge:</strong> Go to <span class="code">Application</span> tab → <span class="code">Cookies</span> → <span class="code">https://www.instagram.com</span></li>
+                        <li><strong>Firefox:</strong> Go to <span class="code">Storage</span> tab → <span class="code">Cookies</span> → <span class="code">https://www.instagram.com</span></li>
+                        <li><strong>Safari:</strong> Go to <span class="code">Storage</span> tab → <span class="code">Cookies</span> → <span class="code">instagram.com</span></li>
+                    </ul>
+                </li>
+                <li><strong>Find sessionid:</strong> Look for a cookie named <span class="code">sessionid</span></li>
+                <li><strong>Copy the Value:</strong> Copy the entire <span class="code">Value</span> field (should be 40+ characters with %3A)</li>
+                <li><strong>Paste below:</strong> Use the textarea below to test and copy the session ID</li>
             </ol>
             
             <h4>Paste Manual Session ID:</h4>
@@ -193,40 +203,47 @@
         }
 
         function extractSessionId() {
-            showStatus('🔍 Searching for Instagram session...', 'info');
-            
             try {
-                // Try to get Instagram cookies
-                const cookies = document.cookie.split(';');
-                let sessionId = null;
+                showStatus('🔍 Searching for Instagram session...', 'info');
                 
-                for (let cookie of cookies) {
-                    const [name, value] = cookie.trim().split('=');
-                    if (name === 'sessionid') {
-                        sessionId = value;
-                        break;
+                // Check if we're on Instagram domain
+                if (window.location.hostname.includes('instagram.com')) {
+                    // Try to extract sessionid from cookies on Instagram domain
+                    const cookies = document.cookie.split(';');
+                    let sessionId = null;
+                    
+                    for (let cookie of cookies) {
+                        const [name, value] = cookie.trim().split('=');
+                        if (name === 'sessionid') {
+                            sessionId = value;
+                            break;
+                        }
+                    }
+                    
+                    if (sessionId) {
+                        currentSessionId = sessionId;
+                        document.getElementById('sessionId').textContent = sessionId;
+                        document.getElementById('sessionResult').style.display = 'block';
+                        document.getElementById('testBtn').disabled = false;
+                        showStatus('✅ Session ID extracted successfully!', 'success');
+                        
+                        // Send to parent window if opened as popup
+                        sendSessionToParent(sessionId);
+                        return;
                     }
                 }
                 
-                if (sessionId) {
-                    currentSessionId = sessionId;
-                    document.getElementById('sessionId').textContent = sessionId;
-                    document.getElementById('sessionResult').style.display = 'block';
-                    document.getElementById('testBtn').disabled = false;
-                    showStatus('✅ Session ID extracted successfully!', 'success');
-                } else {
-                    showStatus('❌ No Instagram session found. Make sure you\'re logged into Instagram in this browser.', 'error');
-                    
-                    // Provide alternative method
-                    setTimeout(() => {
-                        if (confirm('Session not found automatically. Would you like to open Instagram in a new tab to login?')) {
-                            window.open('https://www.instagram.com', '_blank');
-                        }
-                    }, 2000);
-                }
+                // If not on Instagram or no session found, show manual instructions
+                showStatus('⚠️ Automatic extraction not available. Instagram sessionid cookies are HttpOnly for security.', 'warning');
+                showStatus('📝 Please use the manual method below to extract your session ID.', 'info');
+                
+                // Show the manual extraction section
+                document.getElementById('manualExtraction').style.display = 'block';
+                
             } catch (error) {
                 console.error('Error extracting session:', error);
-                showStatus('❌ Error extracting session. Try the manual method below.', 'error');
+                showStatus('❌ Error extracting session. Please use the manual method below.', 'error');
+                document.getElementById('manualExtraction').style.display = 'block';
             }
         }
 

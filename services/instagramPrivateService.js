@@ -96,6 +96,9 @@ class InstagramPrivateService {
             }
             
             try {
+                // Generate device ID for consistency
+                this.ig.state.generateDevice('session_user');
+                
                 // Create a minimal state object with session cookie
                 const stateData = {
                     constants: {},
@@ -105,6 +108,8 @@ class InstagramPrivateService {
                 // Deserialize the state with session cookie
                 await this.ig.state.deserialize(JSON.stringify(stateData));
                 
+                console.log('Instagram Private API: Session cookie set, attempting to verify...');
+                
                 // Verify session is valid by getting current user
                 this.user = await this.ig.account.currentUser();
                 this.isLoggedIn = true;
@@ -113,11 +118,25 @@ class InstagramPrivateService {
                 
             } catch (sessionError) {
                 console.error('Instagram Private API: Session validation failed:', sessionError.message);
-                console.log('The provided session ID may be expired or invalid');
-                console.log('Please extract a fresh session ID from your browser:');
-                console.log('1. Go to instagram.com and login');
-                console.log('2. Use the session extractor tool in the platform management interface');
-                console.log('3. Or manually extract the sessionid cookie from browser developer tools');
+                
+                // Check if it's a 404 error (session expired/invalid)
+                if (sessionError.message.includes('404') || sessionError.message.includes('login')) {
+                    console.log('❌ Session ID appears to be expired or invalid');
+                    console.log('📝 This usually means:');
+                    console.log('   • The session ID has expired (Instagram sessions expire periodically)');
+                    console.log('   • The session ID format is incorrect');
+                    console.log('   • The account was logged out from another device');
+                    console.log('');
+                    console.log('🔧 To fix this:');
+                    console.log('   1. Go to instagram.com in your browser');
+                    console.log('   2. Make sure you are logged in');
+                    console.log('   3. Extract a fresh session ID using the session extractor tool');
+                    console.log('   4. The session ID should be 40+ characters long and contain %3A');
+                } else {
+                    console.log('❌ Unexpected error during session validation');
+                    console.log('🔧 Please check your internet connection and try again');
+                }
+                
                 this.isLoggedIn = false;
                 return false;
             }
