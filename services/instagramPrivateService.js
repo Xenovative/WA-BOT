@@ -555,16 +555,33 @@ class InstagramPrivateService {
                 }
 
                 if (response && response.trim()) {
-                    console.log(`Generated response for ${chatId}: ${response.substring(0, 100)}...`);
-                    await this.sendDirectMessage(thread.thread_id, response);
+                    console.log(`🤖 Generated response for ${chatId}: ${response.substring(0, 100)}...`);
+                    
+                    try {
+                        console.log(`📤 Attempting to send AI response to Instagram thread ${thread.thread_id}`);
+                        await this.sendDirectMessage(thread.thread_id, response);
+                        console.log(`✅ Successfully sent AI response to Instagram for ${chatId}`);
+                    } catch (sendError) {
+                        console.error(`❌ Failed to send AI response to Instagram for ${chatId}:`, sendError);
+                        console.error('Send error stack:', sendError.stack);
+                        
+                        // Try alternative sending method
+                        try {
+                            console.log(`🔄 Trying alternative send method for ${chatId}`);
+                            await this.sendDirectMessageToUser(senderId, response);
+                            console.log(`✅ Successfully sent AI response via alternative method for ${chatId}`);
+                        } catch (altSendError) {
+                            console.error(`❌ Alternative send method also failed for ${chatId}:`, altSendError);
+                        }
+                    }
                     
                     // Save assistant response
                     if (global.chatHandler) {
                         global.chatHandler.addMessage(senderId, 'assistant', response, 'instagram');
-                        console.log(`Saved assistant response to chat history for ${chatId}`);
+                        console.log(`💾 Saved assistant response to chat history for ${chatId}`);
                     }
                 } else {
-                    console.log(`No response generated for ${chatId}`);
+                    console.log(`⚠️ No response generated for ${chatId}`);
                 }
             } catch (llmError) {
                 console.error(`Error generating LLM response for ${chatId}:`, llmError);
@@ -587,17 +604,27 @@ class InstagramPrivateService {
      */
     async sendDirectMessage(threadId, messageText) {
         try {
+            console.log(`📨 SendDirectMessage called - ThreadID: ${threadId}, MessageLength: ${messageText?.length}`);
+            
             if (!this.isLoggedIn) {
                 throw new Error('Not logged in to Instagram');
             }
 
+            console.log(`🔗 Creating thread entity for threadId: ${threadId}`);
             const thread = this.ig.entity.directThread(threadId);
+            
+            console.log(`📤 Broadcasting text message: "${messageText.substring(0, 50)}${messageText.length > 50 ? '...' : ''}"`);
             await thread.broadcastText(messageText);
             
-            console.log('Instagram DM sent successfully');
+            console.log(`✅ Instagram DM sent successfully to thread ${threadId}`);
             return true;
         } catch (error) {
-            console.error('Error sending Instagram DM:', error);
+            console.error(`❌ Error sending Instagram DM to thread ${threadId}:`, error);
+            console.error('Send DM error details:', {
+                message: error.message,
+                name: error.name,
+                stack: error.stack?.split('\n')[0] // First line of stack
+            });
             throw error;
         }
     }
