@@ -445,7 +445,30 @@ class PlatformManager {
                     config.authMethod = authMethod;
                     
                     if (authMethod === 'app_state') {
-                        config.appState = document.getElementById('facebook-app-state')?.value;
+                        const appStateValue = document.getElementById('facebook-app-state')?.value;
+                        config.appState = appStateValue;
+                        
+                        // Validate app state before sending
+                        if (appStateValue && appStateValue.trim() !== '') {
+                            try {
+                                const appState = JSON.parse(appStateValue);
+                                
+                                // Check for template placeholders
+                                const templateCookies = ['c_user', 'xs', 'datr'].filter(cookieName => {
+                                    const cookie = appState.find(c => c.key === cookieName);
+                                    return cookie && cookie.value && 
+                                        (cookie.value.includes('PASTE_YOUR_') || cookie.value.includes('_HERE'));
+                                });
+                                
+                                if (templateCookies.length > 0) {
+                                    if (!confirm('Facebook app state still contains template placeholders. Are you sure you want to continue?')) {
+                                        return null; // Cancel connection
+                                    }
+                                }
+                            } catch (e) {
+                                // Invalid JSON, let server handle it
+                            }
+                        }
                     } else {
                         config.email = document.getElementById('facebook-email')?.value;
                         config.password = document.getElementById('facebook-password')?.value;

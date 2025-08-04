@@ -1,5 +1,29 @@
 const login = require('facebook-chat-api');
 
+/**
+ * Validate Facebook app state format and required cookies
+ * @param {Array} appState - Array of cookie objects
+ * @returns {boolean} - Whether app state is valid
+ */
+function validateFacebookAppState(appState) {
+    if (!Array.isArray(appState)) {
+        return false;
+    }
+    
+    // Check for required cookies
+    const requiredCookies = ['c_user', 'xs', 'datr'];
+    const foundCookies = requiredCookies.filter(cookieName => 
+        appState.some(cookie => cookie.key === cookieName && cookie.value && cookie.value.trim() !== '')
+    );
+    
+    // Also check for common cookie structure
+    const hasValidStructure = appState.every(cookie => 
+        (cookie.key || cookie.name) && cookie.value !== undefined
+    );
+    
+    return foundCookies.length >= 3 && hasValidStructure; // At least 3 required cookies and valid structure
+}
+
 class FacebookChatService {
     constructor(email, password, appState = null) {
         this.email = email;
@@ -23,6 +47,38 @@ class FacebookChatService {
     }
 
     /**
+     * Validate Facebook app state format and required cookies
+     * @param {Array} appState - Array of cookie objects
+     * @returns {boolean} - Whether app state is valid
+     */
+    validateAppState(appState) {
+        return validateFacebookAppState(appState);
+    }
+
+    /**
+     * Test if app state is likely to work for login
+     * @param {Array} appState - Array of cookie objects
+     * @returns {boolean} - Whether app state is likely valid for login
+     */
+    testAppStateValidity(appState) {
+        if (!this.validateAppState(appState)) {
+            return false;
+        }
+        
+        // Check if required cookies have non-empty values
+        const requiredCookies = ['c_user', 'xs', 'datr'];
+        for (const cookieName of requiredCookies) {
+            const cookie = appState.find(c => c.key === cookieName);
+            if (!cookie || !cookie.value || cookie.value.trim() === '' || 
+                cookie.value.includes('PASTE_YOUR_') || cookie.value.includes('_HERE')) {
+                return false;
+            }
+        }
+        
+        return true;
+    }
+
+    /**
      * Load saved app state for persistent login
      */
     loadAppState() {
@@ -30,7 +86,43 @@ class FacebookChatService {
             // First, try to use app state from environment variable
             if (this.appState) {
                 console.log('🌍 Loading Facebook app state from environment variable...');
-                const appState = typeof this.appState === 'string' ? JSON.parse(this.appState) : this.appState;
+                
+                // Parse app state
+                let appState;
+                if (typeof this.appState === 'string') {
+                    try {
+                        appState = JSON.parse(this.appState);
+                    } catch (parseError) {
+                        console.log('❌ Invalid JSON in FACEBOOK_APP_STATE environment variable');
+                        console.log('   • Error:', parseError.message);
+                        console.log('   • Make sure FACEBOOK_APP_STATE contains valid JSON');
+                        return null;
+                    }
+                } else {
+                    appState = this.appState;
+                }
+                
+                // Validate app state format
+                if (!this.validateAppState(appState)) {
+                    console.log('❌ Invalid Facebook app state format');
+                    console.log('   • App state must be an array of cookie objects');
+                    console.log('   • Required cookies: c_user, xs, datr');
+                    
+                    // Show what we got
+                    if (Array.isArray(appState)) {
+                        console.log(`   • Found ${appState.length} cookies in app state`);
+                        appState.slice(0, 5).forEach((cookie, index) => {
+                            console.log(`     ${index + 1}. ${cookie.key || cookie.name || 'unknown'}: ${cookie.value ? '✓' : '✗'}`);
+                        });
+                        if (appState.length > 5) {
+                            console.log(`     ... and ${appState.length - 5} more cookies`);
+                        }
+                    } else {
+                        console.log('   • App state is not an array:', typeof appState);
+                    }
+                    return null;
+                }
+                
                 console.log(`✅ Loaded app state with ${appState.length} cookies from environment`);
                 return appState;
             }
@@ -39,6 +131,13 @@ class FacebookChatService {
             const fs = require('fs');
             if (fs.existsSync(this.appStatePath)) {
                 const appState = JSON.parse(fs.readFileSync(this.appStatePath, 'utf8'));
+                
+                // Validate app state format
+                if (!this.validateAppState(appState)) {
+                    console.log('❌ Invalid Facebook app state format in file');
+                    return null;
+                }
+                
                 console.log(`📱 Loaded Facebook app state from file (${appState.length} cookies)`);
                 return appState;
             }
@@ -114,9 +213,31 @@ class FacebookChatService {
                 
                 // Add authentication method
                 if (appState) {
+                    // Test app state validity
+                    if (!this.testAppStateValidity(appState)) {
+                        console.log('⚠️ Facebook app state may be invalid or contain template placeholders');
+                        console.log('   • Make sure all required cookies have actual values');
+                        console.log('   • Required cookies: c_user, xs, datr');
+                        
+                        // Still proceed but with warning
+                    }
+                    
                     // App state authentication (preferred)
                     loginOptions.appState = appState;
                     console.log('📱 Using app state authentication');
+                    
+                    // Log app state info for debugging
+                    const requiredCookies = ['c_user', 'xs', 'datr', 'sb'];
+                    requiredCookies.forEach(cookieName => {
+                        const cookie = appState.find(c => c.key === cookieName);
+                        if (cookie) {
+                            const hasValue = cookie.value && cookie.value.trim() !== '';
+                            const isTemplate = cookie.value && (cookie.value.includes('PASTE_YOUR_') || cookie.value.includes('_HERE'));
+                            console.log(`   • ${cookieName}: ${hasValue && !isTemplate ? '✓ Present' : isTemplate ? '⚠️ Template' : '✗ Empty'}`);
+                        } else {
+                            console.log(`   • ${cookieName}: ✗ Not found`);
+                        }
+                    });
                 } else {
                     // Email/password authentication (fallback)
                     loginOptions.email = this.email;
@@ -225,6 +346,41 @@ class FacebookChatService {
         this.api.listen((err, message) => {
             if (err) {
                 console.error('Facebook listen error:', err);
+                
+                // Handle specific error types
+                if (err.message && err.message.includes('404')) {
+                    console.log('');
+                    console.log('🚨 FACEBOOK API ENDPOINT NOT FOUND (404):');
+                    console.log('   • The Facebook unofficial API endpoint is currently unavailable');
+                    console.log('   • This is likely due to Facebook blocking the unofficial API');
+                    console.log('');
+                    console.log('🔧 IMMEDIATE SOLUTIONS:');
+                    console.log('   1. 🌟 Switch to Facebook Messenger Official API (recommended)');
+                    console.log('      - Set FACEBOOK_PAGE_ACCESS_TOKEN in .env');
+                    console.log('      - Configure webhook URL in Facebook Developer Portal');
+                    console.log('');
+                    console.log('   2. 🔄 Refresh your Facebook app state:');
+                    console.log('      - Re-extract app state using facebook-session-extractor.html');
+                    console.log('      - Update FACEBOOK_APP_STATE in .env with new values');
+                    console.log('');
+                    console.log('   3. 🌐 Try a different network/connection:');
+                    console.log('      - Use a VPN or different IP address');
+                    console.log('      - Restart your router/modem');
+                    console.log('');
+                } else if (err.message && err.message.includes('ECONN')) {
+                    console.log('');
+                    console.log('🌐 FACEBOOK CONNECTION ERROR:');
+                    console.log('   • Cannot connect to Facebook servers');
+                    console.log('   • Check your internet connection');
+                    console.log('');
+                }
+                
+                // Try to reinitialize connection after a delay
+                setTimeout(() => {
+                    console.log('🔄 Attempting to reinitialize Facebook connection...');
+                    this.initialize();
+                }, 30000); // 30 second delay
+                
                 return;
             }
 
