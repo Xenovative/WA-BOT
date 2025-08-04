@@ -99,14 +99,31 @@ class InstagramPrivateService {
                 // Generate device ID for consistency
                 this.ig.state.generateDevice('session_user');
                 
-                // Create a minimal state object with session cookie
-                const stateData = {
-                    constants: {},
-                    cookies: `{"version":"tough-cookie@4.0.0","storeType":"MemoryCookieStore","rejectPublicSuffixes":true,"cookies":[{"key":"sessionid","value":"${sessionData.sessionid}","domain":".instagram.com","path":"/","httpOnly":true,"secure":true,"sameSite":"none"}]}`
-                };
+                console.log('Instagram Private API: Setting session cookie...');
                 
-                // Deserialize the state with session cookie
-                await this.ig.state.deserialize(JSON.stringify(stateData));
+                // Try multiple approaches to set the session
+                
+                // Method 1: Direct cookie jar manipulation
+                try {
+                    const cookieString = `sessionid=${sessionData.sessionid}; Domain=.instagram.com; Path=/; HttpOnly; Secure`;
+                    await this.ig.state.cookieJar.setCookie(cookieString, 'https://www.instagram.com/');
+                    console.log('Method 1: Cookie set via cookieJar.setCookie');
+                } catch (cookieError) {
+                    console.log('Method 1 failed:', cookieError.message);
+                    
+                    // Method 2: State deserialization
+                    try {
+                        const stateData = {
+                            constants: {},
+                            cookies: `{"version":"tough-cookie@4.0.0","storeType":"MemoryCookieStore","rejectPublicSuffixes":true,"cookies":[{"key":"sessionid","value":"${sessionData.sessionid}","domain":".instagram.com","path":"/","httpOnly":true,"secure":true,"sameSite":"none"}]}`
+                        };
+                        await this.ig.state.deserialize(JSON.stringify(stateData));
+                        console.log('Method 2: Cookie set via state deserialization');
+                    } catch (deserializeError) {
+                        console.log('Method 2 failed:', deserializeError.message);
+                        throw new Error('Both cookie setting methods failed');
+                    }
+                }
                 
                 console.log('Instagram Private API: Session cookie set, attempting to verify...');
                 
@@ -157,6 +174,8 @@ class InstagramPrivateService {
      */
     parseSessionId(sessionIdString) {
         try {
+            console.log('Parsing session ID:', sessionIdString.substring(0, 20) + '...');
+            
             // Handle different session ID formats
             let sessionid;
             
@@ -164,17 +183,35 @@ class InstagramPrivateService {
                 // Extract from cookie format: "sessionid=12345678%3A..."
                 const match = sessionIdString.match(/sessionid=([^;\s]+)/);
                 if (match) {
-                    sessionid = decodeURIComponent(match[1]);
+                    sessionid = match[1]; // Keep URL-encoded format
                 }
             } else {
-                // Assume it's just the session ID value
+                // Assume it's just the session ID value - keep as-is
                 sessionid = sessionIdString.trim();
+                
+                // If it doesn't contain %3A, it might be already decoded - re-encode it
+                if (!sessionid.includes('%3A') && sessionid.includes(':')) {
+                    sessionid = encodeURIComponent(sessionid);
+                    console.log('Re-encoded session ID to URL format');
+                }
             }
             
             if (!sessionid) {
+                console.error('No session ID found after parsing');
                 return null;
             }
             
+            // Validate session ID format
+            if (sessionid.length < 20) {
+                console.error('Session ID too short:', sessionid.length, 'characters');
+                return null;
+            }
+            
+            if (!sessionid.includes('%3A')) {
+                console.warn('Session ID may be in wrong format - should contain %3A');
+            }
+            
+            console.log('Parsed session ID successfully, length:', sessionid.length);
             return { sessionid };
         } catch (error) {
             console.error('Error parsing session ID:', error);
