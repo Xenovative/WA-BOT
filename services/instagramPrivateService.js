@@ -224,16 +224,34 @@ class InstagramPrivateService {
      */
     startDirectMessageListener() {
         try {
-            // Check for new messages every 30 seconds
+            console.log('Starting Instagram DM listener...');
+            
+            // Clear any existing interval
+            if (this.messageCheckInterval) {
+                clearInterval(this.messageCheckInterval);
+            }
+            
+            // Do an immediate check for messages
+            if (this.isLoggedIn) {
+                console.log('Doing initial message check...');
+                this.checkForNewMessages().catch(error => {
+                    console.error('Initial message check failed:', error);
+                });
+            }
+            
+            // Check for new messages every 15 seconds (more frequent)
             this.messageCheckInterval = setInterval(async () => {
                 if (this.isLoggedIn) {
+                    console.log('🔍 Checking for new Instagram messages...');
                     await this.checkForNewMessages();
+                } else {
+                    console.log('⚠️ Instagram not logged in, skipping message check');
                 }
-            }, 30000);
+            }, 15000); // Reduced from 30 seconds to 15 seconds
 
-            console.log('Instagram DM listener started');
+            console.log('✅ Instagram DM listener started (checking every 15 seconds)');
         } catch (error) {
-            console.error('Error starting Instagram DM listener:', error);
+            console.error('❌ Error starting Instagram DM listener:', error);
         }
     }
 
@@ -242,10 +260,16 @@ class InstagramPrivateService {
      */
     async checkForNewMessages() {
         try {
+            console.log('📬 Fetching Instagram inbox...');
             const inbox = this.ig.feed.directInbox();
             const threads = await inbox.items();
             
-            console.log(`Checking ${threads.length} Instagram threads for new messages`);
+            console.log(`📋 Found ${threads.length} Instagram conversation threads`);
+            
+            if (threads.length === 0) {
+                console.log('📭 No Instagram conversations found. Send a message to your Instagram account to test!');
+                return;
+            }
 
             for (const thread of threads) {
                 // Check if this is a new message
