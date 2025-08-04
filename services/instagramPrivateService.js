@@ -406,13 +406,25 @@ class InstagramPrivateService {
                         }
                     };
                     
-                    // Extract voice duration (if available) - be more conservative with default
-                    const actualDuration = message.voice_media?.media?.audio?.duration;
+                    // Extract voice duration (if available) - Instagram might use milliseconds
+                    const rawDuration = message.voice_media?.media?.audio?.duration;
+                    let actualDuration;
+                    
+                    if (rawDuration) {
+                        // If duration seems too large, it's likely in milliseconds - convert to seconds
+                        if (rawDuration > 300) { // If > 5 minutes, assume it's milliseconds
+                            actualDuration = Math.round(rawDuration / 1000);
+                            console.log(`🔄 Converted duration from ${rawDuration}ms to ${actualDuration}s`);
+                        } else {
+                            actualDuration = rawDuration;
+                        }
+                    }
+                    
                     const voiceData = {
-                        seconds: actualDuration || 30 // Use 30s default instead of 60s
+                        seconds: actualDuration || 30 // Use 30s default if no duration available
                     };
                     
-                    console.log(`⏱️ Voice message duration: ${voiceData.seconds}s (actual: ${actualDuration || 'unknown'})`);
+                    console.log(`⏱️ Voice message duration: ${voiceData.seconds}s (raw: ${rawDuration || 'unknown'})`);
                     
                     // Process voice message with voiceHandler
                     console.log('🎤 Processing voice with voiceHandler...');
