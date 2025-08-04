@@ -858,13 +858,47 @@
                                             <!-- App State Authentication -->
                                             <div id="facebook-app-state-auth" class="auth-method-config">
                                                 <div class="mb-3">
-                                                    <label for="facebook-app-state" class="form-label" data-i18n="platforms.app_state">App State:</label>
-                                                    <textarea class="form-control" id="facebook-app-state" rows="4" placeholder='[{"key":"c_user","value":"123456789","domain":".facebook.com"},{"key":"xs","value":"abc123def456","domain":".facebook.com"}]'></textarea>
-                                                    <div class="form-text" data-i18n="platforms.facebook_app_state_help">Extract app state cookies from browser after logging into Facebook</div>
+                                                    <div class="d-flex justify-content-between align-items-center mb-2">
+                                                        <label for="facebook-app-state" class="form-label mb-0" data-i18n="platforms.app_state">App State:</label>
+                                                        <div class="btn-group btn-group-sm" role="group">
+                                                            <button type="button" class="btn btn-outline-primary" id="facebook-validate-btn" title="Validate App State">
+                                                                <i class="bi bi-check-circle"></i> Validate
+                                                            </button>
+                                                            <button type="button" class="btn btn-outline-secondary" id="facebook-format-btn" title="Format JSON">
+                                                                <i class="bi bi-code"></i> Format
+                                                            </button>
+                                                            <button type="button" class="btn btn-outline-info" id="facebook-help-btn" title="How to Extract">
+                                                                <i class="bi bi-question-circle"></i> Help
+                                                            </button>
+                                                        </div>
+                                                    </div>
+                                                    <div class="position-relative">
+                                                        <textarea class="form-control font-monospace" id="facebook-app-state" rows="6" 
+                                                                  placeholder='Paste your Facebook app state JSON here...
+
+Example format:
+[{"key":"c_user","value":"123456789","domain":".facebook.com"},{"key":"xs","value":"abc123def456","domain":".facebook.com"},{"key":"datr","value":"xyz789","domain":".facebook.com"},{"key":"sb","value":"def456","domain":".facebook.com"}]'
+                                                                  style="resize: vertical; min-height: 120px;"></textarea>
+                                                        <div id="facebook-app-state-status" class="position-absolute top-0 end-0 me-2 mt-2" style="z-index: 5;"></div>
+                                                    </div>
+                                                    <div class="form-text mt-2">
+                                                        <i class="bi bi-info-circle me-1"></i>
+                                                        <span data-i18n="platforms.facebook_app_state_help">Extract app state cookies from browser after logging into Facebook</span>
+                                                        <br>
+                                                        <small class="text-muted">Required cookies: c_user, xs, datr, sb</small>
+                                                    </div>
                                                 </div>
+                                                
+                                                <!-- Validation Results -->
+                                                <div id="facebook-validation-result" class="mb-3" style="display: none;"></div>
+                                                
                                                 <div class="alert alert-info small">
-                                                    <i class="bi bi-info-circle me-1"></i>
-                                                    <span data-i18n="platforms.facebook_app_state_info">App State method is more stable and avoids login challenges</span>
+                                                    <i class="bi bi-shield-check me-1"></i>
+                                                    <strong>Benefits:</strong> <span data-i18n="platforms.facebook_app_state_info">App State method is more stable and avoids login challenges</span>
+                                                    <br>
+                                                    <small class="text-muted mt-1 d-block">
+                                                        • No 2FA issues • Bypasses bot detection • Longer session life • More reliable connection
+                                                    </small>
                                                 </div>
                                             </div>
                                             

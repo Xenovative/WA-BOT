@@ -749,10 +749,240 @@ function handleFacebookAuthMethodChange() {
     if (authMethod === 'app_state') {
         appStateAuth.style.display = 'block';
         loginAuth.style.display = 'none';
+        initializeFacebookAppStateHelpers();
     } else {
         appStateAuth.style.display = 'none';
         loginAuth.style.display = 'block';
     }
+}
+
+// Initialize Facebook App State helper functions
+function initializeFacebookAppStateHelpers() {
+    const textarea = document.getElementById('facebook-app-state');
+    const validateBtn = document.getElementById('facebook-validate-btn');
+    const formatBtn = document.getElementById('facebook-format-btn');
+    const helpBtn = document.getElementById('facebook-help-btn');
+    const statusDiv = document.getElementById('facebook-app-state-status');
+    const resultDiv = document.getElementById('facebook-validation-result');
+    
+    if (!textarea || !validateBtn || !formatBtn || !helpBtn) return;
+    
+    // Real-time validation on input
+    textarea.addEventListener('input', () => {
+        validateFacebookAppState(false);
+    });
+    
+    // Validate button
+    validateBtn.addEventListener('click', () => {
+        validateFacebookAppState(true);
+    });
+    
+    // Format button
+    formatBtn.addEventListener('click', () => {
+        formatFacebookAppState();
+    });
+    
+    // Help button
+    helpBtn.addEventListener('click', () => {
+        showFacebookAppStateHelp();
+    });
+}
+
+// Validate Facebook App State
+function validateFacebookAppState(showDetails = false) {
+    const textarea = document.getElementById('facebook-app-state');
+    const statusDiv = document.getElementById('facebook-app-state-status');
+    const resultDiv = document.getElementById('facebook-validation-result');
+    
+    if (!textarea || !statusDiv) return;
+    
+    const value = textarea.value.trim();
+    
+    // Clear previous status
+    statusDiv.innerHTML = '';
+    if (resultDiv) resultDiv.style.display = 'none';
+    
+    if (!value) {
+        if (showDetails && resultDiv) {
+            resultDiv.innerHTML = '<div class="alert alert-warning small"><i class="bi bi-exclamation-triangle me-1"></i>Please paste your Facebook app state JSON</div>';
+            resultDiv.style.display = 'block';
+        }
+        return;
+    }
+    
+    try {
+        const appState = JSON.parse(value);
+        
+        // Check if it's an array
+        if (!Array.isArray(appState)) {
+            throw new Error('App state must be an array of cookie objects');
+        }
+        
+        // Required cookies
+        const requiredCookies = ['c_user', 'xs', 'datr', 'sb'];
+        const foundCookies = appState.map(cookie => cookie.key || cookie.name).filter(Boolean);
+        const missingCookies = requiredCookies.filter(required => !foundCookies.includes(required));
+        
+        // Check cookie structure
+        const invalidCookies = appState.filter(cookie => {
+            return !cookie.key && !cookie.name || !cookie.value;
+        });
+        
+        if (invalidCookies.length > 0) {
+            throw new Error('Some cookies are missing key or value properties');
+        }
+        
+        // Show status
+        if (missingCookies.length === 0) {
+            statusDiv.innerHTML = '<span class="badge bg-success"><i class="bi bi-check-circle"></i> Valid</span>';
+            if (showDetails && resultDiv) {
+                resultDiv.innerHTML = `
+                    <div class="alert alert-success small">
+                        <i class="bi bi-check-circle me-1"></i>
+                        <strong>Valid App State!</strong><br>
+                        Found ${appState.length} cookies including all required ones: ${requiredCookies.join(', ')}
+                    </div>
+                `;
+                resultDiv.style.display = 'block';
+            }
+        } else {
+            statusDiv.innerHTML = '<span class="badge bg-warning"><i class="bi bi-exclamation-triangle"></i> Incomplete</span>';
+            if (showDetails && resultDiv) {
+                resultDiv.innerHTML = `
+                    <div class="alert alert-warning small">
+                        <i class="bi bi-exclamation-triangle me-1"></i>
+                        <strong>Incomplete App State</strong><br>
+                        Missing required cookies: <code>${missingCookies.join(', ')}</code><br>
+                        Found cookies: <code>${foundCookies.join(', ')}</code>
+                    </div>
+                `;
+                resultDiv.style.display = 'block';
+            }
+        }
+        
+    } catch (error) {
+        statusDiv.innerHTML = '<span class="badge bg-danger"><i class="bi bi-x-circle"></i> Invalid</span>';
+        if (showDetails && resultDiv) {
+            resultDiv.innerHTML = `
+                <div class="alert alert-danger small">
+                    <i class="bi bi-x-circle me-1"></i>
+                    <strong>Invalid JSON:</strong> ${error.message}<br>
+                    <small class="text-muted">Make sure your app state is valid JSON format</small>
+                </div>
+            `;
+            resultDiv.style.display = 'block';
+        }
+    }
+}
+
+// Format Facebook App State JSON
+function formatFacebookAppState() {
+    const textarea = document.getElementById('facebook-app-state');
+    if (!textarea) return;
+    
+    const value = textarea.value.trim();
+    if (!value) return;
+    
+    try {
+        const appState = JSON.parse(value);
+        const formatted = JSON.stringify(appState, null, 2);
+        textarea.value = formatted;
+        validateFacebookAppState();
+    } catch (error) {
+        alert('Cannot format invalid JSON. Please fix the JSON syntax first.');
+    }
+}
+
+// Show Facebook App State extraction help
+function showFacebookAppStateHelp() {
+    const helpModal = `
+        <div class="modal fade" id="facebookAppStateHelpModal" tabindex="-1" aria-hidden="true">
+            <div class="modal-dialog modal-lg">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title">
+                            <i class="bi bi-facebook text-primary me-2"></i>
+                            How to Extract Facebook App State
+                        </h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                    </div>
+                    <div class="modal-body">
+                        <div class="alert alert-info">
+                            <i class="bi bi-info-circle me-1"></i>
+                            <strong>App State</strong> contains your Facebook session cookies that allow WA-BOT to authenticate without username/password.
+                        </div>
+                        
+                        <h6><i class="bi bi-1-circle text-primary me-1"></i> Login to Facebook</h6>
+                        <p>Open your browser and login to <strong>facebook.com</strong> with the account you want to use for the bot.</p>
+                        
+                        <h6><i class="bi bi-2-circle text-primary me-1"></i> Open Developer Tools</h6>
+                        <div class="row">
+                            <div class="col-md-4">
+                                <strong>Chrome/Edge:</strong><br>
+                                <kbd>F12</kbd> or <kbd>Ctrl+Shift+I</kbd><br>
+                                → Application tab → Cookies → facebook.com
+                            </div>
+                            <div class="col-md-4">
+                                <strong>Firefox:</strong><br>
+                                <kbd>F12</kbd> or <kbd>Ctrl+Shift+I</kbd><br>
+                                → Storage tab → Cookies → facebook.com
+                            </div>
+                            <div class="col-md-4">
+                                <strong>Safari:</strong><br>
+                                <kbd>Cmd+Opt+I</kbd><br>
+                                → Storage tab → Cookies → facebook.com
+                            </div>
+                        </div>
+                        
+                        <h6 class="mt-3"><i class="bi bi-3-circle text-primary me-1"></i> Find Required Cookies</h6>
+                        <p>Look for these 4 cookies and copy their <strong>Value</strong> (not the name):</p>
+                        <ul>
+                            <li><code>c_user</code> - Your Facebook user ID (numbers only)</li>
+                            <li><code>xs</code> - Session token (long string)</li>
+                            <li><code>datr</code> - Browser fingerprint</li>
+                            <li><code>sb</code> - Session browser token</li>
+                        </ul>
+                        
+                        <h6><i class="bi bi-4-circle text-primary me-1"></i> Format as JSON</h6>
+                        <p>Create a JSON array with this structure:</p>
+                        <pre class="bg-light p-2 rounded"><code>[{"key":"c_user","value":"YOUR_C_USER_VALUE","domain":".facebook.com"},{"key":"xs","value":"YOUR_XS_VALUE","domain":".facebook.com"},{"key":"datr","value":"YOUR_DATR_VALUE","domain":".facebook.com"},{"key":"sb","value":"YOUR_SB_VALUE","domain":".facebook.com"}]</code></pre>
+                        
+                        <div class="alert alert-warning mt-3">
+                            <i class="bi bi-shield-exclamation me-1"></i>
+                            <strong>Security Note:</strong> Treat your app state like a password. Don't share it or commit it to version control.
+                        </div>
+                        
+                        <div class="alert alert-success">
+                            <i class="bi bi-lightbulb me-1"></i>
+                            <strong>Pro Tip:</strong> You can also use the <code>facebook-session-extractor.html</code> tool in the utils folder for automatic extraction.
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                        <button type="button" class="btn btn-primary" onclick="window.open('/utils/facebook-session-extractor.html', '_blank')">Open Extractor Tool</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    `;
+    
+    // Remove existing modal
+    const existingModal = document.getElementById('facebookAppStateHelpModal');
+    if (existingModal) {
+        existingModal.remove();
+    }
+    
+    // Add modal to body
+    document.body.insertAdjacentHTML('beforeend', helpModal);
+    
+    // Show modal
+    const modal = new bootstrap.Modal(document.getElementById('facebookAppStateHelpModal'));
+    modal.show();
+    
+    // Clean up modal when hidden
+    document.getElementById('facebookAppStateHelpModal').addEventListener('hidden.bs.modal', function() {
+        this.remove();
+    });
 }
 
 // Initialize platform manager when DOM is loaded
@@ -775,6 +1005,10 @@ document.addEventListener('shown.bs.tab', (event) => {
         const facebookAuthMethod = document.getElementById('facebook-auth-method');
         if (facebookAuthMethod) {
             handleFacebookAuthMethodChange();
+            // Initialize app state helpers if app state is selected
+            if (facebookAuthMethod.value === 'app_state') {
+                setTimeout(() => initializeFacebookAppStateHelpers(), 100);
+            }
         }
         
         // Instagram authentication method initialization removed - session ID only
