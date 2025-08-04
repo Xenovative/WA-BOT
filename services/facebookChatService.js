@@ -11,8 +11,14 @@ class FacebookChatService {
         this.appStatePath = `./facebook_appstate_${Buffer.from(email || 'default').toString('base64').slice(0, 8)}.json`;
         
         console.log('Facebook Chat service initialized (unofficial API)');
+        
+        // Log authentication method
         if (this.appState) {
-            console.log('📱 App State authentication available - will use instead of email/password');
+            console.log('📱 Using Facebook App State authentication (recommended)');
+        } else if (this.email && this.password) {
+            console.log('🔑 Using Facebook email/password authentication');
+        } else {
+            console.log('⚠️ No Facebook authentication method configured');
         }
     }
 
@@ -21,24 +27,27 @@ class FacebookChatService {
      */
     loadAppState() {
         try {
-            // First try to use app state from environment variable or constructor
+            // First, try to use app state from environment variable
             if (this.appState) {
-                console.log('📱 Using Facebook app state from environment/constructor');
-                if (typeof this.appState === 'string') {
-                    return JSON.parse(this.appState);
-                }
-                return this.appState;
+                console.log('🌍 Loading Facebook app state from environment variable...');
+                const appState = typeof this.appState === 'string' ? JSON.parse(this.appState) : this.appState;
+                console.log(`✅ Loaded app state with ${appState.length} cookies from environment`);
+                return appState;
             }
             
             // Fallback to file-based app state
             const fs = require('fs');
             if (fs.existsSync(this.appStatePath)) {
                 const appState = JSON.parse(fs.readFileSync(this.appStatePath, 'utf8'));
-                console.log('📱 Loaded Facebook app state from file for persistent login');
+                console.log(`📱 Loaded Facebook app state from file (${appState.length} cookies)`);
                 return appState;
             }
         } catch (error) {
             console.log('⚠️ Could not load Facebook app state:', error.message);
+            if (this.appState) {
+                console.log('   • Check if FACEBOOK_APP_STATE is valid JSON format');
+                console.log('   • Make sure the app state was extracted correctly');
+            }
         }
         return null;
     }
@@ -62,13 +71,23 @@ class FacebookChatService {
     async initialize() {
         return new Promise((resolve, reject) => {
             try {
-                const appState = this.loadAppState();
+                // Check if we have any authentication method
+                const hasAppState = !!this.loadAppState();
+                const hasCredentials = !!(this.email && this.password);
                 
-                if (appState) {
-                    console.log('📱 Attempting Facebook login with App State (session-based)...');
-                } else {
-                    console.log('🔑 Attempting Facebook login with email/password...');
+                if (!hasAppState && !hasCredentials) {
+                    console.error('❌ No Facebook authentication method available');
+                    console.log('');
+                    console.log('🔧 SETUP REQUIRED:');
+                    console.log('   Option 1: Set FACEBOOK_APP_STATE in .env (recommended)');
+                    console.log('   Option 2: Set FACEBOOK_EMAIL and FACEBOOK_PASSWORD in .env');
+                    console.log('   Option 3: Use Facebook Messenger Official API instead');
+                    console.log('');
+                    resolve(false);
+                    return;
                 }
+                
+                console.log(`🔑 Attempting Facebook login (${hasAppState ? 'App State' : 'Email/Password'})...`);
                 
                 // Try multiple user agents to avoid detection
                 const userAgents = [
@@ -79,6 +98,8 @@ class FacebookChatService {
                 
                 const randomUserAgent = userAgents[Math.floor(Math.random() * userAgents.length)];
                 
+                const appState = this.loadAppState();
+                
                 const loginOptions = {
                     userAgent: randomUserAgent,
                     // Additional options to bypass Facebook restrictions
@@ -88,19 +109,20 @@ class FacebookChatService {
                     listenEvents: false,
                     updatePresence: false,
                     autoMarkDelivery: false,
-                    autoMarkRead: false,
-                    forceLogin: true  // Force login even with 2FA
+                    autoMarkRead: false
                 };
                 
-                // Use app state if available, otherwise use email/password
+                // Add authentication method
                 if (appState) {
+                    // App state authentication (preferred)
                     loginOptions.appState = appState;
+                    console.log('📱 Using app state authentication');
                 } else {
-                    if (!this.email || !this.password) {
-                        throw new Error('No app state provided and email/password missing');
-                    }
+                    // Email/password authentication (fallback)
                     loginOptions.email = this.email;
                     loginOptions.password = this.password;
+                    loginOptions.forceLogin = true;
+                    console.log('🔑 Using email/password authentication');
                 }
 
                 console.log(`🔑 Attempting Facebook login with enhanced options (User-Agent: ${randomUserAgent.includes('Chrome') ? 'Chrome' : randomUserAgent.includes('Firefox') ? 'Firefox' : 'Safari'})...`);
@@ -149,13 +171,6 @@ class FacebookChatService {
                             console.log('   3. Get Page Access Token from your Facebook page');
                             console.log('   4. Set FACEBOOK_PAGE_ACCESS_TOKEN in your .env file');
                             console.log('   5. Configure webhook URL for message receiving');
-                            console.log('');
-                            console.log('🎆 FACEBOOK APP STATE EXTRACTION (Alternative):');
-                            console.log('   1. Open utils/facebook-session-extractor.html in browser');
-                            console.log('   2. Navigate to facebook.com and login');
-                            console.log('   3. Extract your Facebook App State (cookies)');
-                            console.log('   4. Set FACEBOOK_APP_STATE in your .env file');
-                            console.log('   5. This bypasses email/password authentication');
                             console.log('');
                         }
                         

@@ -6,285 +6,205 @@
     <title>Facebook Session Extractor - WA-BOT</title>
     <style>
         body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
             max-width: 800px;
             margin: 0 auto;
             padding: 20px;
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             min-height: 100vh;
+            color: #333;
         }
+        
         .container {
             background: white;
-            border-radius: 12px;
+            border-radius: 15px;
             padding: 30px;
             box-shadow: 0 10px 30px rgba(0,0,0,0.2);
         }
-        h1 {
-            color: #1877f2;
+        
+        .header {
             text-align: center;
-            margin-bottom: 10px;
-        }
-        .subtitle {
-            text-align: center;
-            color: #666;
             margin-bottom: 30px;
         }
+        
+        .header h1 {
+            color: #1877f2;
+            margin: 0;
+            font-size: 2.5em;
+        }
+        
+        .header p {
+            color: #666;
+            margin: 10px 0;
+            font-size: 1.1em;
+        }
+        
         .step {
             background: #f8f9fa;
             border-left: 4px solid #1877f2;
-            padding: 15px;
-            margin: 15px 0;
-            border-radius: 0 8px 8px 0;
+            padding: 20px;
+            margin: 20px 0;
+            border-radius: 5px;
         }
+        
         .step h3 {
-            margin: 0 0 10px 0;
+            margin-top: 0;
             color: #1877f2;
         }
-        .warning {
-            background: #fff3cd;
-            border: 1px solid #ffeaa7;
-            border-radius: 8px;
-            padding: 15px;
-            margin: 20px 0;
-            color: #856404;
-        }
-        .success {
-            background: #d4edda;
-            border: 1px solid #c3e6cb;
-            border-radius: 8px;
-            padding: 15px;
-            margin: 20px 0;
-            color: #155724;
-        }
-        .error {
-            background: #f8d7da;
-            border: 1px solid #f5c6cb;
-            border-radius: 8px;
-            padding: 15px;
-            margin: 20px 0;
-            color: #721c24;
-        }
-        button {
+        
+        .button {
             background: #1877f2;
             color: white;
             border: none;
             padding: 12px 24px;
-            border-radius: 6px;
+            border-radius: 8px;
             cursor: pointer;
             font-size: 16px;
             margin: 10px 5px;
-            transition: background-color 0.2s;
+            transition: background 0.3s;
         }
-        button:hover {
+        
+        .button:hover {
             background: #166fe5;
         }
-        button:disabled {
+        
+        .button:disabled {
             background: #ccc;
             cursor: not-allowed;
         }
-        textarea {
+        
+        .success {
+            background: #d4edda;
+            border: 1px solid #c3e6cb;
+            color: #155724;
+            padding: 15px;
+            border-radius: 5px;
+            margin: 15px 0;
+        }
+        
+        .error {
+            background: #f8d7da;
+            border: 1px solid #f5c6cb;
+            color: #721c24;
+            padding: 15px;
+            border-radius: 5px;
+            margin: 15px 0;
+        }
+        
+        .warning {
+            background: #fff3cd;
+            border: 1px solid #ffeaa7;
+            color: #856404;
+            padding: 15px;
+            border-radius: 5px;
+            margin: 15px 0;
+        }
+        
+        .session-output {
+            background: #f1f3f4;
+            border: 1px solid #ddd;
+            padding: 15px;
+            border-radius: 5px;
+            font-family: monospace;
+            font-size: 12px;
+            word-break: break-all;
+            max-height: 200px;
+            overflow-y: auto;
+            margin: 15px 0;
+        }
+        
+        .manual-input {
             width: 100%;
-            min-height: 200px;
-            border: 2px solid #ddd;
-            border-radius: 6px;
-            padding: 12px;
-            font-family: 'Courier New', monospace;
+            height: 150px;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            font-family: monospace;
             font-size: 12px;
             resize: vertical;
-            box-sizing: border-box;
         }
-        .status {
-            padding: 10px;
-            border-radius: 6px;
-            margin: 10px 0;
-            font-weight: bold;
-        }
-        .status.checking {
-            background: #e3f2fd;
-            color: #1976d2;
-        }
-        .status.success {
-            background: #e8f5e8;
-            color: #2e7d32;
-        }
-        .status.error {
-            background: #ffebee;
-            color: #c62828;
-        }
-        .manual-section {
+        
+        .browser-specific {
             display: none;
-            margin-top: 20px;
+            background: #e3f2fd;
+            border: 1px solid #bbdefb;
+            padding: 15px;
+            border-radius: 5px;
+            margin: 10px 0;
         }
+        
         .browser-tabs {
             display: flex;
             margin-bottom: 15px;
         }
+        
         .browser-tab {
-            padding: 8px 16px;
-            background: #f0f0f0;
+            background: #f5f5f5;
             border: 1px solid #ddd;
+            padding: 8px 16px;
             cursor: pointer;
-            border-radius: 6px 6px 0 0;
+            border-radius: 5px 5px 0 0;
             margin-right: 5px;
         }
+        
         .browser-tab.active {
             background: #1877f2;
             color: white;
+            border-color: #1877f2;
         }
-        .browser-content {
-            display: none;
+        
+        .code {
             background: #f8f9fa;
-            padding: 15px;
-            border-radius: 0 6px 6px 6px;
-            border: 1px solid #ddd;
-        }
-        .browser-content.active {
-            display: block;
-        }
-        .copy-btn {
-            background: #28a745;
-            font-size: 14px;
-            padding: 8px 16px;
-        }
-        .copy-btn:hover {
-            background: #218838;
-        }
-        code {
-            background: #f1f3f4;
             padding: 2px 6px;
             border-radius: 3px;
-            font-family: 'Courier New', monospace;
+            font-family: monospace;
+            color: #e83e8c;
         }
     </style>
 </head>
 <body>
     <div class="container">
-        <h1>🔵 Facebook Session Extractor</h1>
-        <p class="subtitle">Extract Facebook App State for WA-BOT Authentication</p>
-        
+        <div class="header">
+            <h1>🔵 Facebook Session Extractor</h1>
+            <p>Extract Facebook App State for WA-BOT Authentication</p>
+        </div>
+
         <div class="warning">
             <strong>⚠️ Important:</strong> This tool must be used on <strong>facebook.com</strong> while you're logged in. 
-            Make sure you're logged into the Facebook account you want to use for the bot.
+            The extracted session will allow WA-BOT to access your Facebook Messenger without username/password.
         </div>
 
         <div class="step">
-            <h3>Step 1: Navigate to Facebook</h3>
-            <p>Go to <a href="https://www.facebook.com" target="_blank">facebook.com</a> and make sure you're logged in to your bot account.</p>
+            <h3>📋 Instructions</h3>
+            <ol>
+                <li>Make sure you're logged into <strong>facebook.com</strong> in this browser</li>
+                <li>Open this page on the <strong>facebook.com</strong> domain (not locally)</li>
+                <li>Click "Extract Facebook App State" below</li>
+                <li>Copy the generated app state to your WA-BOT configuration</li>
+            </ol>
         </div>
+
+        <div style="text-align: center; margin: 30px 0;">
+            <button class="button" onclick="extractAppState()">🔍 Extract Facebook App State</button>
+            <button class="button" onclick="showManualInstructions()">📖 Manual Instructions</button>
+            <button class="button" onclick="testAppState()" id="testBtn" disabled>🧪 Test App State</button>
+        </div>
+
+        <div id="status"></div>
+        <div id="sessionOutput"></div>
+        <div id="manualInstructions" style="display: none;"></div>
 
         <div class="step">
-            <h3>Step 2: Extract App State</h3>
-            <button onclick="extractAppState()" id="extractBtn">🔍 Extract Facebook App State</button>
-            <div id="status"></div>
-        </div>
-
-        <div id="manualSection" class="manual-section">
-            <div class="error">
-                <strong>🚫 Automatic Extraction Failed</strong><br>
-                Facebook cookies are HttpOnly and cannot be accessed automatically. Please follow the manual extraction steps below.
-            </div>
-
-            <h3>Manual App State Extraction</h3>
-            <div class="browser-tabs">
-                <div class="browser-tab active" onclick="showBrowser('chrome')">Chrome</div>
-                <div class="browser-tab" onclick="showBrowser('firefox')">Firefox</div>
-                <div class="browser-tab" onclick="showBrowser('safari')">Safari</div>
-                <div class="browser-tab" onclick="showBrowser('edge')">Edge</div>
-            </div>
-
-            <div id="chrome" class="browser-content active">
-                <h4>Chrome Instructions:</h4>
-                <ol>
-                    <li>Make sure you're on <strong>facebook.com</strong> and logged in</li>
-                    <li>Press <code>F12</code> to open Developer Tools</li>
-                    <li>Go to the <strong>Console</strong> tab</li>
-                    <li>Paste this code and press Enter:</li>
-                </ol>
-                <textarea readonly onclick="this.select()">
-// Facebook App State Extractor
-function getFacebookAppState() {
-    const cookies = document.cookie.split(';');
-    const appState = [];
-    
-    cookies.forEach(cookie => {
-        const [name, value] = cookie.trim().split('=');
-        if (name && value) {
-            appState.push({
-                key: name,
-                value: decodeURIComponent(value),
-                domain: '.facebook.com',
-                path: '/',
-                hostOnly: false,
-                creation: new Date().toISOString(),
-                lastAccessed: new Date().toISOString()
-            });
-        }
-    });
-    
-    console.log('Facebook App State:');
-    console.log(JSON.stringify(appState, null, 2));
-    return appState;
-}
-
-getFacebookAppState();
-                </textarea>
-                <p><strong>5.</strong> Copy the JSON output that appears in the console</p>
-            </div>
-
-            <div id="firefox" class="browser-content">
-                <h4>Firefox Instructions:</h4>
-                <ol>
-                    <li>Make sure you're on <strong>facebook.com</strong> and logged in</li>
-                    <li>Press <code>F12</code> to open Developer Tools</li>
-                    <li>Go to the <strong>Console</strong> tab</li>
-                    <li>Paste the same JavaScript code as Chrome and press Enter</li>
-                    <li>Copy the JSON output from the console</li>
-                </ol>
-            </div>
-
-            <div id="safari" class="browser-content">
-                <h4>Safari Instructions:</h4>
-                <ol>
-                    <li>Enable Developer menu: Safari → Preferences → Advanced → Show Develop menu</li>
-                    <li>Make sure you're on <strong>facebook.com</strong> and logged in</li>
-                    <li>Press <code>Cmd+Option+C</code> to open Web Inspector</li>
-                    <li>Go to the <strong>Console</strong> tab</li>
-                    <li>Paste the JavaScript code and press Enter</li>
-                    <li>Copy the JSON output from the console</li>
-                </ol>
-            </div>
-
-            <div id="edge" class="browser-content">
-                <h4>Edge Instructions:</h4>
-                <ol>
-                    <li>Make sure you're on <strong>facebook.com</strong> and logged in</li>
-                    <li>Press <code>F12</code> to open Developer Tools</li>
-                    <li>Go to the <strong>Console</strong> tab</li>
-                    <li>Paste the JavaScript code and press Enter</li>
-                    <li>Copy the JSON output from the console</li>
-                </ol>
-            </div>
-        </div>
-
-        <div class="step">
-            <h3>Step 3: Paste App State</h3>
-            <p>Paste the extracted Facebook App State JSON here:</p>
-            <textarea id="appStateInput" placeholder="Paste your Facebook App State JSON here..."></textarea>
-            <br>
-            <button onclick="copyAppState()" class="copy-btn">📋 Copy App State</button>
-            <button onclick="testAppState()">🧪 Test App State</button>
-        </div>
-
-        <div class="step">
-            <h3>Step 4: Configure WA-BOT</h3>
+            <h3>🔧 Setup in WA-BOT</h3>
             <p>Add this to your <code>.env</code> file:</p>
-            <textarea id="envConfig" readonly placeholder="App State will appear here after extraction..."></textarea>
-            <br>
-            <button onclick="copyEnvConfig()" class="copy-btn">📋 Copy .env Configuration</button>
-        </div>
+            <pre style="background: #f8f9fa; padding: 15px; border-radius: 5px; overflow-x: auto;">
+# Facebook App State Authentication (more reliable than email/password)
+FACEBOOK_APP_STATE=your_extracted_app_state_json
 
-        <div class="success" style="display: none;" id="successMessage">
-            <strong>✅ Success!</strong> Your Facebook App State has been extracted and is ready to use in WA-BOT.
+# Comment out or remove these if using app state:
+# FACEBOOK_EMAIL=your_email
+# FACEBOOK_PASSWORD=your_password
+            </pre>
         </div>
     </div>
 
@@ -293,178 +213,280 @@ getFacebookAppState();
 
         function extractAppState() {
             const statusDiv = document.getElementById('status');
-            const extractBtn = document.getElementById('extractBtn');
+            const outputDiv = document.getElementById('sessionOutput');
             
-            statusDiv.innerHTML = '<div class="status checking">🔍 Checking if we\'re on Facebook...</div>';
-            extractBtn.disabled = true;
-
+            // Clear previous results
+            statusDiv.innerHTML = '';
+            outputDiv.innerHTML = '';
+            
             // Check if we're on Facebook domain
             if (!window.location.hostname.includes('facebook.com')) {
-                statusDiv.innerHTML = '<div class="status error">❌ Please open this tool on facebook.com while logged in</div>';
-                extractBtn.disabled = false;
+                statusDiv.innerHTML = `
+                    <div class="error">
+                        <strong>❌ Wrong Domain</strong><br>
+                        This tool must be run on <strong>facebook.com</strong>. 
+                        Current domain: <code>${window.location.hostname}</code><br><br>
+                        Please copy this HTML file content and run it as a bookmark or console script on facebook.com
+                    </div>
+                `;
+                showManualInstructions();
                 return;
             }
 
-            statusDiv.innerHTML = '<div class="status checking">🔍 Attempting to extract app state...</div>';
-
             try {
-                // Try to extract cookies (will fail due to HttpOnly)
-                const cookies = document.cookie;
-                if (!cookies || cookies.length < 100) {
-                    throw new Error('Insufficient cookie data - likely HttpOnly protected');
+                statusDiv.innerHTML = '<div class="warning">🔍 Extracting Facebook cookies and tokens...</div>';
+                
+                // Extract all Facebook cookies
+                const cookies = document.cookie.split(';').reduce((acc, cookie) => {
+                    const [name, value] = cookie.trim().split('=');
+                    if (name && value) {
+                        acc[name] = decodeURIComponent(value);
+                    }
+                    return acc;
+                }, {});
+
+                // Check for essential Facebook cookies
+                const essentialCookies = ['c_user', 'xs', 'datr', 'sb'];
+                const missingCookies = essentialCookies.filter(cookie => !cookies[cookie]);
+                
+                if (missingCookies.length > 0) {
+                    statusDiv.innerHTML = `
+                        <div class="error">
+                            <strong>❌ Missing Essential Cookies</strong><br>
+                            Missing: ${missingCookies.join(', ')}<br>
+                            Please make sure you're logged into Facebook and try again.
+                        </div>
+                    `;
+                    return;
                 }
 
-                // This won't work for Facebook due to HttpOnly cookies, but we'll try anyway
-                statusDiv.innerHTML = '<div class="status error">❌ Automatic extraction failed - Facebook uses HttpOnly cookies</div>';
-                showManualInstructions();
-            } catch (error) {
-                console.log('Automatic extraction failed:', error.message);
-                statusDiv.innerHTML = '<div class="status error">❌ Automatic extraction failed - Please use manual method</div>';
-                showManualInstructions();
-            }
-
-            extractBtn.disabled = false;
-        }
-
-        function showManualInstructions() {
-            document.getElementById('manualSection').style.display = 'block';
-        }
-
-        function showBrowser(browser) {
-            // Hide all browser contents
-            const contents = document.querySelectorAll('.browser-content');
-            contents.forEach(content => {
-                content.classList.remove('active');
-            });
-
-            // Hide all browser tabs
-            const tabs = document.querySelectorAll('.browser-tab');
-            tabs.forEach(tab => {
-                tab.classList.remove('active');
-            });
-
-            // Show selected browser
-            document.getElementById(browser).classList.add('active');
-            event.target.classList.add('active');
-        }
-
-        function copyAppState() {
-            const appStateInput = document.getElementById('appStateInput');
-            if (!appStateInput.value.trim()) {
-                alert('Please paste your Facebook App State first!');
-                return;
-            }
-
-            try {
-                // Validate JSON
-                const appState = JSON.parse(appStateInput.value);
-                extractedAppState = appState;
+                // Create app state object (similar to facebook-chat-api format)
+                const appState = [];
                 
-                // Copy to clipboard
-                navigator.clipboard.writeText(appStateInput.value).then(() => {
-                    alert('✅ App State copied to clipboard!');
-                    updateEnvConfig();
-                }).catch(() => {
-                    // Fallback for older browsers
-                    appStateInput.select();
-                    document.execCommand('copy');
-                    alert('✅ App State copied to clipboard!');
-                    updateEnvConfig();
+                // Convert cookies to app state format
+                Object.entries(cookies).forEach(([key, value]) => {
+                    if (key && value && value !== 'undefined') {
+                        appState.push({
+                            key: key,
+                            value: value,
+                            domain: '.facebook.com',
+                            path: '/',
+                            hostOnly: false,
+                            creation: new Date().toISOString(),
+                            lastAccessed: new Date().toISOString()
+                        });
+                    }
                 });
+
+                if (appState.length === 0) {
+                    statusDiv.innerHTML = `
+                        <div class="error">
+                            <strong>❌ No Cookies Found</strong><br>
+                            Unable to extract Facebook cookies. Please make sure you're logged in.
+                        </div>
+                    `;
+                    return;
+                }
+
+                extractedAppState = appState;
+                const appStateJson = JSON.stringify(appState, null, 2);
+
+                statusDiv.innerHTML = `
+                    <div class="success">
+                        <strong>✅ App State Extracted Successfully!</strong><br>
+                        Found ${appState.length} cookies/tokens<br>
+                        User ID: ${cookies.c_user || 'Unknown'}
+                    </div>
+                `;
+
+                outputDiv.innerHTML = `
+                    <h4>📋 Facebook App State (Copy this entire JSON):</h4>
+                    <div class="session-output" id="appStateText">${appStateJson}</div>
+                    <button class="button" onclick="copyToClipboard()">📋 Copy App State</button>
+                    <button class="button" onclick="downloadAppState()">💾 Download as File</button>
+                `;
+
+                document.getElementById('testBtn').disabled = false;
+
             } catch (error) {
-                alert('❌ Invalid JSON format. Please check your App State data.');
+                console.error('Error extracting app state:', error);
+                statusDiv.innerHTML = `
+                    <div class="error">
+                        <strong>❌ Extraction Failed</strong><br>
+                        Error: ${error.message}<br>
+                        Please try the manual method below.
+                    </div>
+                `;
+                showManualInstructions();
             }
+        }
+
+        function copyToClipboard() {
+            const appStateText = document.getElementById('appStateText').textContent;
+            navigator.clipboard.writeText(appStateText).then(() => {
+                alert('✅ App state copied to clipboard!');
+            }).catch(err => {
+                console.error('Copy failed:', err);
+                // Fallback: select text
+                const range = document.createRange();
+                range.selectNode(document.getElementById('appStateText'));
+                window.getSelection().removeAllRanges();
+                window.getSelection().addRange(range);
+                alert('📋 App state selected. Press Ctrl+C to copy.');
+            });
+        }
+
+        function downloadAppState() {
+            if (!extractedAppState) return;
+            
+            const blob = new Blob([JSON.stringify(extractedAppState, null, 2)], {
+                type: 'application/json'
+            });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'facebook_appstate.json';
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
         }
 
         function testAppState() {
-            const appStateInput = document.getElementById('appStateInput');
-            if (!appStateInput.value.trim()) {
-                alert('Please paste your Facebook App State first!');
+            if (!extractedAppState) {
+                alert('❌ No app state to test. Please extract first.');
                 return;
             }
 
-            try {
-                const appState = JSON.parse(appStateInput.value);
-                
-                // Basic validation
-                if (!Array.isArray(appState)) {
-                    throw new Error('App State should be an array');
-                }
+            const statusDiv = document.getElementById('status');
+            statusDiv.innerHTML = '<div class="warning">🧪 Testing app state validity...</div>';
 
-                if (appState.length === 0) {
-                    throw new Error('App State is empty');
-                }
+            // Basic validation
+            const hasEssentialCookies = extractedAppState.some(cookie => 
+                ['c_user', 'xs'].includes(cookie.key)
+            );
 
-                // Check for essential Facebook cookies
-                const hasEssentialCookies = appState.some(cookie => 
-                    cookie.key && (cookie.key.includes('c_user') || cookie.key.includes('xs') || cookie.key.includes('datr'))
-                );
-
-                if (!hasEssentialCookies) {
-                    throw new Error('App State missing essential Facebook cookies');
-                }
-
-                alert('✅ App State looks valid! It contains ' + appState.length + ' cookies.');
-                document.getElementById('successMessage').style.display = 'block';
-                updateEnvConfig();
-            } catch (error) {
-                alert('❌ App State validation failed: ' + error.message);
-            }
-        }
-
-        function updateEnvConfig() {
-            const appStateInput = document.getElementById('appStateInput');
-            const envConfig = document.getElementById('envConfig');
-            
-            if (appStateInput.value.trim()) {
-                // Create a compact version for .env file
-                const compactAppState = JSON.stringify(JSON.parse(appStateInput.value));
-                envConfig.value = `# Facebook App State Configuration (instead of email/password)
-FACEBOOK_APP_STATE=${compactAppState}
-
-# Comment out or remove these if using app state:
-# FACEBOOK_EMAIL=your_facebook_email
-# FACEBOOK_PASSWORD=your_facebook_password`;
-            }
-        }
-
-        function copyEnvConfig() {
-            const envConfig = document.getElementById('envConfig');
-            if (!envConfig.value.trim()) {
-                alert('Please extract and test your App State first!');
-                return;
-            }
-
-            navigator.clipboard.writeText(envConfig.value).then(() => {
-                alert('✅ Environment configuration copied to clipboard!');
-            }).catch(() => {
-                // Fallback for older browsers
-                envConfig.select();
-                document.execCommand('copy');
-                alert('✅ Environment configuration copied to clipboard!');
-            });
-        }
-
-        // Auto-extract if we're on Facebook
-        window.addEventListener('load', () => {
-            if (window.location.hostname.includes('facebook.com')) {
-                setTimeout(() => {
-                    document.getElementById('status').innerHTML = '<div class="status checking">🔍 Ready to extract - Click the button above</div>';
-                }, 1000);
+            if (hasEssentialCookies) {
+                statusDiv.innerHTML = `
+                    <div class="success">
+                        <strong>✅ App State Looks Valid!</strong><br>
+                        Contains essential authentication cookies.<br>
+                        You can now use this in WA-BOT.
+                    </div>
+                `;
             } else {
-                document.getElementById('status').innerHTML = '<div class="status error">⚠️ Please open this tool on facebook.com</div>';
+                statusDiv.innerHTML = `
+                    <div class="error">
+                        <strong>❌ App State May Be Invalid</strong><br>
+                        Missing essential authentication cookies.<br>
+                        Please try extracting again while logged in.
+                    </div>
+                `;
             }
-        });
+        }
 
-        // Send extracted data to parent window if opened as popup
-        window.addEventListener('message', (event) => {
-            if (event.data.type === 'requestAppState' && extractedAppState) {
-                event.source.postMessage({
-                    type: 'facebookAppState',
-                    appState: extractedAppState
-                }, '*');
-            }
+        function showManualInstructions() {
+            const instructionsDiv = document.getElementById('manualInstructions');
+            instructionsDiv.style.display = 'block';
+            instructionsDiv.innerHTML = `
+                <div class="step">
+                    <h3>📖 Manual App State Extraction</h3>
+                    <p>If automatic extraction fails, follow these browser-specific steps:</p>
+                    
+                    <div class="browser-tabs">
+                        <div class="browser-tab active" onclick="showBrowserInstructions('chrome')">Chrome</div>
+                        <div class="browser-tab" onclick="showBrowserInstructions('firefox')">Firefox</div>
+                        <div class="browser-tab" onclick="showBrowserInstructions('safari')">Safari</div>
+                    </div>
+                    
+                    <div id="chrome-instructions" class="browser-specific" style="display: block;">
+                        <h4>🔵 Google Chrome Instructions:</h4>
+                        <ol>
+                            <li>Go to <strong>facebook.com</strong> and make sure you're logged in</li>
+                            <li>Press <code>F12</code> to open Developer Tools</li>
+                            <li>Go to the <strong>Application</strong> tab</li>
+                            <li>In the left sidebar, expand <strong>Cookies</strong></li>
+                            <li>Click on <strong>https://www.facebook.com</strong></li>
+                            <li>Look for these important cookies: <code>c_user</code>, <code>xs</code>, <code>datr</code>, <code>sb</code></li>
+                            <li>Copy all cookie values and create JSON format manually</li>
+                        </ol>
+                    </div>
+                    
+                    <div id="firefox-instructions" class="browser-specific">
+                        <h4>🦊 Firefox Instructions:</h4>
+                        <ol>
+                            <li>Go to <strong>facebook.com</strong> and make sure you're logged in</li>
+                            <li>Press <code>F12</code> to open Developer Tools</li>
+                            <li>Go to the <strong>Storage</strong> tab</li>
+                            <li>Expand <strong>Cookies</strong> in the left sidebar</li>
+                            <li>Click on <strong>https://www.facebook.com</strong></li>
+                            <li>Find cookies: <code>c_user</code>, <code>xs</code>, <code>datr</code>, <code>sb</code></li>
+                            <li>Copy values and format as JSON</li>
+                        </ol>
+                    </div>
+                    
+                    <div id="safari-instructions" class="browser-specific">
+                        <h4>🧭 Safari Instructions:</h4>
+                        <ol>
+                            <li>Enable Developer menu: Safari → Preferences → Advanced → Show Develop menu</li>
+                            <li>Go to <strong>facebook.com</strong> and make sure you're logged in</li>
+                            <li>Press <code>Option+Cmd+I</code> to open Web Inspector</li>
+                            <li>Go to the <strong>Storage</strong> tab</li>
+                            <li>Click on <strong>Cookies</strong> → <strong>facebook.com</strong></li>
+                            <li>Find essential cookies and copy their values</li>
+                        </ol>
+                    </div>
+                    
+                    <h4>🔧 Alternative: Console Method</h4>
+                    <p>Run this JavaScript code in the browser console on facebook.com:</p>
+                    <pre style="background: #f8f9fa; padding: 15px; border-radius: 5px; overflow-x: auto; font-size: 12px;">
+const cookies = document.cookie.split(';').reduce((acc, cookie) => {
+    const [name, value] = cookie.trim().split('=');
+    if (name && value) {
+        acc.push({
+            key: name,
+            value: decodeURIComponent(value),
+            domain: '.facebook.com',
+            path: '/',
+            hostOnly: false,
+            creation: new Date().toISOString(),
+            lastAccessed: new Date().toISOString()
         });
+    }
+    return acc;
+}, []);
+console.log(JSON.stringify(cookies, null, 2));
+                    </pre>
+                </div>
+            `;
+        }
+
+        function showBrowserInstructions(browser) {
+            // Hide all browser instructions
+            document.querySelectorAll('.browser-specific').forEach(div => {
+                div.style.display = 'none';
+            });
+            
+            // Remove active class from all tabs
+            document.querySelectorAll('.browser-tab').forEach(tab => {
+                tab.classList.remove('active');
+            });
+            
+            // Show selected browser instructions
+            document.getElementById(browser + '-instructions').style.display = 'block';
+            event.target.classList.add('active');
+        }
+
+        // Auto-extract if on Facebook domain
+        if (window.location.hostname.includes('facebook.com')) {
+            setTimeout(() => {
+                document.getElementById('status').innerHTML = `
+                    <div class="success">
+                        ✅ Detected Facebook domain. Ready to extract app state!
+                    </div>
+                `;
+            }, 1000);
+        }
     </script>
 </body>
 </html>

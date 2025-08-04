@@ -3,52 +3,139 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Instagram Session ID Extractor</title>
+    <title>WA-BOT Session Extractor</title>
     <style>
         body {
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-            max-width: 800px;
+            max-width: 900px;
             margin: 0 auto;
             padding: 20px;
-            background: #f5f5f5;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
         }
         .container {
             background: white;
-            padding: 30px;
             border-radius: 12px;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            padding: 30px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
         }
         h1 {
-            color: #333;
             text-align: center;
+            margin-bottom: 10px;
+            background: linear-gradient(45deg, #1877f2, #e1306c);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+        .subtitle {
+            text-align: center;
+            color: #666;
             margin-bottom: 30px;
         }
-        .step {
-            margin: 20px 0;
-            padding: 20px;
+        
+        /* Platform Tabs */
+        .platform-tabs {
+            display: flex;
+            margin-bottom: 20px;
+            border-bottom: 2px solid #f0f0f0;
+        }
+        .platform-tab {
+            flex: 1;
+            padding: 15px 20px;
             background: #f8f9fa;
-            border-radius: 8px;
+            border: none;
+            cursor: pointer;
+            font-size: 16px;
+            font-weight: 600;
+            transition: all 0.3s ease;
+            border-radius: 8px 8px 0 0;
+            margin-right: 5px;
+        }
+        .platform-tab.instagram {
+            color: #e1306c;
+            border-bottom: 3px solid transparent;
+        }
+        .platform-tab.facebook {
+            color: #1877f2;
+            border-bottom: 3px solid transparent;
+        }
+        .platform-tab.active.instagram {
+            background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+            color: white;
+            border-bottom-color: #e1306c;
+        }
+        .platform-tab.active.facebook {
+            background: linear-gradient(135deg, #4267B2 0%, #1877f2 100%);
+            color: white;
+            border-bottom-color: #1877f2;
+        }
+        .platform-tab:hover {
+            transform: translateY(-2px);
+        }
+        
+        /* Platform Content */
+        .platform-content {
+            display: none;
+            animation: fadeIn 0.3s ease;
+        }
+        .platform-content.active {
+            display: block;
+        }
+        
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        
+        .step {
+            background: #f8f9fa;
             border-left: 4px solid #007bff;
+            padding: 15px;
+            margin: 15px 0;
+            border-radius: 0 8px 8px 0;
         }
         .step h3 {
-            margin-top: 0;
+            margin: 0 0 10px 0;
             color: #007bff;
         }
+        .step.instagram {
+            border-left-color: #e1306c;
+        }
+        .step.instagram h3 {
+            color: #e1306c;
+        }
+        .step.facebook {
+            border-left-color: #1877f2;
+        }
+        .step.facebook h3 {
+            color: #1877f2;
+        }
+        
         .warning {
             background: #fff3cd;
-            border-left-color: #ffc107;
+            border: 1px solid #ffeaa7;
+            border-radius: 8px;
+            padding: 15px;
+            margin: 15px 0;
             color: #856404;
         }
         .success {
             background: #d4edda;
-            border-left-color: #28a745;
+            border: 1px solid #c3e6cb;
+            border-radius: 8px;
+            padding: 15px;
+            margin: 15px 0;
             color: #155724;
         }
         .error {
             background: #f8d7da;
-            border-left-color: #dc3545;
+            border: 1px solid #f5c6cb;
+            border-radius: 8px;
+            padding: 15px;
+            margin: 15px 0;
             color: #721c24;
         }
+        
         button {
             background: #007bff;
             color: white;
@@ -58,14 +145,30 @@
             cursor: pointer;
             font-size: 16px;
             margin: 10px 5px;
+            transition: all 0.3s ease;
         }
         button:hover {
             background: #0056b3;
+            transform: translateY(-1px);
         }
         button:disabled {
             background: #6c757d;
             cursor: not-allowed;
+            transform: none;
         }
+        button.instagram {
+            background: linear-gradient(45deg, #f093fb 0%, #f5576c 100%);
+        }
+        button.instagram:hover {
+            background: linear-gradient(45deg, #e1306c 0%, #d62976 100%);
+        }
+        button.facebook {
+            background: linear-gradient(45deg, #4267B2 0%, #1877f2 100%);
+        }
+        button.facebook:hover {
+            background: linear-gradient(45deg, #365899 0%, #166fe5 100%);
+        }
+        
         textarea {
             width: 100%;
             height: 100px;
@@ -75,7 +178,9 @@
             font-family: monospace;
             font-size: 14px;
             resize: vertical;
+            box-sizing: border-box;
         }
+        
         .session-output {
             background: #f8f9fa;
             border: 1px solid #dee2e6;
@@ -84,7 +189,10 @@
             margin: 15px 0;
             font-family: monospace;
             word-break: break-all;
+            max-height: 200px;
+            overflow-y: auto;
         }
+        
         .copy-btn {
             background: #28a745;
             font-size: 14px;
@@ -93,266 +201,449 @@
         .copy-btn:hover {
             background: #218838;
         }
+        
         .status {
             padding: 10px;
             border-radius: 4px;
             margin: 10px 0;
             font-weight: bold;
         }
-        .code {
+        
+        /* Browser tabs for Facebook */
+        .browser-tabs {
+            display: flex;
+            margin-bottom: 15px;
+        }
+        .browser-tab {
+            padding: 8px 16px;
+            background: #f0f0f0;
+            border: 1px solid #ddd;
+            cursor: pointer;
+            border-radius: 6px 6px 0 0;
+            margin-right: 5px;
+            font-size: 14px;
+        }
+        .browser-tab.active {
+            background: #1877f2;
+            color: white;
+        }
+        .browser-content {
+            display: none;
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 0 6px 6px 6px;
+            border: 1px solid #ddd;
+        }
+        .browser-content.active {
+            display: block;
+        }
+        
+        code {
             background: #f1f3f4;
             padding: 2px 6px;
             border-radius: 3px;
             font-family: monospace;
-            font-size: 14px;
+        }
+        
+        .manual-section {
+            margin-top: 20px;
         }
     </style>
 </head>
 <body>
     <div class="container">
-        <h1>🔑 Instagram Session ID Extractor</h1>
+        <h1>🤖 WA-BOT Session Extractor</h1>
+        <p class="subtitle">Extract session credentials for Instagram and Facebook integration</p>
         
-        <div class="step warning">
-            <h3>⚠️ Important Security Notice</h3>
-            <p>Your session ID is sensitive information that provides access to your Instagram account. Only use this on your own computer and never share your session ID with others.</p>
+        <!-- Platform Tabs -->
+        <div class="platform-tabs">
+            <button class="platform-tab instagram active" onclick="showPlatform('instagram')">
+                📸 Instagram Session ID
+            </button>
+            <button class="platform-tab facebook" onclick="showPlatform('facebook')">
+                📘 Facebook App State
+            </button>
         </div>
-
-        <div class="step">
-            <h3>📋 Instructions</h3>
-            <ol>
-                <li><strong>Login to Instagram:</strong> Open <a href="https://www.instagram.com" target="_blank">instagram.com</a> in a new tab and make sure you're logged in</li>
-                <li><strong>Extract Session:</strong> Click the "Extract Session ID" button below</li>
-                <li><strong>Copy & Use:</strong> Copy the session ID and paste it into your WA-BOT platform configuration</li>
-            </ol>
+        
+        <!-- Instagram Content -->
+        <div id="instagram" class="platform-content active">
+            <div class="step instagram">
+                <h3>📸 Instagram Session ID Extraction</h3>
+                <p>Extract your Instagram session ID to authenticate with Instagram Private API without username/password.</p>
+            </div>
+            
+            <div class="step instagram">
+                <h3>Step 1: Navigate to Instagram</h3>
+                <p>Open <strong>instagram.com</strong> in your browser and make sure you're logged in to the account you want to use for the bot.</p>
+            </div>
+            
+            <div class="step instagram">
+                <h3>Step 2: Extract Session ID</h3>
+                <button class="instagram" onclick="extractInstagramSession()">🔍 Extract Instagram Session ID</button>
+                <p>Click the button above to automatically extract your Instagram session ID from cookies.</p>
+            </div>
+            
+            <div id="instagramResult" class="session-output" style="display: none;">
+                <strong>Instagram Session ID:</strong>
+                <div id="instagramSessionId"></div>
+                <button class="copy-btn" onclick="copyToClipboard('instagramSessionId')">📋 Copy Session ID</button>
+            </div>
+            
+            <div class="step instagram">
+                <h3>Step 3: Configure WA-BOT</h3>
+                <p>Add the extracted session ID to your <code>.env</code> file:</p>
+                <textarea readonly>INSTAGRAM_SESSION_ID=your_extracted_session_id_here</textarea>
+            </div>
+            
+            <div class="warning">
+                <strong>⚠️ Important:</strong> Keep your session ID secure! It provides access to your Instagram account. Never share it publicly.
+            </div>
         </div>
-
-        <div class="step">
-            <h3>🔍 Session Extraction</h3>
-            <p><strong>Note:</strong> Instagram uses HttpOnly cookies for security, so automatic extraction may not work. Manual extraction is usually required.</p>
-            <button id="extractBtn" onclick="extractSessionId()">Try Automatic Extraction</button>
-            <button id="testBtn" onclick="testSession()" disabled>Test Session</button>
+        
+        <!-- Facebook Content -->
+        <div id="facebook" class="platform-content">
+            <div class="step facebook">
+                <h3>📘 Facebook App State Extraction</h3>
+                <p>Extract your Facebook App State (cookies) to authenticate with Facebook Chat API without email/password challenges.</p>
+            </div>
             
-            <div id="status"></div>
+            <div class="step facebook">
+                <h3>Step 1: Navigate to Facebook</h3>
+                <p>Open <strong>facebook.com</strong> in your browser and make sure you're logged in to the account you want to use for the bot.</p>
+            </div>
             
-            <div id="sessionResult" style="display: none;">
-                <h4>✅ Session ID Found:</h4>
-                <div class="session-output">
-                    <div id="sessionId"></div>
-                    <button class="copy-btn" onclick="copySessionId()">📋 Copy Session ID</button>
+            <div class="step facebook">
+                <h3>Step 2: Extract App State</h3>
+                <button class="facebook" onclick="extractFacebookAppState()">🔍 Extract Facebook App State</button>
+                <p>Click the button above to automatically extract your Facebook App State from cookies.</p>
+            </div>
+            
+            <div id="facebookResult" class="session-output" style="display: none;">
+                <strong>Facebook App State:</strong>
+                <div id="facebookAppState"></div>
+                <button class="copy-btn" onclick="copyToClipboard('facebookAppState')">📋 Copy App State</button>
+            </div>
+            
+            <div id="manualSection" class="manual-section" style="display: none;">
+                <div class="error">
+                    <strong>🚫 Automatic Extraction Failed</strong><br>
+                    Facebook cookies are HttpOnly and cannot be accessed automatically. Please follow the manual extraction steps below.
                 </div>
-                
-                <div class="step success">
-                    <h4>🎉 Success! Next Steps:</h4>
+
+                <h3>Manual App State Extraction</h3>
+                <div class="browser-tabs">
+                    <div class="browser-tab active" onclick="showBrowser('chrome')">Chrome</div>
+                    <div class="browser-tab" onclick="showBrowser('firefox')">Firefox</div>
+                    <div class="browser-tab" onclick="showBrowser('safari')">Safari</div>
+                    <div class="browser-tab" onclick="showBrowser('edge')">Edge</div>
+                </div>
+
+                <div id="chrome" class="browser-content active">
+                    <h4>Chrome Instructions:</h4>
                     <ol>
-                        <li>Copy the session ID above</li>
-                        <li>Go to your WA-BOT Platforms tab</li>
-                        <li>Select Instagram Private API</li>
-                        <li>Choose "Session ID (Recommended)" authentication method</li>
-                        <li>Paste the session ID and connect</li>
+                        <li>Make sure you're on <strong>facebook.com</strong> and logged in</li>
+                        <li>Press <code>F12</code> to open Developer Tools</li>
+                        <li>Go to the <strong>Console</strong> tab</li>
+                        <li>Paste this code and press Enter:</li>
+                    </ol>
+                    <textarea readonly onclick="this.select()">
+// Facebook App State Extractor
+function getFacebookAppState() {
+    const cookies = document.cookie.split(';');
+    const appState = [];
+    
+    cookies.forEach(cookie => {
+        const [name, value] = cookie.trim().split('=');
+        if (name && value) {
+            appState.push({
+                key: name,
+                value: decodeURIComponent(value),
+                domain: '.facebook.com',
+                path: '/',
+                hostOnly: false,
+                creation: new Date().toISOString(),
+                lastAccessed: new Date().toISOString()
+            });
+        }
+    });
+    
+    return appState;
+}
+
+// Extract and display the App State
+const appState = getFacebookAppState();
+console.log('Facebook App State:');
+console.log(JSON.stringify(appState, null, 2));
+
+// Copy to clipboard (if supported)
+if (navigator.clipboard) {
+    navigator.clipboard.writeText(JSON.stringify(appState)).then(() => {
+        console.log('✅ App State copied to clipboard!');
+    });
+} else {
+    console.log('📋 Please manually copy the JSON above');
+}
+                    </textarea>
+                    <button class="copy-btn" onclick="copyBrowserCode('chrome')">📋 Copy Code</button>
+                </div>
+
+                <div id="firefox" class="browser-content">
+                    <h4>Firefox Instructions:</h4>
+                    <ol>
+                        <li>Make sure you're on <strong>facebook.com</strong> and logged in</li>
+                        <li>Press <code>F12</code> to open Developer Tools</li>
+                        <li>Go to the <strong>Console</strong> tab</li>
+                        <li>Paste the same code as Chrome and press Enter</li>
+                    </ol>
+                    <p><em>Same extraction code works for Firefox</em></p>
+                </div>
+
+                <div id="safari" class="browser-content">
+                    <h4>Safari Instructions:</h4>
+                    <ol>
+                        <li>Enable Developer menu: Safari → Preferences → Advanced → Show Develop menu</li>
+                        <li>Make sure you're on <strong>facebook.com</strong> and logged in</li>
+                        <li>Press <code>Cmd+Option+C</code> to open Web Inspector</li>
+                        <li>Go to the <strong>Console</strong> tab</li>
+                        <li>Paste the same code as Chrome and press Enter</li>
+                    </ol>
+                </div>
+
+                <div id="edge" class="browser-content">
+                    <h4>Edge Instructions:</h4>
+                    <ol>
+                        <li>Make sure you're on <strong>facebook.com</strong> and logged in</li>
+                        <li>Press <code>F12</code> to open Developer Tools</li>
+                        <li>Go to the <strong>Console</strong> tab</li>
+                        <li>Paste the same code as Chrome and press Enter</li>
                     </ol>
                 </div>
             </div>
-        </div>
-
-        <div class="step" id="manualExtraction">
-            <h3>🔠️ Manual Session ID Extraction</h3>
-            <div class="warning">
-                <strong>⚠️ Important:</strong> Instagram sessionid cookies are HttpOnly, so manual extraction is required.
-            </div>
-            <p><strong>Step-by-step guide:</strong></p>
-            <ol>
-                <li><strong>Open Instagram:</strong> Go to <a href="https://www.instagram.com" target="_blank" style="color: #007bff;">instagram.com</a> and make sure you're logged in</li>
-                <li><strong>Open Developer Tools:</strong> Press <span class="code">F12</span> (or right-click → "Inspect")</li>
-                <li><strong>Navigate to Cookies:</strong>
-                    <ul>
-                        <li><strong>Chrome/Edge:</strong> Go to <span class="code">Application</span> tab → <span class="code">Cookies</span> → <span class="code">https://www.instagram.com</span></li>
-                        <li><strong>Firefox:</strong> Go to <span class="code">Storage</span> tab → <span class="code">Cookies</span> → <span class="code">https://www.instagram.com</span></li>
-                        <li><strong>Safari:</strong> Go to <span class="code">Storage</span> tab → <span class="code">Cookies</span> → <span class="code">instagram.com</span></li>
-                    </ul>
-                </li>
-                <li><strong>Find sessionid:</strong> Look for a cookie named <span class="code">sessionid</span></li>
-                <li><strong>Copy the Value:</strong> Copy the entire <span class="code">Value</span> field (should be 40+ characters with %3A)</li>
-                <li><strong>Paste below:</strong> Use the textarea below to test and copy the session ID</li>
-            </ol>
             
-            <h4>Paste Manual Session ID:</h4>
-            <textarea id="manualSession" placeholder="Paste your manually extracted session ID here..."></textarea>
-            <br>
-            <button onclick="useManualSession()">Use Manual Session ID</button>
+            <div class="step facebook">
+                <h3>Step 3: Configure WA-BOT</h3>
+                <p>Add the extracted App State to your <code>.env</code> file:</p>
+                <textarea readonly>FACEBOOK_APP_STATE=your_extracted_app_state_json_here</textarea>
+            </div>
+            
+            <div class="warning">
+                <strong>⚠️ Important:</strong> Keep your App State secure! It contains session cookies that provide access to your Facebook account. Never share it publicly.
+            </div>
         </div>
-
-        <div class="step">
-            <h3>🔧 Troubleshooting</h3>
-            <ul>
-                <li><strong>No session found:</strong> Make sure you're logged into Instagram in this browser</li>
-                <li><strong>Session invalid:</strong> Try logging out and back into Instagram, then extract again</li>
-                <li><strong>Connection fails:</strong> The session might have expired, extract a fresh one</li>
-                <li><strong>Browser blocks:</strong> Some browsers block cookie access, try Chrome or Edge</li>
-            </ul>
+        
+        <div class="success" style="margin-top: 30px;">
+            <strong>✅ Next Steps:</strong>
+            <ol>
+                <li>Copy the extracted session credentials</li>
+                <li>Add them to your <code>.env</code> file</li>
+                <li>Restart WA-BOT</li>
+                <li>Your bot will now authenticate using session-based login!</li>
+            </ol>
         </div>
     </div>
 
     <script>
-        let currentSessionId = null;
-
-        function showStatus(message, type = 'info') {
-            const status = document.getElementById('status');
-            status.className = `status ${type}`;
-            status.textContent = message;
-            status.style.display = 'block';
+        // Platform switching
+        function showPlatform(platform) {
+            // Hide all platform content
+            document.querySelectorAll('.platform-content').forEach(content => {
+                content.classList.remove('active');
+            });
+            
+            // Remove active class from all tabs
+            document.querySelectorAll('.platform-tab').forEach(tab => {
+                tab.classList.remove('active');
+            });
+            
+            // Show selected platform content
+            document.getElementById(platform).classList.add('active');
+            
+            // Add active class to selected tab
+            document.querySelector(`.platform-tab.${platform}`).classList.add('active');
         }
-
-        function extractSessionId() {
+        
+        // Browser switching for Facebook manual extraction
+        function showBrowser(browser) {
+            // Hide all browser content
+            document.querySelectorAll('.browser-content').forEach(content => {
+                content.classList.remove('active');
+            });
+            
+            // Remove active class from all browser tabs
+            document.querySelectorAll('.browser-tab').forEach(tab => {
+                tab.classList.remove('active');
+            });
+            
+            // Show selected browser content
+            document.getElementById(browser).classList.add('active');
+            
+            // Add active class to selected browser tab
+            event.target.classList.add('active');
+        }
+        
+        // Instagram session extraction
+        function extractInstagramSession() {
             try {
-                showStatus('🔍 Searching for Instagram session...', 'info');
+                // Check if we're on Instagram
+                if (!window.location.hostname.includes('instagram.com')) {
+                    alert('⚠️ Please navigate to instagram.com first and make sure you\'re logged in!');
+                    return;
+                }
                 
-                // Check if we're on Instagram domain
-                if (window.location.hostname.includes('instagram.com')) {
-                    // Try to extract sessionid from cookies on Instagram domain
-                    const cookies = document.cookie.split(';');
-                    let sessionId = null;
-                    
-                    for (let cookie of cookies) {
-                        const [name, value] = cookie.trim().split('=');
-                        if (name === 'sessionid') {
-                            sessionId = value;
-                            break;
-                        }
-                    }
-                    
-                    if (sessionId) {
-                        currentSessionId = sessionId;
-                        document.getElementById('sessionId').textContent = sessionId;
-                        document.getElementById('sessionResult').style.display = 'block';
-                        document.getElementById('testBtn').disabled = false;
-                        showStatus('✅ Session ID extracted successfully!', 'success');
-                        
-                        // Send to parent window if opened as popup
-                        sendSessionToParent(sessionId);
-                        return;
+                // Extract session ID from cookies
+                const cookies = document.cookie.split(';');
+                let sessionId = null;
+                
+                for (let cookie of cookies) {
+                    const [name, value] = cookie.trim().split('=');
+                    if (name === 'sessionid') {
+                        sessionId = value;
+                        break;
                     }
                 }
                 
-                // If not on Instagram or no session found, show manual instructions
-                showStatus('⚠️ Automatic extraction not available. Instagram sessionid cookies are HttpOnly for security.', 'warning');
-                showStatus('📝 Please use the manual method below to extract your session ID.', 'info');
-                
-                // Show the manual extraction section
-                document.getElementById('manualExtraction').style.display = 'block';
-                
-            } catch (error) {
-                console.error('Error extracting session:', error);
-                showStatus('❌ Error extracting session. Please use the manual method below.', 'error');
-                document.getElementById('manualExtraction').style.display = 'block';
-            }
-        }
-
-        function testSession() {
-            if (!currentSessionId) {
-                showStatus('❌ No session ID to test', 'error');
-                return;
-            }
-            
-            showStatus('🧪 Testing session validity...', 'info');
-            
-            // Simple test by trying to fetch Instagram API
-            fetch('https://www.instagram.com/api/v1/users/self/', {
-                headers: {
-                    'Cookie': `sessionid=${currentSessionId}`
-                }
-            })
-            .then(response => {
-                if (response.ok) {
-                    showStatus('✅ Session is valid!', 'success');
+                if (sessionId) {
+                    document.getElementById('instagramSessionId').textContent = sessionId;
+                    document.getElementById('instagramResult').style.display = 'block';
+                    
+                    // Show success message
+                    showStatus('✅ Instagram Session ID extracted successfully!', 'success');
                 } else {
-                    showStatus('⚠️ Session might be expired or invalid', 'warning');
-                }
-            })
-            .catch(error => {
-                showStatus('⚠️ Could not test session (CORS blocked), but session ID was extracted', 'warning');
-            });
-        }
-
-        function copySessionId() {
-            if (!currentSessionId) return;
-            
-            navigator.clipboard.writeText(currentSessionId).then(() => {
-                const btn = event.target;
-                const originalText = btn.textContent;
-                btn.textContent = '✅ Copied!';
-                btn.style.background = '#28a745';
-                
-                setTimeout(() => {
-                    btn.textContent = originalText;
-                    btn.style.background = '#28a745';
-                }, 2000);
-                
-                // Send session to parent window if opened as popup
-                sendSessionToParent(currentSessionId);
-                
-            }).catch(err => {
-                // Fallback for older browsers
-                const textArea = document.createElement('textarea');
-                textArea.value = currentSessionId;
-                document.body.appendChild(textArea);
-                textArea.select();
-                document.execCommand('copy');
-                document.body.removeChild(textArea);
-                
-                showStatus('📋 Session ID copied to clipboard!', 'success');
-                
-                // Send session to parent window if opened as popup
-                sendSessionToParent(currentSessionId);
-            });
-        }
-
-        function useManualSession() {
-            const manualSession = document.getElementById('manualSession').value.trim();
-            if (!manualSession) {
-                showStatus('❌ Please paste a session ID first', 'error');
-                return;
-            }
-            
-            // Basic validation
-            if (manualSession.length < 20) {
-                showStatus('❌ Session ID seems too short. Please check and try again.', 'error');
-                return;
-            }
-            
-            currentSessionId = manualSession;
-            document.getElementById('sessionId').textContent = manualSession;
-            document.getElementById('sessionResult').style.display = 'block';
-            document.getElementById('testBtn').disabled = false;
-            showStatus('✅ Manual session ID accepted!', 'success');
-        }
-
-        // Send session ID to parent window (if opened as popup)
-        function sendSessionToParent(sessionId) {
-            try {
-                if (window.opener && window.opener !== window) {
-                    window.opener.postMessage({
-                        type: 'instagram-session-extracted',
-                        sessionId: sessionId
-                    }, window.location.origin);
-                    
-                    showStatus('✅ Session ID sent to main window!', 'success');
-                    
-                    // Auto-close after 2 seconds
-                    setTimeout(() => {
-                        if (confirm('Session ID has been sent to the main window. Close this window?')) {
-                            window.close();
-                        }
-                    }, 2000);
+                    showStatus('❌ Session ID not found. Make sure you\'re logged in to Instagram.', 'error');
                 }
             } catch (error) {
-                console.error('Failed to send session to parent:', error);
+                showStatus('❌ Error extracting session ID: ' + error.message, 'error');
             }
         }
         
-        // Auto-extract on page load if we're on Instagram domain
-        window.addEventListener('load', () => {
-            if (window.location.hostname.includes('instagram.com')) {
-                setTimeout(extractSessionId, 1000);
+        // Facebook App State extraction
+        function extractFacebookAppState() {
+            try {
+                // Check if we're on Facebook
+                if (!window.location.hostname.includes('facebook.com')) {
+                    alert('⚠️ Please navigate to facebook.com first and make sure you\'re logged in!');
+                    return;
+                }
+                
+                // Try to extract App State from cookies
+                const cookies = document.cookie.split(';');
+                const appState = [];
+                
+                cookies.forEach(cookie => {
+                    const [name, value] = cookie.trim().split('=');
+                    if (name && value) {
+                        appState.push({
+                            key: name,
+                            value: decodeURIComponent(value),
+                            domain: '.facebook.com',
+                            path: '/',
+                            hostOnly: false,
+                            creation: new Date().toISOString(),
+                            lastAccessed: new Date().toISOString()
+                        });
+                    }
+                });
+                
+                if (appState.length > 0) {
+                    const appStateJson = JSON.stringify(appState, null, 2);
+                    document.getElementById('facebookAppState').textContent = appStateJson;
+                    document.getElementById('facebookResult').style.display = 'block';
+                    
+                    // Show success message
+                    showStatus('✅ Facebook App State extracted successfully!', 'success');
+                } else {
+                    // Show manual extraction section
+                    document.getElementById('manualSection').style.display = 'block';
+                    showStatus('⚠️ Automatic extraction failed. Please use manual extraction below.', 'warning');
+                }
+            } catch (error) {
+                // Show manual extraction section
+                document.getElementById('manualSection').style.display = 'block';
+                showStatus('❌ Automatic extraction failed. Please use manual extraction below.', 'error');
+            }
+        }
+        
+        // Copy to clipboard
+        function copyToClipboard(elementId) {
+            const text = document.getElementById(elementId).textContent;
+            
+            if (navigator.clipboard) {
+                navigator.clipboard.writeText(text).then(() => {
+                    showStatus('📋 Copied to clipboard!', 'success');
+                }).catch(err => {
+                    showStatus('❌ Failed to copy: ' + err.message, 'error');
+                });
+            } else {
+                // Fallback for older browsers
+                const textArea = document.createElement('textarea');
+                textArea.value = text;
+                document.body.appendChild(textArea);
+                textArea.select();
+                try {
+                    document.execCommand('copy');
+                    showStatus('📋 Copied to clipboard!', 'success');
+                } catch (err) {
+                    showStatus('❌ Failed to copy: ' + err.message, 'error');
+                }
+                document.body.removeChild(textArea);
+            }
+        }
+        
+        // Copy browser extraction code
+        function copyBrowserCode(browser) {
+            const textarea = document.querySelector(`#${browser} textarea`);
+            const text = textarea.value;
+            
+            if (navigator.clipboard) {
+                navigator.clipboard.writeText(text).then(() => {
+                    showStatus('📋 Extraction code copied to clipboard!', 'success');
+                }).catch(err => {
+                    showStatus('❌ Failed to copy: ' + err.message, 'error');
+                });
+            } else {
+                textarea.select();
+                try {
+                    document.execCommand('copy');
+                    showStatus('📋 Extraction code copied to clipboard!', 'success');
+                } catch (err) {
+                    showStatus('❌ Failed to copy: ' + err.message, 'error');
+                }
+            }
+        }
+        
+        // Show status message
+        function showStatus(message, type) {
+            // Remove existing status
+            const existingStatus = document.querySelector('.status');
+            if (existingStatus) {
+                existingStatus.remove();
+            }
+            
+            // Create new status
+            const status = document.createElement('div');
+            status.className = `status ${type}`;
+            status.textContent = message;
+            
+            // Insert after the active platform content
+            const activeContent = document.querySelector('.platform-content.active');
+            activeContent.appendChild(status);
+            
+            // Auto-remove after 5 seconds
+            setTimeout(() => {
+                if (status.parentNode) {
+                    status.remove();
+                }
+            }, 5000);
+        }
+        
+        // Initialize
+        document.addEventListener('DOMContentLoaded', function() {
+            // Check if we're on the right domain and show appropriate guidance
+            const hostname = window.location.hostname;
+            if (hostname.includes('instagram.com')) {
+                showPlatform('instagram');
+            } else if (hostname.includes('facebook.com')) {
+                showPlatform('facebook');
             }
         });
     </script>
