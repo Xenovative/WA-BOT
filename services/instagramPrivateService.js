@@ -96,11 +96,14 @@ class InstagramPrivateService {
             }
             
             try {
-                // Set session cookie directly
-                this.ig.state.cookieJar.setCookieSync(
-                    `sessionid=${sessionData.sessionid}; Domain=.instagram.com; Path=/; HttpOnly; Secure`,
-                    'https://www.instagram.com'
-                );
+                // Create a minimal state object with session cookie
+                const stateData = {
+                    constants: {},
+                    cookies: `{"version":"tough-cookie@4.0.0","storeType":"MemoryCookieStore","rejectPublicSuffixes":true,"cookies":[{"key":"sessionid","value":"${sessionData.sessionid}","domain":".instagram.com","path":"/","httpOnly":true,"secure":true,"sameSite":"none"}]}`
+                };
+                
+                // Deserialize the state with session cookie
+                await this.ig.state.deserialize(JSON.stringify(stateData));
                 
                 // Verify session is valid by getting current user
                 this.user = await this.ig.account.currentUser();
