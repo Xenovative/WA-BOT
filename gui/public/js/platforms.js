@@ -1128,5 +1128,226 @@ document.addEventListener('shown.bs.tab', (event) => {
         }
         
         // Instagram authentication method initialization removed - session ID only
+        
+        // Initialize Facebook official API helpers
+        initializeFacebookOfficialHelpers();
     }
 });
+
+// Facebook Official API Helper Functions
+function initializeFacebookOfficialHelpers() {
+    // Setup guide button
+    const setupGuideBtn = document.getElementById('facebook-setup-guide-btn');
+    if (setupGuideBtn) {
+        setupGuideBtn.addEventListener('click', () => {
+            const modal = new bootstrap.Modal(document.getElementById('facebookSetupGuideModal'));
+            modal.show();
+        });
+    }
+    
+    // Token visibility toggle
+    const tokenToggle = document.getElementById('facebook-token-toggle');
+    if (tokenToggle) {
+        tokenToggle.addEventListener('click', () => {
+            togglePasswordVisibility('facebook-page-token');
+        });
+    }
+    
+    // Secret visibility toggle
+    const secretToggle = document.getElementById('facebook-secret-toggle');
+    if (secretToggle) {
+        secretToggle.addEventListener('click', () => {
+            togglePasswordVisibility('facebook-app-secret');
+        });
+    }
+    
+    // Generate verify token
+    const generateVerifyBtn = document.getElementById('facebook-generate-verify-btn');
+    if (generateVerifyBtn) {
+        generateVerifyBtn.addEventListener('click', () => {
+            generateFacebookVerifyToken();
+        });
+    }
+    
+    // Copy webhook URL
+    const webhookCopyBtn = document.getElementById('facebook-webhook-copy');
+    if (webhookCopyBtn) {
+        webhookCopyBtn.addEventListener('click', () => {
+            copyFacebookWebhookUrl();
+        });
+    }
+    
+    // Test connection
+    const testConnectionBtn = document.getElementById('facebook-test-connection');
+    if (testConnectionBtn) {
+        testConnectionBtn.addEventListener('click', () => {
+            testFacebookConnection();
+        });
+    }
+    
+    // Update webhook URL on page load
+    updateFacebookWebhookUrl();
+}
+
+// Generate a random verify token
+function generateFacebookVerifyToken() {
+    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+    let token = 'fb_verify_';
+    for (let i = 0; i < 16; i++) {
+        token += chars.charAt(Math.floor(Math.random() * chars.length));
+    }
+    
+    const verifyTokenInput = document.getElementById('facebook-verify-token');
+    if (verifyTokenInput) {
+        verifyTokenInput.value = token;
+        
+        // Show success message
+        showToast('Verify token generated successfully!', 'success');
+    }
+}
+
+// Update webhook URL based on current server settings
+function updateFacebookWebhookUrl() {
+    const webhookUrlInput = document.getElementById('facebook-webhook-url');
+    if (!webhookUrlInput) return;
+    
+    // Get current host and port
+    const protocol = window.location.protocol;
+    const host = window.location.hostname;
+    const port = window.location.port;
+    
+    let webhookUrl = `${protocol}//${host}`;
+    if (port && port !== '80' && port !== '443') {
+        webhookUrl += `:${port}`;
+    }
+    webhookUrl += '/webhook/facebook';
+    
+    webhookUrlInput.value = webhookUrl;
+}
+
+// Copy webhook URL to clipboard
+function copyFacebookWebhookUrl() {
+    const webhookUrlInput = document.getElementById('facebook-webhook-url');
+    if (!webhookUrlInput) return;
+    
+    webhookUrlInput.select();
+    webhookUrlInput.setSelectionRange(0, 99999); // For mobile devices
+    
+    try {
+        document.execCommand('copy');
+        showToast('Webhook URL copied to clipboard!', 'success');
+    } catch (err) {
+        // Fallback for modern browsers
+        navigator.clipboard.writeText(webhookUrlInput.value).then(() => {
+            showToast('Webhook URL copied to clipboard!', 'success');
+        }).catch(() => {
+            showToast('Failed to copy webhook URL', 'error');
+        });
+    }
+}
+
+// Test Facebook connection
+async function testFacebookConnection() {
+    const testBtn = document.getElementById('facebook-test-connection');
+    const resultDiv = document.getElementById('facebook-test-result');
+    
+    if (!testBtn || !resultDiv) return;
+    
+    // Get form values
+    const pageToken = document.getElementById('facebook-page-token')?.value;
+    const verifyToken = document.getElementById('facebook-verify-token')?.value;
+    const appSecret = document.getElementById('facebook-app-secret')?.value;
+    
+    if (!pageToken || !verifyToken || !appSecret) {
+        resultDiv.innerHTML = `
+            <div class="alert alert-warning small">
+                <i class="bi bi-exclamation-triangle me-1"></i>
+                Please fill in all required fields before testing.
+            </div>
+        `;
+        resultDiv.style.display = 'block';
+        return;
+    }
+    
+    // Show loading state
+    const originalText = testBtn.innerHTML;
+    testBtn.innerHTML = '<i class="bi bi-arrow-repeat spin"></i> Testing...';
+    testBtn.disabled = true;
+    
+    try {
+        // Test the Facebook API connection
+        const response = await fetch('/api/platforms/facebook/test', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                pageAccessToken: pageToken,
+                verifyToken: verifyToken,
+                appSecret: appSecret
+            })
+        });
+        
+        const result = await response.json();
+        
+        if (response.ok && result.success) {
+            resultDiv.innerHTML = `
+                <div class="alert alert-success small">
+                    <i class="bi bi-check-circle me-1"></i>
+                    <strong>Connection successful!</strong><br>
+                    ${result.message || 'Facebook API is working correctly.'}
+                </div>
+            `;
+        } else {
+            resultDiv.innerHTML = `
+                <div class="alert alert-danger small">
+                    <i class="bi bi-x-circle me-1"></i>
+                    <strong>Connection failed:</strong><br>
+                    ${result.message || 'Unknown error occurred.'}
+                </div>
+            `;
+        }
+    } catch (error) {
+        resultDiv.innerHTML = `
+            <div class="alert alert-danger small">
+                <i class="bi bi-x-circle me-1"></i>
+                <strong>Test failed:</strong><br>
+                ${error.message}
+            </div>
+        `;
+    } finally {
+        // Restore button state
+        testBtn.innerHTML = originalText;
+        testBtn.disabled = false;
+        resultDiv.style.display = 'block';
+    }
+}
+
+// Helper function to toggle password visibility
+function togglePasswordVisibility(inputId) {
+    const input = document.getElementById(inputId);
+    const button = document.querySelector(`#${inputId} + button, button[onclick*="${inputId}"]`);
+    
+    if (!input) return;
+    
+    if (input.type === 'password') {
+        input.type = 'text';
+        if (button) {
+            button.innerHTML = '<i class="bi bi-eye-slash"></i>';
+        }
+    } else {
+        input.type = 'password';
+        if (button) {
+            button.innerHTML = '<i class="bi bi-eye"></i>';
+        }
+    }
+}
+
+// Helper function to show toast notifications
+function showToast(message, type = 'info') {
+    if (window.showToast) {
+        window.showToast(message, type);
+    } else {
+        console.log(`${type.toUpperCase()}: ${message}`);
+    }
+}

@@ -48,6 +48,37 @@
             background: #343a40;
             color: white;
         }
+        
+        /* Facebook Setup Guide Styles */
+        .step-card {
+            border-left: 4px solid #0d6efd;
+            padding-left: 1rem;
+        }
+        
+        .step-number {
+            min-width: 40px;
+            min-height: 40px;
+            font-size: 1.1rem;
+        }
+        
+        /* Spinning animation for loading states */
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        .spin {
+            animation: spin 1s linear infinite;
+        }
+        
+        /* Enhanced form styling */
+        .form-text {
+            font-size: 0.8rem;
+        }
+        
+        .input-group .btn {
+            border-left: 0;
+        }
     </style>
 </head>
 <body>
@@ -831,17 +862,78 @@
                                         
                                         <!-- Official API Method -->
                                         <div id="facebook-official-config" class="method-config">
-                                            <div class="mb-3">
-                                                <label for="facebook-page-token" class="form-label" data-i18n="platforms.page_access_token">Page Access Token:</label>
-                                                <input type="password" class="form-control" id="facebook-page-token" placeholder="EAAxxxxxxxxxxxxx">
+                                            <!-- Setup Guide Alert -->
+                                            <div class="alert alert-info small mb-3">
+                                                <i class="bi bi-info-circle me-1"></i>
+                                                <strong>Need help setting up?</strong> 
+                                                <button type="button" class="btn btn-link btn-sm p-0 ms-1" id="facebook-setup-guide-btn">
+                                                    Click here for step-by-step setup guide
+                                                </button>
                                             </div>
+                                            
                                             <div class="mb-3">
-                                                <label for="facebook-verify-token" class="form-label" data-i18n="platforms.verify_token">Verify Token:</label>
-                                                <input type="text" class="form-control" id="facebook-verify-token" placeholder="your_verify_token">
+                                                <label for="facebook-page-token" class="form-label">
+                                                    Page Access Token:
+                                                    <i class="bi bi-question-circle text-muted ms-1" data-bs-toggle="tooltip" title="Long-lived token from your Facebook Page settings"></i>
+                                                </label>
+                                                <div class="input-group">
+                                                    <input type="password" class="form-control" id="facebook-page-token" placeholder="EAAxxxxxxxxxxxxx">
+                                                    <button class="btn btn-outline-secondary" type="button" id="facebook-token-toggle">
+                                                        <i class="bi bi-eye"></i>
+                                                    </button>
+                                                </div>
+                                                <div class="form-text">Get this from Facebook Developer Console > Your App > Messenger > Settings</div>
                                             </div>
+                                            
                                             <div class="mb-3">
-                                                <label for="facebook-app-secret" class="form-label" data-i18n="platforms.app_secret">App Secret:</label>
-                                                <input type="password" class="form-control" id="facebook-app-secret" placeholder="xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx">
+                                                <label for="facebook-verify-token" class="form-label">
+                                                    Verify Token:
+                                                    <i class="bi bi-question-circle text-muted ms-1" data-bs-toggle="tooltip" title="Custom token you create for webhook verification"></i>
+                                                </label>
+                                                <div class="input-group">
+                                                    <input type="text" class="form-control" id="facebook-verify-token" placeholder="your_custom_verify_token">
+                                                    <button class="btn btn-outline-secondary" type="button" id="facebook-generate-verify-btn">
+                                                        <i class="bi bi-arrow-clockwise"></i> Generate
+                                                    </button>
+                                                </div>
+                                                <div class="form-text">Create a custom token for webhook verification (e.g., "my_bot_verify_2024")</div>
+                                            </div>
+                                            
+                                            <div class="mb-3">
+                                                <label for="facebook-app-secret" class="form-label">
+                                                    App Secret:
+                                                    <i class="bi bi-question-circle text-muted ms-1" data-bs-toggle="tooltip" title="Your Facebook App's secret key for secure communication"></i>
+                                                </label>
+                                                <div class="input-group">
+                                                    <input type="password" class="form-control" id="facebook-app-secret" placeholder="xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx">
+                                                    <button class="btn btn-outline-secondary" type="button" id="facebook-secret-toggle">
+                                                        <i class="bi bi-eye"></i>
+                                                    </button>
+                                                </div>
+                                                <div class="form-text">Found in Facebook Developer Console > Your App > Settings > Basic</div>
+                                            </div>
+                                            
+                                            <!-- Webhook URL Display -->
+                                            <div class="mb-3">
+                                                <label class="form-label">
+                                                    Webhook URL (Copy this to Facebook):
+                                                    <i class="bi bi-question-circle text-muted ms-1" data-bs-toggle="tooltip" title="Use this URL in your Facebook App webhook settings"></i>
+                                                </label>
+                                                <div class="input-group">
+                                                    <input type="text" class="form-control" id="facebook-webhook-url" readonly>
+                                                    <button class="btn btn-outline-secondary" type="button" id="facebook-webhook-copy">
+                                                        <i class="bi bi-clipboard"></i> Copy
+                                                    </button>
+                                                </div>
+                                                <div class="form-text">This URL will be auto-generated based on your server settings</div>
+                                            </div>
+                                            
+                                            <!-- Test Connection -->
+                                            <div class="mb-3">
+                                                <button type="button" class="btn btn-outline-primary btn-sm" id="facebook-test-connection">
+                                                    <i class="bi bi-check-circle"></i> Test Connection
+                                                </button>
+                                                <div id="facebook-test-result" class="mt-2" style="display: none;"></div>
                                             </div>
                                         </div>
                                         
@@ -1253,6 +1345,156 @@ Instructions:
                     <button type="button" class="btn btn-outline-primary" id="exportChatBtn">
                         <i class="bi bi-download me-1"></i> <span data-i18n="button.export">Export</span>
                     </button>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Facebook Setup Guide Modal -->
+    <div class="modal fade" id="facebookSetupGuideModal" tabindex="-1" aria-labelledby="facebookSetupGuideModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-lg modal-dialog-scrollable">
+            <div class="modal-content">
+                <div class="modal-header bg-primary text-white">
+                    <h5 class="modal-title" id="facebookSetupGuideModalLabel">
+                        <i class="bi bi-messenger me-2"></i>Facebook Messenger Official API Setup Guide
+                    </h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="setup-steps">
+                        <!-- Step 1 -->
+                        <div class="step-card mb-4">
+                            <div class="d-flex align-items-start">
+                                <div class="step-number bg-primary text-white rounded-circle d-flex align-items-center justify-content-center me-3" style="width: 40px; height: 40px; font-weight: bold;">1</div>
+                                <div class="flex-grow-1">
+                                    <h6 class="fw-bold">Create a Facebook App</h6>
+                                    <p class="mb-2">Go to <a href="https://developers.facebook.com/apps" target="_blank" class="text-decoration-none">Facebook Developer Console <i class="bi bi-box-arrow-up-right"></i></a></p>
+                                    <ul class="small text-muted mb-0">
+                                        <li>Click "Create App"</li>
+                                        <li>Choose "Business" as app type</li>
+                                        <li>Fill in app name and contact email</li>
+                                        <li>Click "Create App"</li>
+                                    </ul>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Step 2 -->
+                        <div class="step-card mb-4">
+                            <div class="d-flex align-items-start">
+                                <div class="step-number bg-primary text-white rounded-circle d-flex align-items-center justify-content-center me-3" style="width: 40px; height: 40px; font-weight: bold;">2</div>
+                                <div class="flex-grow-1">
+                                    <h6 class="fw-bold">Add Messenger Product</h6>
+                                    <p class="mb-2">In your app dashboard:</p>
+                                    <ul class="small text-muted mb-0">
+                                        <li>Click "Add Product" in the left sidebar</li>
+                                        <li>Find "Messenger" and click "Set Up"</li>
+                                        <li>This will add Messenger to your app</li>
+                                    </ul>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Step 3 -->
+                        <div class="step-card mb-4">
+                            <div class="d-flex align-items-start">
+                                <div class="step-number bg-primary text-white rounded-circle d-flex align-items-center justify-content-center me-3" style="width: 40px; height: 40px; font-weight: bold;">3</div>
+                                <div class="flex-grow-1">
+                                    <h6 class="fw-bold">Get Page Access Token</h6>
+                                    <p class="mb-2">In Messenger > Settings:</p>
+                                    <ul class="small text-muted mb-0">
+                                        <li>Scroll to "Access Tokens" section</li>
+                                        <li>Click "Add or Remove Pages"</li>
+                                        <li>Select your Facebook Page and continue</li>
+                                        <li>Copy the generated Page Access Token</li>
+                                        <li><strong>Paste this token in the "Page Access Token" field above</strong></li>
+                                    </ul>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Step 4 -->
+                        <div class="step-card mb-4">
+                            <div class="d-flex align-items-start">
+                                <div class="step-number bg-primary text-white rounded-circle d-flex align-items-center justify-content-center me-3" style="width: 40px; height: 40px; font-weight: bold;">4</div>
+                                <div class="flex-grow-1">
+                                    <h6 class="fw-bold">Get App Secret</h6>
+                                    <p class="mb-2">In your app dashboard:</p>
+                                    <ul class="small text-muted mb-0">
+                                        <li>Go to Settings > Basic in the left sidebar</li>
+                                        <li>Find "App Secret" and click "Show"</li>
+                                        <li>Copy the App Secret</li>
+                                        <li><strong>Paste this secret in the "App Secret" field above</strong></li>
+                                    </ul>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Step 5 -->
+                        <div class="step-card mb-4">
+                            <div class="d-flex align-items-start">
+                                <div class="step-number bg-primary text-white rounded-circle d-flex align-items-center justify-content-center me-3" style="width: 40px; height: 40px; font-weight: bold;">5</div>
+                                <div class="flex-grow-1">
+                                    <h6 class="fw-bold">Create Verify Token</h6>
+                                    <p class="mb-2">Create a custom verification token:</p>
+                                    <ul class="small text-muted mb-0">
+                                        <li>This can be any string you choose (e.g., "my_bot_verify_2024")</li>
+                                        <li>Use the "Generate" button above for a random token</li>
+                                        <li><strong>Remember this token - you'll need it in the next step</strong></li>
+                                    </ul>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Step 6 -->
+                        <div class="step-card mb-4">
+                            <div class="d-flex align-items-start">
+                                <div class="step-number bg-primary text-white rounded-circle d-flex align-items-center justify-content-center me-3" style="width: 40px; height: 40px; font-weight: bold;">6</div>
+                                <div class="flex-grow-1">
+                                    <h6 class="fw-bold">Setup Webhook</h6>
+                                    <p class="mb-2">Back in Messenger > Settings:</p>
+                                    <ul class="small text-muted mb-0">
+                                        <li>Scroll to "Webhooks" section</li>
+                                        <li>Click "Add Callback URL"</li>
+                                        <li><strong>Copy the Webhook URL from above</strong></li>
+                                        <li>Paste your Verify Token from step 5</li>
+                                        <li>Click "Verify and Save"</li>
+                                        <li>Subscribe to "messages" and "messaging_postbacks" events</li>
+                                    </ul>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Step 7 -->
+                        <div class="step-card mb-4">
+                            <div class="d-flex align-items-start">
+                                <div class="step-number bg-success text-white rounded-circle d-flex align-items-center justify-content-center me-3" style="width: 40px; height: 40px; font-weight: bold;">✓</div>
+                                <div class="flex-grow-1">
+                                    <h6 class="fw-bold text-success">Test Your Setup</h6>
+                                    <p class="mb-2">Final steps:</p>
+                                    <ul class="small text-muted mb-0">
+                                        <li>Click "Test Connection" button above</li>
+                                        <li>If successful, click "Connect" to activate</li>
+                                        <li>Send a test message to your Facebook Page</li>
+                                        <li>Check the Chat tab to see if messages appear</li>
+                                    </ul>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="alert alert-warning small">
+                            <i class="bi bi-exclamation-triangle me-1"></i>
+                            <strong>Important:</strong> Make sure your Facebook Page is published and your app is in "Development" mode for testing. For production use, you'll need to submit your app for review.
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+                        <i class="bi bi-x-circle me-1"></i> Close
+                    </button>
+                    <a href="https://developers.facebook.com/docs/messenger-platform/getting-started" target="_blank" class="btn btn-outline-primary">
+                        <i class="bi bi-book me-1"></i> Official Documentation
+                    </a>
                 </div>
             </div>
         </div>
