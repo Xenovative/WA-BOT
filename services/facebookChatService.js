@@ -7,8 +7,39 @@ class FacebookChatService {
         this.api = null;
         this.isLoggedIn = false;
         this.processedMessages = new Set();
+        this.appStatePath = `./facebook_appstate_${Buffer.from(email).toString('base64').slice(0, 8)}.json`;
         
         console.log('Facebook Chat service initialized (unofficial API)');
+    }
+
+    /**
+     * Load saved app state for persistent login
+     */
+    loadAppState() {
+        try {
+            const fs = require('fs');
+            if (fs.existsSync(this.appStatePath)) {
+                const appState = JSON.parse(fs.readFileSync(this.appStatePath, 'utf8'));
+                console.log('📱 Loaded Facebook app state for persistent login');
+                return appState;
+            }
+        } catch (error) {
+            console.log('⚠️ Could not load Facebook app state:', error.message);
+        }
+        return null;
+    }
+
+    /**
+     * Save app state for future logins
+     */
+    saveAppState(appState) {
+        try {
+            const fs = require('fs');
+            fs.writeFileSync(this.appStatePath, JSON.stringify(appState, null, 2));
+            console.log('💾 Saved Facebook app state for future logins');
+        } catch (error) {
+            console.error('❌ Failed to save Facebook app state:', error.message);
+        }
     }
 
     /**
@@ -23,20 +54,67 @@ class FacebookChatService {
                     email: this.email,
                     password: this.password,
                     forceLogin: true,  // Force login even with 2FA
-                    userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+                    userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                    // Additional options to bypass Facebook restrictions
+                    pauseLog: true,
+                    logLevel: 'silent',
+                    selfListen: false,
+                    listenEvents: false,
+                    updatePresence: false,
+                    autoMarkDelivery: false,
+                    autoMarkRead: false,
+                    // Try to use app state if available
+                    appState: this.loadAppState()
                 };
 
+                console.log('🔑 Attempting Facebook login with enhanced options...');
+                
                 login(loginOptions, (err, api) => {
                     if (err) {
-                        console.error('Facebook login failed:', err);
+                        console.error('❌ Facebook login failed:', err);
+                        
+                        // Provide specific guidance based on error
+                        if (err.error && err.error.includes('login approvals')) {
+                            console.log('');
+                            console.log('🚨 FACEBOOK 2FA ISSUE DETECTED:');
+                            console.log('   • Your Facebook account has 2FA (login approvals) enabled');
+                            console.log('   • Facebook unofficial API cannot handle 2FA automatically');
+                            console.log('');
+                            console.log('🔧 SOLUTIONS:');
+                            console.log('   1. Disable 2FA on this Facebook account (recommended for bots)');
+                            console.log('   2. Use Facebook Messenger Official API instead');
+                            console.log('   3. Create a dedicated bot account without 2FA');
+                            console.log('');
+                        } else if (err.error && err.error.includes('blocked')) {
+                            console.log('');
+                            console.log('🚫 FACEBOOK ACCOUNT BLOCKED:');
+                            console.log('   • Facebook has temporarily blocked this account');
+                            console.log('   • This happens with repeated login attempts');
+                            console.log('');
+                            console.log('🔧 SOLUTIONS:');
+                            console.log('   1. Wait 24-48 hours before trying again');
+                            console.log('   2. Login manually via browser first');
+                            console.log('   3. Use a different Facebook account');
+                            console.log('   4. Switch to Facebook Messenger Official API');
+                            console.log('');
+                        }
+                        
                         this.isLoggedIn = false;
                         resolve(false);
                         return;
                     }
 
-                    console.log('Facebook login successful!');
+                    console.log('✅ Facebook login successful!');
                     this.api = api;
                     this.isLoggedIn = true;
+
+                    // Save app state for future logins
+                    try {
+                        const appState = api.getAppState();
+                        this.saveAppState(appState);
+                    } catch (stateError) {
+                        console.log('⚠️ Could not save app state:', stateError.message);
+                    }
 
                     // Set options
                     api.setOptions({
