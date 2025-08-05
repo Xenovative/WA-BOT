@@ -32,6 +32,7 @@ class FacebookChatService {
         this.api = null;
         this.isLoggedIn = false;
         this.processedMessages = new Set();
+        this.pollingInterval = null; // For polling mode
         this.appStatePath = `./facebook_appstate_${Buffer.from(email || 'default').toString('base64').slice(0, 8)}.json`;
         
         console.log('Facebook Chat service initialized (unofficial API)');
@@ -213,9 +214,15 @@ class FacebookChatService {
                     pageID: null,
                     proxy: null,
                     online: false,
-                    autoReconnect: true, // Enable auto-reconnect
-                    session: true, // Enable session persistence
-                    keepAlive: true // Keep connection alive
+                    autoReconnect: false, // Disable to avoid detection
+                    session: false, // Try without session persistence
+                    keepAlive: false, // Disable keep alive
+                    // More aggressive bypass options
+                    listenTyping: false,
+                    autoMarkSeen: false,
+                    mqttEndpoint: null, // Disable MQTT
+                    region: 'www', // Force www region
+                    userDataDir: null // No user data persistence
                 };
                 
                 // Add authentication method
@@ -392,8 +399,8 @@ class FacebookChatService {
                     const validationTimeout = setTimeout(() => {
                         console.log('⏰ Session validation timed out - proceeding anyway');
                         console.log('⚠️ MQTT connection likely blocked by Facebook');
-                        console.log('🔄 Starting listener in degraded mode...');
-                        this.startMessageListener();
+                        console.log('🔄 Switching to polling mode instead of real-time listening...');
+                        this.startPollingMode();
                     }, 10000); // 10 second timeout
                     
                     api.getCurrentUserID((err, userID) => {
@@ -414,20 +421,17 @@ class FacebookChatService {
                             
                             // Check if MQTT connection is available
                             if (api.mqttClient) {
-                                console.log('✅ MQTT connection available - full messaging support');
-                                console.log('🚀 Starting message listener in 5 seconds...');
+                                console.log('✅ MQTT connection available - trying real-time listener');
                                 setTimeout(() => {
                                     this.startMessageListener();
                                 }, 5000);
                             } else {
-                                console.log('⚠️ MQTT connection blocked - limited functionality');
-                                console.log('📤 Can send messages but may not receive them reliably');
-                                console.log('🎆 For full functionality, use Facebook Messenger Official API');
+                                console.log('⚠️ MQTT connection blocked - using polling mode instead');
+                                console.log('🔄 Polling mode will check for messages every 10 seconds');
                                 
-                                // Still try to start listener but with warning
+                                // Use polling mode instead of broken listener
                                 setTimeout(() => {
-                                    console.log('🔄 Attempting to start listener despite MQTT issues...');
-                                    this.startMessageListener();
+                                    this.startPollingMode();
                                 }, 3000);
                             }
                         }
@@ -694,6 +698,9 @@ class FacebookChatService {
      */
     async stop() {
         try {
+            // Stop polling if active
+            this.stopPollingMode();
+            
             if (this.api && typeof this.api.logout === 'function') {
                 this.api.logout();
             }
@@ -722,6 +729,66 @@ class FacebookChatService {
             email: this.email,
             hasApi: this.api !== null
         };
+    }
+
+    /**
+     * Start polling mode - alternative to real-time listening
+     * Polls for new messages every 10 seconds
+     */
+    startPollingMode() {
+        if (!this.api || !this.isLoggedIn) {
+            console.error('Cannot start polling - Facebook not logged in');
+            return;
+        }
+
+        console.log('🔄 Starting Facebook polling mode (checks every 10 seconds)');
+        console.log('⚠️ Note: Polling mode has 10-second delay for new messages');
+        
+        this.pollingInterval = setInterval(async () => {
+            try {
+                // Get thread list to check for new messages
+                this.api.getThreadList(20, null, [], (err, threads) => {
+                    if (err) {
+                        console.log('⚠️ Polling error (will retry):', err.message);
+                        return;
+                    }
+                    
+                    // Check each thread for new messages
+                    threads.forEach(thread => {
+                        if (thread.messageCount > 0) {
+                            // Get recent messages from this thread
+                            this.api.getThreadHistory(thread.threadID, 5, undefined, (histErr, history) => {
+                                if (histErr) return;
+                                
+                                // Process messages in reverse order (oldest first)
+                                history.reverse().forEach(message => {
+                                    // Only process messages from the last 30 seconds
+                                    const messageAge = Date.now() - parseInt(message.timestamp);
+                                    if (messageAge < 30000 && !this.processedMessages.has(message.messageID)) {
+                                        this.handleMessage(message);
+                                    }
+                                });
+                            });
+                        }
+                    });
+                });
+            } catch (error) {
+                console.log('⚠️ Polling cycle error:', error.message);
+            }
+        }, 10000); // Poll every 10 seconds
+        
+        console.log('✅ Facebook polling mode started successfully');
+    }
+
+    /**
+     * Stop polling mode
+     */
+    stopPollingMode() {
+        if (this.pollingInterval) {
+            clearInterval(this.pollingInterval);
+            this.pollingInterval = null;
+            console.log('⏹️ Facebook polling mode stopped');
+        }
     }
 }
 
