@@ -745,14 +745,18 @@ class FacebookChatService {
         console.log('⚠️ Note: Polling mode has 10-second delay for new messages');
         
         this.pollingInterval = setInterval(async () => {
+            console.log('🔍 Facebook polling check...'); // Debug log
             try {
                 // Try a simpler approach first - just check if we can get user info
                 this.api.getCurrentUserID((userErr, userID) => {
                     if (userErr) {
                         console.log('⚠️ Polling: Session invalid, stopping polling');
+                        console.log('⚠️ Error details:', userErr);
                         this.stopPollingMode();
                         return;
                     }
+                    
+                    console.log('✅ Polling: Session valid, checking for messages...');
                     
                     // If user ID works, try getting thread list
                     this.api.getThreadList(5, null, [], (err, threads) => {
@@ -769,8 +773,11 @@ class FacebookChatService {
                         return;
                     }
                     
+                    console.log(`💬 Found ${threads ? threads.length : 0} Facebook threads`);
+                    
                     // Check each thread for new messages
-                    threads.forEach(thread => {
+                    if (threads && threads.length > 0) {
+                        threads.forEach(thread => {
                         if (thread.messageCount > 0) {
                             // Get recent messages from this thread
                             this.api.getThreadHistory(thread.threadID, 5, undefined, (histErr, history) => {
@@ -787,6 +794,9 @@ class FacebookChatService {
                             });
                         }
                     });
+                    } else {
+                        console.log('💬 No Facebook threads found or threads array empty');
+                    }
                     });
                 });
             } catch (error) {
