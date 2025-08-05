@@ -801,20 +801,30 @@ class FacebookChatService {
                 // Skip session validation in polling - just try to get threads directly
                 console.log('💬 Attempting to fetch Facebook threads...');
                 
-                // Try to get thread list directly without validation
-                this.api.getThreadList(5, null, [], (err, threads) => {
-                    if (err) {
-                        // More detailed error handling
-                        const errorMsg = err.message || err.error || 'Unknown error';
-                        console.log('⚠️ Direct polling error:', errorMsg);
-                        
-                        // If it's a session error, stop polling
-                        if (errorMsg.includes('login') || errorMsg.includes('session') || errorMsg.includes('1357004')) {
-                            console.log('❌ Facebook session completely invalid, stopping polling');
-                            this.stopPollingMode();
+                // Try to get thread list with better error handling
+                try {
+                    this.api.getThreadList(3, null, [], (err, threads) => {
+                        if (err) {
+                            // More detailed error handling
+                            console.log('⚠️ Direct polling error details:');
+                            console.log('   • Error type:', typeof err);
+                            console.log('   • Error message:', err.message || 'No message');
+                            console.log('   • Error code:', err.error || err.code || 'No code');
+                            console.log('   • Full error:', JSON.stringify(err, null, 2));
+                            
+                            // Check for specific Facebook blocking patterns
+                            const errorStr = JSON.stringify(err);
+                            if (errorStr.includes('1357004') || errorStr.includes('login') || errorStr.includes('session')) {
+                                console.log('❌ Facebook session completely invalid, stopping polling');
+                                this.stopPollingMode();
+                                return;
+                            }
+                            
+                            // Try alternative approach for other errors
+                            console.log('🔄 Trying alternative Facebook API call...');
+                            this.trySimpleApiCall();
+                            return;
                         }
-                        return;
-                    }
                     
                     console.log(`💬 Direct fetch: Found ${threads ? threads.length : 0} Facebook threads`);
                     
@@ -840,7 +850,10 @@ class FacebookChatService {
                     } else {
                         console.log('💬 No Facebook threads found or threads array empty');
                     }
-                });
+                    });
+                } catch (apiError) {
+                    console.log('⚠️ API call failed:', apiError.message);
+                }
             } catch (error) {
                 console.log('⚠️ Polling cycle error:', error.message);
             }
@@ -857,6 +870,28 @@ class FacebookChatService {
             clearInterval(this.pollingInterval);
             this.pollingInterval = null;
             console.log('⏹️ Facebook polling mode stopped');
+        }
+    }
+
+    /**
+     * Try a simple API call to test session validity
+     */
+    trySimpleApiCall() {
+        console.log('🔍 Trying simple Facebook API test...');
+        
+        // Try a very basic API call
+        try {
+            this.api.getThreadList(1, null, [], (err, threads) => {
+                if (err) {
+                    console.log('❌ Simple API call also failed:', err.message || 'Unknown error');
+                    console.log('🚨 Facebook session appears completely blocked');
+                    console.log('🎆 Recommendation: Use Facebook Messenger Official API');
+                } else {
+                    console.log('✅ Simple API call succeeded, continuing polling...');
+                }
+            });
+        } catch (error) {
+            console.log('⚠️ Simple API call exception:', error.message);
         }
     }
 
