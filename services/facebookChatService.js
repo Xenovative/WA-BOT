@@ -396,15 +396,24 @@ class FacebookChatService {
                     console.log('🔍 Testing Facebook session validity...');
                     
                     // Add immediate timeout to prevent hanging
+                    console.log('⏰ Setting 5-second timeout for session validation...');
                     const validationTimeout = setTimeout(() => {
-                        console.log('⏰ Session validation timed out - proceeding anyway');
-                        console.log('⚠️ MQTT connection likely blocked by Facebook');
-                        console.log('🔄 Switching to polling mode instead of real-time listening...');
+                        console.log('⏰ Session validation timed out after 5 seconds');
+                        console.log('⚠️ getCurrentUserID() is hanging - Facebook blocking API calls');
+                        console.log('🔄 Forcing switch to polling mode...');
                         this.startPollingMode();
-                    }, 10000); // 10 second timeout
+                    }, 5000); // 5 second timeout (reduced)
+                    
+                    // Also add a backup timer in case everything is blocked
+                    const backupTimeout = setTimeout(() => {
+                        console.log('🚑 Emergency fallback: Starting polling mode after 8 seconds');
+                        console.log('📤 Facebook API appears completely unresponsive');
+                        this.startPollingMode();
+                    }, 8000);
                     
                     api.getCurrentUserID((err, userID) => {
                         clearTimeout(validationTimeout); // Cancel timeout if callback executes
+                        clearTimeout(backupTimeout); // Cancel backup timeout
                         if (err) {
                             console.log('⚠️ Session validation failed:', err);
                             console.log('❌ Facebook has blocked the session immediately after login');
@@ -436,6 +445,14 @@ class FacebookChatService {
                             }
                         }
                     });
+                    
+                    // Start polling immediately as backup (in case validation hangs)
+                    setTimeout(() => {
+                        if (!this.pollingInterval) {
+                            console.log('🚑 Direct polling start - validation may have failed');
+                            this.startPollingMode();
+                        }
+                    }, 12000); // 12 seconds after login
                     
                     resolve(true);
                     });
