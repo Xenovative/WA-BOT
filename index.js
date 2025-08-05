@@ -50,7 +50,18 @@ if (process.env.FACEBOOK_PAGE_ACCESS_TOKEN && process.env.FACEBOOK_VERIFY_TOKEN)
       process.env.FACEBOOK_VERIFY_TOKEN,
       process.env.FACEBOOK_APP_SECRET
     );
-    console.log('Facebook Messenger service (official API) initialized');
+    
+    // Initialize the official Facebook Messenger service
+    facebookMessenger.initialize().then(result => {
+      if (result.success) {
+        console.log('✅ Facebook Messenger service (official API) started successfully');
+        global.facebookMessenger = facebookMessenger;
+      } else {
+        console.error('❌ Failed to initialize Facebook Messenger:', result.message);
+      }
+    }).catch(error => {
+      console.error('❌ Facebook Messenger initialization error:', error.message);
+    });
   } catch (error) {
     console.error('Failed to initialize Facebook Messenger:', error);
   }

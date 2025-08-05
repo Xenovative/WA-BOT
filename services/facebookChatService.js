@@ -188,27 +188,36 @@ class FacebookChatService {
                 
                 console.log(`🔑 Attempting Facebook login (${hasAppState ? 'App State' : 'Email/Password'})...`);
                 
-                // Try multiple user agents to avoid detection
+                // Use latest Chrome user agents and additional bypass options
                 const userAgents = [
                     'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36',
+                    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/118.0.0.0 Safari/537.36',
                     'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-                    'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:109.0) Gecko/20100101 Firefox/121.0'
+                    'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
                 ];
-                
                 const randomUserAgent = userAgents[Math.floor(Math.random() * userAgents.length)];
                 
                 const appState = this.loadAppState();
                 
                 const loginOptions = {
                     userAgent: randomUserAgent,
-                    // Additional options to bypass Facebook restrictions
+                    // Enhanced options to bypass Facebook restrictions and 404 errors
                     pauseLog: true,
                     logLevel: 'silent',
                     selfListen: false,
                     listenEvents: false,
                     updatePresence: false,
                     autoMarkDelivery: false,
-                    autoMarkRead: false
+                    autoMarkRead: false,
+                    // Additional bypass options
+                    forceLogin: true,
+                    pageID: null,
+                    proxy: null,
+                    // Try to use mobile endpoints
+                    online: false,
+                    // Disable some features that might trigger 404
+                    autoReconnect: false
                 };
                 
                 // Add authentication method
@@ -248,7 +257,18 @@ class FacebookChatService {
 
                 console.log(`🔑 Attempting Facebook login with enhanced options (User-Agent: ${randomUserAgent.includes('Chrome') ? 'Chrome' : randomUserAgent.includes('Firefox') ? 'Firefox' : 'Safari'})...`);
                 
-                login(loginOptions, (err, api) => {
+                // Enhanced login with retry mechanism for 404 errors
+                let retryCount = 0;
+                const maxRetries = 3;
+                
+                const attemptLogin = () => {
+                    if (retryCount > 0) {
+                        console.log(`🔄 Retry attempt ${retryCount}/${maxRetries - 1}...`);
+                        // Use different user agent for retry
+                        loginOptions.userAgent = userAgents[Math.floor(Math.random() * userAgents.length)];
+                    }
+                    
+                    login(loginOptions, (err, api) => {
                     if (err) {
                         console.error('❌ Facebook login failed:', err);
                         
@@ -293,6 +313,34 @@ class FacebookChatService {
                             console.log('   4. Set FACEBOOK_PAGE_ACCESS_TOKEN in your .env file');
                             console.log('   5. Configure webhook URL for message receiving');
                             console.log('');
+                        } else if (err.error && (err.error.includes('404') || err.error.includes('parseAndCheckLogin') || err.toString().includes('404'))) {
+                            console.log('');
+                            console.log('🚨 FACEBOOK API ENDPOINT ERROR (404):');
+                            console.log('   • Facebook has changed or blocked the unofficial API endpoints');
+                            console.log('   • This is a common issue with the unofficial facebook-chat-api');
+                            console.log('');
+                            
+                            // Retry with different options if we have retries left
+                            if (retryCount < maxRetries - 1) {
+                                retryCount++;
+                                console.log(`🔄 Retrying with different configuration (${retryCount}/${maxRetries - 1})...`);
+                                
+                                // Modify login options for retry
+                                loginOptions.userAgent = userAgents[Math.floor(Math.random() * userAgents.length)];
+                                loginOptions.forceLogin = !loginOptions.forceLogin; // Toggle forceLogin
+                                loginOptions.online = retryCount % 2 === 0; // Alternate online status
+                                
+                                setTimeout(attemptLogin, 3000 * retryCount); // Exponential backoff
+                                return;
+                            } else {
+                                console.log('🔧 ALL RETRY ATTEMPTS FAILED - SOLUTIONS:');
+                                console.log('   1. 🌟 Switch to Facebook Messenger Official API (highly recommended)');
+                                console.log('   2. 🔄 Try updating facebook-chat-api: npm install fca-unofficial');
+                                console.log('   3. 🌐 Use a VPN or different IP address');
+                                console.log('   4. 🔄 Re-extract fresh app state cookies from browser');
+                                console.log('   5. ⏰ Wait several hours and try again');
+                                console.log('');
+                            }
                         }
                         
                         this.isLoggedIn = false;
@@ -323,7 +371,12 @@ class FacebookChatService {
                     // Start listening for messages
                     this.startMessageListener();
                     resolve(true);
-                });
+                    });
+                };
+                
+                // Start the first login attempt
+                attemptLogin();
+                
             } catch (error) {
                 console.error('Facebook initialization error:', error);
                 this.isLoggedIn = false;
