@@ -43,6 +43,13 @@ if (process.env.TELEGRAM_BOT_TOKEN) {
 
 // Initialize Facebook Messenger if credentials are provided
 let facebookMessenger = null;
+console.log('🚑 FACEBOOK INITIALIZATION CHECK:');
+console.log('   • FACEBOOK_PAGE_ACCESS_TOKEN:', !!process.env.FACEBOOK_PAGE_ACCESS_TOKEN);
+console.log('   • FACEBOOK_VERIFY_TOKEN:', !!process.env.FACEBOOK_VERIFY_TOKEN);
+console.log('   • FACEBOOK_EMAIL:', !!process.env.FACEBOOK_EMAIL);
+console.log('   • FACEBOOK_PASSWORD:', !!process.env.FACEBOOK_PASSWORD);
+console.log('   • FACEBOOK_APP_STATE:', !!process.env.FACEBOOK_APP_STATE);
+
 if (process.env.FACEBOOK_PAGE_ACCESS_TOKEN && process.env.FACEBOOK_VERIFY_TOKEN) {
   try {
     facebookMessenger = new FacebookMessengerService(
@@ -65,7 +72,7 @@ if (process.env.FACEBOOK_PAGE_ACCESS_TOKEN && process.env.FACEBOOK_VERIFY_TOKEN)
   } catch (error) {
     console.error('Failed to initialize Facebook Messenger:', error);
   }
-} else if (process.env.FACEBOOK_EMAIL && process.env.FACEBOOK_PASSWORD) {
+} else if (process.env.FACEBOOK_EMAIL && process.env.FACEBOOK_PASSWORD || process.env.FACEBOOK_APP_STATE) {
   try {
     facebookMessenger = new FacebookChatService(
       process.env.FACEBOOK_EMAIL,
