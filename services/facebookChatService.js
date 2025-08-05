@@ -202,7 +202,6 @@ class FacebookChatService {
                 
                 const loginOptions = {
                     userAgent: randomUserAgent,
-                    // Enhanced options to bypass Facebook restrictions and 404 errors
                     pauseLog: true,
                     logLevel: 'silent',
                     selfListen: false,
@@ -210,14 +209,13 @@ class FacebookChatService {
                     updatePresence: false,
                     autoMarkDelivery: false,
                     autoMarkRead: false,
-                    // Additional bypass options
                     forceLogin: true,
                     pageID: null,
                     proxy: null,
-                    // Try to use mobile endpoints
                     online: false,
-                    // Disable some features that might trigger 404
-                    autoReconnect: false
+                    autoReconnect: true, // Enable auto-reconnect
+                    session: true, // Enable session persistence
+                    keepAlive: true // Keep connection alive
                 };
                 
                 // Add authentication method
@@ -378,8 +376,11 @@ class FacebookChatService {
                         selfListen: false
                     });
 
-                    // Start listening for messages
-                    this.startMessageListener();
+                    // Add delay before starting listener to let session stabilize
+                    setTimeout(() => {
+                        this.startMessageListener();
+                    }, 3000); // 3 second delay
+                    
                     resolve(true);
                     });
                 };
@@ -409,6 +410,28 @@ class FacebookChatService {
         this.api.listen((err, message) => {
             if (err) {
                 console.error('Facebook listen error:', err);
+                
+                // Handle session invalidation
+                if (err.error === 'Not logged in' || (err.res && err.res.error === 1357004)) {
+                    console.log('');
+                    console.log('🔐 FACEBOOK SESSION INVALIDATED:');
+                    console.log('   • Facebook has invalidated the current session');
+                    console.log('   • This is common with unofficial API usage');
+                    console.log('');
+                    console.log('🔧 SOLUTIONS:');
+                    console.log('   1. 🌟 Switch to Facebook Messenger Official API (recommended)');
+                    console.log('   2. 🔄 Re-extract fresh app state from browser');
+                    console.log('   3. ⏰ Wait 10-15 minutes before trying again');
+                    console.log('');
+                    
+                    // Try to reinitialize after delay
+                    setTimeout(() => {
+                        console.log('🔄 Attempting to reinitialize Facebook connection...');
+                        this.initialize();
+                    }, 60000); // 1 minute delay for session invalidation
+                    
+                    return;
+                }
                 
                 // Handle specific error types
                 if (err.message && err.message.includes('404')) {
