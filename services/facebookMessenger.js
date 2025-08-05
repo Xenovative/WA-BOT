@@ -3,12 +3,75 @@ const crypto = require('crypto');
 
 class FacebookMessengerService {
     constructor(pageAccessToken, verifyToken, appSecret) {
-        this.pageAccessToken = pageAccessToken;
-        this.verifyToken = verifyToken;
-        this.appSecret = appSecret;
+        // Use provided parameters or fall back to environment variables
+        this.pageAccessToken = pageAccessToken || process.env.FACEBOOK_PAGE_ACCESS_TOKEN;
+        this.verifyToken = verifyToken || process.env.FACEBOOK_VERIFY_TOKEN;
+        this.appSecret = appSecret || process.env.FACEBOOK_APP_SECRET;
         this.apiUrl = 'https://graph.facebook.com/v18.0/me/messages';
+        this.isInitialized = false;
         
         console.log('Facebook Messenger service initialized');
+    }
+
+    /**
+     * Initialize the Facebook Messenger service
+     */
+    async initialize() {
+        try {
+            // Validate required credentials
+            if (!this.pageAccessToken) {
+                throw new Error('Facebook Page Access Token is required');
+            }
+            if (!this.verifyToken) {
+                throw new Error('Facebook Verify Token is required');
+            }
+            if (!this.appSecret) {
+                throw new Error('Facebook App Secret is required');
+            }
+
+            // Test the API connection
+            await this.testConnection();
+            
+            // Setup webhook routes if Express app is available
+            if (global.app) {
+                this.setupWebhookRoutes(global.app);
+            }
+            
+            this.isInitialized = true;
+            console.log('✅ Facebook Messenger service initialized successfully');
+            
+            return {
+                success: true,
+                message: 'Facebook Messenger connected successfully'
+            };
+        } catch (error) {
+            console.error('❌ Failed to initialize Facebook Messenger service:', error.message);
+            throw error;
+        }
+    }
+
+    /**
+     * Test the Facebook API connection
+     */
+    async testConnection() {
+        try {
+            const response = await axios.get('https://graph.facebook.com/v18.0/me', {
+                params: {
+                    access_token: this.pageAccessToken,
+                    fields: 'name,id'
+                }
+            });
+            
+            console.log(`✅ Connected to Facebook Page: ${response.data.name} (ID: ${response.data.id})`);
+            return response.data;
+        } catch (error) {
+            if (error.response) {
+                const errorData = error.response.data;
+                throw new Error(`Facebook API Error: ${errorData.error?.message || 'Unknown error'}`);
+            } else {
+                throw new Error(`Connection Error: ${error.message}`);
+            }
+        }
     }
 
     /**

@@ -14,6 +14,9 @@ const app = express();
 const server = http.createServer(app);
 const wss = new WebSocket.Server({ server });
 const port = process.env.GUI_PORT || 3000;
+
+// Make app available globally for services
+global.app = app;
 const adminUtils = require('./utils/adminUtils');
 
 // Function to save environment variables to .env file
@@ -2314,6 +2317,31 @@ app.post('/api/platforms/:platform/enabled', (req, res) => {
   }
 });
 
+// Test Facebook API connection
+app.post('/api/platforms/facebook/test', async (req, res) => {
+  const { pageAccessToken, verifyToken, appSecret } = req.body;
+  
+  try {
+    // Create a temporary Facebook Messenger service for testing
+    const FacebookMessenger = require('./services/facebookMessenger');
+    const testService = new FacebookMessenger(pageAccessToken, verifyToken, appSecret);
+    
+    // Test the connection
+    const result = await testService.testConnection();
+    
+    res.json({
+      success: true,
+      message: `Successfully connected to Facebook Page: ${result.name} (ID: ${result.id})`
+    });
+  } catch (error) {
+    console.error('Facebook API test failed:', error);
+    res.status(400).json({
+      success: false,
+      message: error.message
+    });
+  }
+});
+
 // Connect platform
 app.post('/api/platforms/:platform/connect', async (req, res) => {
   const { platform } = req.params;
@@ -2357,13 +2385,19 @@ app.post('/api/platforms/:platform/connect', async (req, res) => {
             saveEnvVariable('FACEBOOK_VERIFY_TOKEN', config.verifyToken);
             saveEnvVariable('FACEBOOK_APP_SECRET', config.appSecret);
             
-            // Reinitialize Facebook Messenger
-            const FacebookMessenger = require('./services/facebookMessenger');
-            global.facebookMessenger = new FacebookMessenger();
-            await global.facebookMessenger.initialize();
-            
-            success = true;
-            message = 'Facebook Messenger connected successfully';
+            try {
+              // Reinitialize Facebook Messenger
+              const FacebookMessenger = require('./services/facebookMessenger');
+              global.facebookMessenger = new FacebookMessenger();
+              const result = await global.facebookMessenger.initialize();
+              
+              success = true;
+              message = result.message || 'Facebook Messenger connected successfully';
+            } catch (error) {
+              console.error('Error connecting facebook:', error);
+              success = false;
+              message = `Failed to connect Facebook Messenger: ${error.message}`;
+            }
           } else {
             message = 'Page access token, verify token, and app secret are required';
           }
