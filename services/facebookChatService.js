@@ -395,12 +395,25 @@ class FacebookChatService {
                             // Don't start listener if session is invalid
                         } else {
                             console.log('✅ Session validated successfully! User ID:', userID);
-                            console.log('🚀 Starting message listener in 5 seconds...');
                             
-                            // Add longer delay before starting listener
-                            setTimeout(() => {
-                                this.startMessageListener();
-                            }, 5000); // 5 second delay
+                            // Check if MQTT connection is available
+                            if (api.mqttClient) {
+                                console.log('✅ MQTT connection available - full messaging support');
+                                console.log('🚀 Starting message listener in 5 seconds...');
+                                setTimeout(() => {
+                                    this.startMessageListener();
+                                }, 5000);
+                            } else {
+                                console.log('⚠️ MQTT connection blocked - limited functionality');
+                                console.log('📤 Can send messages but may not receive them reliably');
+                                console.log('🎆 For full functionality, use Facebook Messenger Official API');
+                                
+                                // Still try to start listener but with warning
+                                setTimeout(() => {
+                                    console.log('🔄 Attempting to start listener despite MQTT issues...');
+                                    this.startMessageListener();
+                                }, 3000);
+                            }
                         }
                     });
                     
