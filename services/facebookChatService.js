@@ -798,33 +798,25 @@ class FacebookChatService {
         this.pollingInterval = setInterval(async () => {
             console.log('🔍 Facebook polling check...'); // Debug log
             try {
-                // Try a simpler approach first - just check if we can get user info
-                this.api.getCurrentUserID((userErr, userID) => {
-                    if (userErr) {
-                        console.log('⚠️ Polling: Session invalid, stopping polling');
-                        console.log('⚠️ Error details:', userErr);
-                        this.stopPollingMode();
-                        return;
-                    }
-                    
-                    console.log('✅ Polling: Session valid, checking for messages...');
-                    
-                    // If user ID works, try getting thread list
-                    this.api.getThreadList(5, null, [], (err, threads) => {
+                // Skip session validation in polling - just try to get threads directly
+                console.log('💬 Attempting to fetch Facebook threads...');
+                
+                // Try to get thread list directly without validation
+                this.api.getThreadList(5, null, [], (err, threads) => {
                     if (err) {
                         // More detailed error handling
                         const errorMsg = err.message || err.error || 'Unknown error';
-                        console.log('⚠️ Polling error (will retry):', errorMsg);
+                        console.log('⚠️ Direct polling error:', errorMsg);
                         
-                        // If it's a session error, try a different approach
-                        if (errorMsg.includes('login') || errorMsg.includes('session')) {
-                            console.log('🔄 Session may be invalid, trying alternative polling...');
-                            this.tryAlternativePolling();
+                        // If it's a session error, stop polling
+                        if (errorMsg.includes('login') || errorMsg.includes('session') || errorMsg.includes('1357004')) {
+                            console.log('❌ Facebook session completely invalid, stopping polling');
+                            this.stopPollingMode();
                         }
                         return;
                     }
                     
-                    console.log(`💬 Found ${threads ? threads.length : 0} Facebook threads`);
+                    console.log(`💬 Direct fetch: Found ${threads ? threads.length : 0} Facebook threads`);
                     
                     // Check each thread for new messages
                     if (threads && threads.length > 0) {
@@ -848,7 +840,6 @@ class FacebookChatService {
                     } else {
                         console.log('💬 No Facebook threads found or threads array empty');
                     }
-                    });
                 });
             } catch (error) {
                 console.log('⚠️ Polling cycle error:', error.message);
