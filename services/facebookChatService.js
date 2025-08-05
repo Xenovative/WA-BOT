@@ -166,9 +166,14 @@ class FacebookChatService {
     }
 
     /**
-     * Initialize and login to Facebook
+     * Initialize Facebook connection
      */
     async initialize() {
+        console.log('🚑 FACEBOOK INITIALIZE() CALLED!');
+        console.log('   • Email:', !!this.email);
+        console.log('   • Password:', !!this.password);
+        console.log('   • App State:', !!this.appState);
+        
         return new Promise((resolve, reject) => {
             try {
                 // Check if we have any authentication method
@@ -283,7 +288,15 @@ class FacebookChatService {
                         console.log('🔄 Using facebook-chat-api (original)');
                     }
                     
+                    console.log('🚑 CALLING LOGIN FUNCTION NOW...');
+                    console.log('   • Login function type:', typeof login);
+                    console.log('   • Login options keys:', Object.keys(loginOptions));
+                    
                     login(loginOptions, (err, api) => {
+                    console.log('🚑 LOGIN CALLBACK REACHED!');
+                    console.log('   • Error:', !!err);
+                    console.log('   • API:', !!api);
+                    
                     if (err) {
                         console.error('❌ Facebook login failed:', err);
                         
