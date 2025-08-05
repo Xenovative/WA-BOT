@@ -395,6 +395,15 @@ class FacebookChatService {
                     // Test API connection before starting listener
                     console.log('🔍 Testing Facebook session validity...');
                     
+                    // IMMEDIATE TEST: Try starting polling right now
+                    console.log('🚑 IMMEDIATE TEST: Trying to start polling now...');
+                    try {
+                        this.startPollingMode();
+                        console.log('✅ Immediate polling start succeeded');
+                    } catch (immediateError) {
+                        console.log('❌ Immediate polling start failed:', immediateError.message);
+                    }
+                    
                     // Add immediate timeout to prevent hanging
                     console.log('⏰ Setting 5-second timeout for session validation...');
                     const validationTimeout = setTimeout(() => {
@@ -753,9 +762,21 @@ class FacebookChatService {
      * Polls for new messages every 10 seconds
      */
     startPollingMode() {
+        console.log('🚑 startPollingMode() called!');
+        console.log('   • API exists:', !!this.api);
+        console.log('   • Is logged in:', this.isLoggedIn);
+        console.log('   • Polling interval exists:', !!this.pollingInterval);
+        
         if (!this.api || !this.isLoggedIn) {
             console.error('Cannot start polling - Facebook not logged in');
+            console.error('   • API:', !!this.api);
+            console.error('   • Logged in:', this.isLoggedIn);
             return;
+        }
+        
+        if (this.pollingInterval) {
+            console.log('⚠️ Polling already running, stopping existing interval');
+            clearInterval(this.pollingInterval);
         }
 
         console.log('🔄 Starting Facebook polling mode (checks every 10 seconds)');
