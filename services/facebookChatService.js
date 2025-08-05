@@ -380,14 +380,22 @@ class FacebookChatService {
                     });
 
                     // Test API connection before starting listener
+                    console.log('🔍 Testing Facebook session validity...');
                     api.getCurrentUserID((err, userID) => {
                         if (err) {
-                            console.log('⚠️ Session validation failed:', err.message);
-                            console.log('❌ Switching to send-only mode');
-                            console.log('📤 Facebook will work for sending messages but not receiving');
+                            console.log('⚠️ Session validation failed:', err);
+                            console.log('❌ Facebook has blocked the session immediately after login');
+                            console.log('📤 This confirms Facebook is actively blocking unofficial API access');
+                            console.log('');
+                            console.log('🎆 SOLUTION: Use Facebook Messenger Official API instead');
+                            console.log('   • Go to Platforms tab in WA-BOT GUI');
+                            console.log('   • Select "Official API (Recommended)"');
+                            console.log('   • Follow the step-by-step setup guide');
+                            console.log('');
                             // Don't start listener if session is invalid
                         } else {
-                            console.log('✅ Session validated, User ID:', userID);
+                            console.log('✅ Session validated successfully! User ID:', userID);
+                            console.log('🚀 Starting message listener in 5 seconds...');
                             
                             // Add longer delay before starting listener
                             setTimeout(() => {
