@@ -746,10 +746,26 @@ class FacebookChatService {
         
         this.pollingInterval = setInterval(async () => {
             try {
-                // Get thread list to check for new messages
-                this.api.getThreadList(20, null, [], (err, threads) => {
+                // Try a simpler approach first - just check if we can get user info
+                this.api.getCurrentUserID((userErr, userID) => {
+                    if (userErr) {
+                        console.log('⚠️ Polling: Session invalid, stopping polling');
+                        this.stopPollingMode();
+                        return;
+                    }
+                    
+                    // If user ID works, try getting thread list
+                    this.api.getThreadList(5, null, [], (err, threads) => {
                     if (err) {
-                        console.log('⚠️ Polling error (will retry):', err.message);
+                        // More detailed error handling
+                        const errorMsg = err.message || err.error || 'Unknown error';
+                        console.log('⚠️ Polling error (will retry):', errorMsg);
+                        
+                        // If it's a session error, try a different approach
+                        if (errorMsg.includes('login') || errorMsg.includes('session')) {
+                            console.log('🔄 Session may be invalid, trying alternative polling...');
+                            this.tryAlternativePolling();
+                        }
                         return;
                     }
                     
@@ -771,6 +787,7 @@ class FacebookChatService {
                             });
                         }
                     });
+                    });
                 });
             } catch (error) {
                 console.log('⚠️ Polling cycle error:', error.message);
@@ -789,6 +806,30 @@ class FacebookChatService {
             this.pollingInterval = null;
             console.log('⏹️ Facebook polling mode stopped');
         }
+    }
+
+    /**
+     * Alternative polling method using different API calls
+     */
+    tryAlternativePolling() {
+        console.log('🔄 Trying alternative polling method...');
+        
+        // Try using getUserInfo as a simple API test
+        this.api.getCurrentUserID((err, userID) => {
+            if (err) {
+                console.log('❌ Alternative polling failed - session completely invalid');
+                console.log('📤 Facebook has blocked this session entirely');
+                console.log('🎆 Please use Facebook Messenger Official API for reliable messaging');
+                this.stopPollingMode();
+                return;
+            }
+            
+            console.log('✅ Alternative polling: User ID still valid:', userID);
+            console.log('🔄 Continuing with basic polling (send-only mode)');
+            
+            // Continue polling but with simpler approach
+            // Just keep the session alive without trying to fetch messages
+        });
     }
 }
 
