@@ -368,18 +368,33 @@ class FacebookChatService {
                         console.log('⚠️ Could not save app state:', stateError.message);
                     }
 
-                    // Set options
+                    // Set minimal options to reduce detection
                     api.setOptions({
                         listenEvents: true,
                         logLevel: 'silent',
                         updatePresence: false,
-                        selfListen: false
+                        selfListen: false,
+                        autoMarkDelivery: false,
+                        autoMarkRead: false,
+                        online: false
                     });
 
-                    // Add delay before starting listener to let session stabilize
-                    setTimeout(() => {
-                        this.startMessageListener();
-                    }, 3000); // 3 second delay
+                    // Test API connection before starting listener
+                    api.getCurrentUserID((err, userID) => {
+                        if (err) {
+                            console.log('⚠️ Session validation failed:', err.message);
+                            console.log('❌ Switching to send-only mode');
+                            console.log('📤 Facebook will work for sending messages but not receiving');
+                            // Don't start listener if session is invalid
+                        } else {
+                            console.log('✅ Session validated, User ID:', userID);
+                            
+                            // Add longer delay before starting listener
+                            setTimeout(() => {
+                                this.startMessageListener();
+                            }, 5000); // 5 second delay
+                        }
+                    });
                     
                     resolve(true);
                     });
@@ -418,17 +433,21 @@ class FacebookChatService {
                     console.log('   • Facebook has invalidated the current session');
                     console.log('   • This is common with unofficial API usage');
                     console.log('');
-                    console.log('🔧 SOLUTIONS:');
-                    console.log('   1. 🌟 Switch to Facebook Messenger Official API (recommended)');
-                    console.log('   2. 🔄 Re-extract fresh app state from browser');
-                    console.log('   3. ⏰ Wait 10-15 minutes before trying again');
+                    console.log('🔧 RECOMMENDED SOLUTION:');
+                    console.log('   🌟 Switch to Facebook Messenger Official API');
+                    console.log('   • Go to Platforms tab in WA-BOT GUI');
+                    console.log('   • Select "Official API (Recommended)"');
+                    console.log('   • Click "Need help setting up?" for step-by-step guide');
+                    console.log('');
+                    console.log('🔄 ALTERNATIVE: Re-extract app state');
+                    console.log('   • Use utils/extract-facebook-cookies.ps1');
+                    console.log('   • Update FACEBOOK_APP_STATE in .env');
                     console.log('');
                     
-                    // Try to reinitialize after delay
-                    setTimeout(() => {
-                        console.log('🔄 Attempting to reinitialize Facebook connection...');
-                        this.initialize();
-                    }, 60000); // 1 minute delay for session invalidation
+                    // Mark as disconnected and stop trying
+                    this.api = null;
+                    console.log('⚠️ Facebook listener stopped due to session invalidation');
+                    console.log('📤 Manual intervention required - please use Official API');
                     
                     return;
                 }
