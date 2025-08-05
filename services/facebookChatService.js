@@ -359,6 +359,12 @@ class FacebookChatService {
                     console.log('✅ Facebook login successful!');
                     this.api = api;
                     this.isLoggedIn = true;
+                    
+                    // Immediate API state check
+                    console.log('🔍 Checking API state after login...');
+                    console.log('   • MQTT Client:', api.mqttClient ? '✅ Available' : '❌ Blocked');
+                    console.log('   • API Object:', typeof api);
+                    console.log('   • Login Status:', this.isLoggedIn);
 
                     // Save app state for future logins
                     try {
@@ -381,7 +387,17 @@ class FacebookChatService {
 
                     // Test API connection before starting listener
                     console.log('🔍 Testing Facebook session validity...');
+                    
+                    // Add immediate timeout to prevent hanging
+                    const validationTimeout = setTimeout(() => {
+                        console.log('⏰ Session validation timed out - proceeding anyway');
+                        console.log('⚠️ MQTT connection likely blocked by Facebook');
+                        console.log('🔄 Starting listener in degraded mode...');
+                        this.startMessageListener();
+                    }, 10000); // 10 second timeout
+                    
                     api.getCurrentUserID((err, userID) => {
+                        clearTimeout(validationTimeout); // Cancel timeout if callback executes
                         if (err) {
                             console.log('⚠️ Session validation failed:', err);
                             console.log('❌ Facebook has blocked the session immediately after login');
