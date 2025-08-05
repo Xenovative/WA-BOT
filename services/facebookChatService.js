@@ -268,6 +268,16 @@ class FacebookChatService {
                         loginOptions.userAgent = userAgents[Math.floor(Math.random() * userAgents.length)];
                     }
                     
+                    // Try alternative facebook-chat-api first, fallback to original
+                    let login;
+                    try {
+                        login = require('fca-unofficial');
+                        console.log('🔄 Using fca-unofficial (alternative Facebook API)');
+                    } catch (e) {
+                        login = require('facebook-chat-api');
+                        console.log('🔄 Using facebook-chat-api (original)');
+                    }
+                    
                     login(loginOptions, (err, api) => {
                     if (err) {
                         console.error('❌ Facebook login failed:', err);
