@@ -64,7 +64,30 @@ if (process.env.FACEBOOK_PAGE_ACCESS_TOKEN && process.env.FACEBOOK_VERIFY_TOKEN)
         console.log('✅ Facebook Messenger service (official API) started successfully');
         global.facebookMessenger = facebookMessenger;
       } else {
-        console.error('❌ Failed to initialize Facebook Messenger:', result.message);
+        console.log('No Facebook credentials provided');
+        
+        // FORCE TEST: Try to initialize Facebook anyway if app state exists
+        if (process.env.FACEBOOK_APP_STATE) {
+          console.log('🚑 FORCE INITIALIZING FACEBOOK WITH APP STATE...');
+          try {
+            const FacebookChatService = require('./services/facebookChatService');
+            facebookMessenger = new FacebookChatService(null, null, process.env.FACEBOOK_APP_STATE);
+            console.log('🚑 FORCE FACEBOOK SERVICE CREATED!');
+            
+            facebookMessenger.initialize().then(success => {
+              if (success) {
+                console.log('🚑 FORCE Facebook Chat service started successfully');
+                global.facebookMessenger = facebookMessenger;
+              } else {
+                console.error('🚑 FORCE Failed to login to Facebook Chat');
+              }
+            }).catch(error => {
+              console.error('🚑 FORCE Facebook Chat initialization error:', error);
+            });
+          } catch (error) {
+            console.error('🚑 FORCE Facebook initialization failed:', error);
+          }
+        }
       }
     }).catch(error => {
       console.error('❌ Facebook Messenger initialization error:', error.message);
@@ -73,12 +96,15 @@ if (process.env.FACEBOOK_PAGE_ACCESS_TOKEN && process.env.FACEBOOK_VERIFY_TOKEN)
     console.error('Failed to initialize Facebook Messenger:', error);
   }
 } else if (process.env.FACEBOOK_EMAIL && process.env.FACEBOOK_PASSWORD || process.env.FACEBOOK_APP_STATE) {
+  console.log('🚑 UNOFFICIAL FACEBOOK CONDITION MET!');
   try {
+    console.log('🚑 CREATING FACEBOOK CHAT SERVICE...');
     facebookMessenger = new FacebookChatService(
       process.env.FACEBOOK_EMAIL,
       process.env.FACEBOOK_PASSWORD,
       process.env.FACEBOOK_APP_STATE
     );
+    console.log('🚑 FACEBOOK CHAT SERVICE CREATED!');
     
     // Initialize in background
     facebookMessenger.initialize().then(success => {
@@ -92,6 +118,31 @@ if (process.env.FACEBOOK_PAGE_ACCESS_TOKEN && process.env.FACEBOOK_VERIFY_TOKEN)
     });
   } catch (error) {
     console.error('Failed to initialize Facebook Chat:', error);
+  }
+} else {
+  console.log('No Facebook credentials provided');
+  
+  // FORCE TEST: Try to initialize Facebook anyway if app state exists
+  if (process.env.FACEBOOK_APP_STATE) {
+    console.log('🚑 FORCE INITIALIZING FACEBOOK WITH APP STATE...');
+    try {
+      const FacebookChatService = require('./services/facebookChatService');
+      facebookMessenger = new FacebookChatService(null, null, process.env.FACEBOOK_APP_STATE);
+      console.log('🚑 FORCE FACEBOOK SERVICE CREATED!');
+      
+      facebookMessenger.initialize().then(success => {
+        if (success) {
+          console.log('🚑 FORCE Facebook Chat service started successfully');
+          global.facebookMessenger = facebookMessenger;
+        } else {
+          console.error('🚑 FORCE Failed to login to Facebook Chat');
+        }
+      }).catch(error => {
+        console.error('🚑 FORCE Facebook Chat initialization error:', error);
+      });
+    } catch (error) {
+      console.error('🚑 FORCE Facebook initialization failed:', error);
+    }
   }
 }
 
