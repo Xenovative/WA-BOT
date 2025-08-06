@@ -110,6 +110,60 @@ if (process.env.FACEBOOK_PAGE_ACCESS_TOKEN && process.env.FACEBOOK_VERIFY_TOKEN)
     facebookMessenger.initialize().then(success => {
       if (success) {
         console.log('Facebook Chat service (unofficial) started successfully');
+        
+        // Set up Facebook message handler
+        facebookMessenger.onMessage(async (err, message) => {
+          if (err) {
+            console.error('Facebook message error:', err);
+            return;
+          }
+          
+          try {
+            console.log('📱 Processing Facebook message:', message.body);
+            
+            // Create a mock WhatsApp-like message object for compatibility
+            const mockMessage = {
+              body: message.body,
+              from: `facebook_${message.senderID}`,
+              fromMe: false,
+              type: 'chat',
+              timestamp: message.timestamp || Date.now(),
+              author: message.senderID,
+              to: 'facebook_bot',
+              hasMedia: false,
+              _data: {
+                id: {
+                  fromMe: false,
+                  remote: `facebook_${message.threadID}`,
+                  id: message.messageID
+                },
+                body: message.body,
+                type: 'chat',
+                timestamp: message.timestamp || Date.now(),
+                notifyName: message.conversationName || message.senderID
+              },
+              // Add reply method for Facebook
+              reply: async (text) => {
+                try {
+                  await facebookMessenger.sendMessage(text, message.threadID);
+                  console.log('✅ Facebook reply sent:', text);
+                } catch (error) {
+                  console.error('❌ Facebook reply failed:', error.message);
+                }
+              }
+            };
+            
+            // Process through WA-BOT's main chat handler
+            await chatHandler.handleMessage(mockMessage);
+            
+          } catch (error) {
+            console.error('❌ Error processing Facebook message:', error.message);
+          }
+        });
+        
+        // Store globally for access from other parts of the app
+        global.facebookMessenger = facebookMessenger;
+        
       } else {
         console.error('Failed to login to Facebook Chat');
       }
@@ -133,6 +187,57 @@ if (process.env.FACEBOOK_PAGE_ACCESS_TOKEN && process.env.FACEBOOK_VERIFY_TOKEN)
       facebookMessenger.initialize().then(success => {
         if (success) {
           console.log('🚑 FORCE Facebook Chat service started successfully');
+          
+          // Set up Facebook message handler for FORCE initialization
+          facebookMessenger.onMessage(async (err, message) => {
+            if (err) {
+              console.error('Facebook message error:', err);
+              return;
+            }
+            
+            try {
+              console.log('📱 Processing Facebook message (FORCE):', message.body);
+              
+              // Create a mock WhatsApp-like message object for compatibility
+              const mockMessage = {
+                body: message.body,
+                from: `facebook_${message.senderID}`,
+                fromMe: false,
+                type: 'chat',
+                timestamp: message.timestamp || Date.now(),
+                author: message.senderID,
+                to: 'facebook_bot',
+                hasMedia: false,
+                _data: {
+                  id: {
+                    fromMe: false,
+                    remote: `facebook_${message.threadID}`,
+                    id: message.messageID
+                  },
+                  body: message.body,
+                  type: 'chat',
+                  timestamp: message.timestamp || Date.now(),
+                  notifyName: message.conversationName || message.senderID
+                },
+                // Add reply method for Facebook
+                reply: async (text) => {
+                  try {
+                    await facebookMessenger.sendMessage(text, message.threadID);
+                    console.log('✅ Facebook reply sent (FORCE):', text);
+                  } catch (error) {
+                    console.error('❌ Facebook reply failed (FORCE):', error.message);
+                  }
+                }
+              };
+              
+              // Process through WA-BOT's main chat handler
+              await chatHandler.handleMessage(mockMessage);
+              
+            } catch (error) {
+              console.error('❌ Error processing Facebook message (FORCE):', error.message);
+            }
+          });
+          
           global.facebookMessenger = facebookMessenger;
         } else {
           console.error('🚑 FORCE Failed to login to Facebook Chat');
