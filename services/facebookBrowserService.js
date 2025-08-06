@@ -319,50 +319,99 @@ class FacebookBrowserService {
      */
     async checkForNewMessages() {
         try {
-            // Get all message elements
+            // Get all message elements using multiple selectors
             const messages = await this.page.evaluate(() => {
-                const messageElements = document.querySelectorAll('[data-testid="message-container"]');
-                const messages = [];
+                // Try multiple selectors for Facebook messages
+                const selectors = [
+                    '[data-testid="message-container"]',
+                    '[role="gridcell"] [dir="auto"]',
+                    '.x1n2onr6 [dir="auto"]',
+                    '[data-scope="messages_table"] [dir="auto"]',
+                    '.conversation-message [dir="auto"]',
+                    '[aria-label*="message"] [dir="auto"]'
+                ];
                 
-                messageElements.forEach((element, index) => {
-                    const textElement = element.querySelector('[dir="auto"]');
-                    const text = textElement ? textElement.textContent.trim() : '';
+                const messages = [];
+                let foundElements = [];
+                
+                // Try each selector
+                for (const selector of selectors) {
+                    const elements = document.querySelectorAll(selector);
+                    if (elements.length > 0) {
+                        foundElements = Array.from(elements);
+                        console.log(`Found ${elements.length} elements with selector: ${selector}`);
+                        break;
+                    }
+                }
+                
+                // If no specific selectors work, try generic text content
+                if (foundElements.length === 0) {
+                    foundElements = Array.from(document.querySelectorAll('[dir="auto"]'))
+                        .filter(el => el.textContent && el.textContent.trim().length > 0);
+                    console.log(`Fallback: Found ${foundElements.length} elements with dir="auto"`);
+                }
+                
+                foundElements.forEach((element, index) => {
+                    const text = element.textContent ? element.textContent.trim() : '';
                     
-                    if (text) {
-                        messages.push({
-                            id: `msg_${Date.now()}_${index}`,
-                            text: text,
-                            timestamp: Date.now(),
-                            element: element.outerHTML.substring(0, 200) // For debugging
-                        });
+                    if (text && text.length > 0 && text.length < 1000) { // Reasonable message length
+                        // Try to determine if this is a received message (not sent by us)
+                        const isReceived = !element.closest('[data-testid="outgoing_message"]') && 
+                                         !element.closest('.x1rg5ohu') && // Sent message class
+                                         !element.closest('[aria-label*="You sent"]');
+                        
+                        if (isReceived) {
+                            messages.push({
+                                id: `msg_${Date.now()}_${index}`,
+                                text: text,
+                                timestamp: Date.now(),
+                                isReceived: true,
+                                element: element.outerHTML.substring(0, 300) // For debugging
+                            });
+                        }
                     }
                 });
                 
+                console.log(`Total messages found: ${messages.length}`);
                 return messages;
             });
             
+            // Debug: Log all found messages
+            if (messages.length > 0) {
+                console.log(`🔍 Found ${messages.length} messages in DOM`);
+                messages.forEach((msg, i) => {
+                    console.log(`   ${i + 1}. "${msg.text.substring(0, 50)}${msg.text.length > 50 ? '...' : ''}"`);
+                });
+            }
+            
             // Process new messages
             for (const message of messages) {
-                if (!this.lastMessageIds.has(message.id)) {
-                    this.lastMessageIds.add(message.id);
+                // Create a more unique ID based on text content
+                const uniqueId = `msg_${message.text.substring(0, 20).replace(/\s+/g, '_')}_${message.text.length}`;
+                
+                if (!this.lastMessageIds.has(uniqueId)) {
+                    this.lastMessageIds.add(uniqueId);
                     
-                    // Only process recent messages (last 30 seconds)
-                    if (Date.now() - message.timestamp < 30000) {
-                        console.log('📨 New Facebook message:', message.text);
-                        
-                        // Trigger message handlers
-                        for (const handler of this.messageHandlers) {
-                            try {
-                                await handler({
-                                    body: message.text,
-                                    senderID: 'unknown', // Will need to extract from DOM
-                                    threadID: 'unknown', // Will need to extract from DOM
-                                    messageID: message.id,
-                                    timestamp: message.timestamp
-                                });
-                            } catch (error) {
-                                console.log('⚠️ Message handler error:', error.message);
-                            }
+                    console.log('🆕 NEW Facebook message detected:', message.text);
+                    console.log('📊 Message details:', {
+                        id: uniqueId,
+                        length: message.text.length,
+                        isReceived: message.isReceived
+                    });
+                    
+                    // Trigger message handlers
+                    for (const handler of this.messageHandlers) {
+                        try {
+                            await handler({
+                                body: message.text,
+                                senderID: 'facebook_user', // Generic sender ID
+                                threadID: 'facebook_thread', // Generic thread ID
+                                messageID: uniqueId,
+                                timestamp: message.timestamp,
+                                isReceived: message.isReceived
+                            });
+                        } catch (error) {
+                            console.log('⚠️ Message handler error:', error.message);
                         }
                     }
                 }
