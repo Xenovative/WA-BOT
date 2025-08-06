@@ -458,24 +458,53 @@ class FacebookBrowserService {
                         const nameElement = thread.querySelector('[dir="auto"]');
                         const name = nameElement ? nameElement.textContent.trim() : `Conversation ${index + 1}`;
                         
-                        // Get message preview
-                        const previewElements = thread.querySelectorAll('[dir="auto"]');
+                        // Get message preview - try multiple methods
                         let messagePreview = '';
+                        
+                        // Method 1: Look for preview in dir="auto" elements (skip first which is usually name)
+                        const previewElements = thread.querySelectorAll('[dir="auto"]');
                         if (previewElements.length > 1) {
-                            messagePreview = previewElements[1].textContent.trim();
+                            for (let i = 1; i < previewElements.length; i++) {
+                                const text = previewElements[i].textContent.trim();
+                                if (text && text !== name && text.length > 2) {
+                                    messagePreview = text;
+                                    break;
+                                }
+                            }
+                        }
+                        
+                        // Method 2: Look for any text content that's not the name
+                        if (!messagePreview) {
+                            const allTextElements = thread.querySelectorAll('*');
+                            for (const el of allTextElements) {
+                                const text = el.textContent ? el.textContent.trim() : '';
+                                if (text && text !== name && text.length > 2 && text.length < 200) {
+                                    // Skip timestamps and UI elements
+                                    const isTimestamp = /^\d+\s*(分鐘|小時|天|秒|minute|hour|day|second|min|hr|sec|ago|剛才|now)$/i.test(text);
+                                    const isUIElement = /^(已讀|seen|delivered|sent|typing|online|active|離線|在線上)$/i.test(text);
+                                    
+                                    if (!isTimestamp && !isUIElement) {
+                                        messagePreview = text;
+                                        break;
+                                    }
+                                }
+                            }
                         }
                         
                         // Get conversation link
                         const linkElement = thread.querySelector('a[href*="/t/"]');
                         const href = linkElement ? linkElement.href : null;
                         
-                        if (hasUnreadBadge || hasBoldText || messagePreview) {
+                        // Include conversation if it has any meaningful content
+                        if (messagePreview && messagePreview.length > 2) {
                             conversations.push({
                                 name: name.substring(0, 50),
                                 preview: messagePreview.substring(0, 100),
                                 href: href,
                                 hasUnread: !!(hasUnreadBadge || hasBoldText),
-                                threadId: href ? href.split('/t/')[1] : `thread_${index}`
+                                threadId: href ? href.split('/t/')[1] : `thread_${index}`,
+                                hasUnreadBadge: !!hasUnreadBadge,
+                                hasBoldText: !!hasBoldText
                             });
                         }
                     } catch (error) {
@@ -488,9 +517,15 @@ class FacebookBrowserService {
             
             console.log(`💬 Found ${conversationsWithNewMessages.length} conversations with potential new messages`);
             
-            // Process each conversation with new messages
+            // Debug: Show details of all found conversations
+            conversationsWithNewMessages.forEach((conv, i) => {
+                console.log(`   ${i + 1}. "${conv.name}" - Preview: "${conv.preview}" - Unread: ${conv.hasUnread}`);
+            });
+            
+            // Process each conversation with new messages (relaxed criteria)
             for (const conversation of conversationsWithNewMessages) {
-                if (conversation.hasUnread && conversation.preview) {
+                // Relax the criteria - process if there's any preview text
+                if (conversation.preview && conversation.preview.length > 2) {
                     // Create unique message ID
                     const messageId = `msg_${conversation.threadId}_${conversation.preview.substring(0, 20).replace(/\s+/g, '_')}_${conversation.preview.length}`;
                     
