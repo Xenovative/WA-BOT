@@ -349,24 +349,119 @@ class FacebookBrowserService {
     }
 
     /**
-     * Start monitoring for new messages across all conversations
+     * Start monitoring for new messages using real-time DOM observation
      */
     async startMessageMonitoring() {
-        console.log('👂 Starting Facebook multi-conversation monitoring...');
+        console.log('👂 Starting Facebook real-time message monitoring...');
         
-        // Navigate back to conversation list for multi-conversation monitoring
+        // Navigate to conversation list for monitoring
         await this.navigateToConversationList();
         
-        // Start polling for new messages every 5 seconds
+        // Set up real-time DOM mutation observer
+        await this.setupRealTimeMonitoring();
+        
+        // Backup polling every 10 seconds (reduced frequency)
         this.pollingInterval = setInterval(async () => {
             try {
                 await this.checkAllConversationsForNewMessages();
             } catch (error) {
-                console.log('⚠️ Error checking for messages:', error.message);
+                console.log('⚠️ Error in backup polling:', error.message);
             }
-        }, 5000);
+        }, 10000);
         
-        console.log('✅ Facebook multi-conversation monitoring started');
+        console.log('✅ Facebook real-time monitoring started');
+    }
+
+    /**
+     * Set up real-time DOM mutation observer for instant message detection
+     */
+    async setupRealTimeMonitoring() {
+        console.log('⚡ Setting up real-time DOM mutation observer...');
+        
+        await this.page.evaluate(() => {
+            // Remove existing observer if any
+            if (window.facebookMessageObserver) {
+                window.facebookMessageObserver.disconnect();
+            }
+            
+            // Create new mutation observer
+            window.facebookMessageObserver = new MutationObserver((mutations) => {
+                let hasNewContent = false;
+                
+                mutations.forEach((mutation) => {
+                    // Check for added nodes that might be new messages
+                    if (mutation.type === 'childList' && mutation.addedNodes.length > 0) {
+                        mutation.addedNodes.forEach((node) => {
+                            if (node.nodeType === Node.ELEMENT_NODE) {
+                                // Check if this could be a new message or conversation update
+                                const hasMessageContent = node.querySelector && (
+                                    node.querySelector('[dir="auto"]') ||
+                                    node.querySelector('[role="gridcell"]') ||
+                                    node.matches('[dir="auto"]') ||
+                                    node.matches('[role="gridcell"]')
+                                );
+                                
+                                if (hasMessageContent) {
+                                    hasNewContent = true;
+                                    console.log('⚡ DOM mutation detected - potential new message');
+                                }
+                            }
+                        });
+                    }
+                    
+                    // Check for text content changes
+                    if (mutation.type === 'characterData' || 
+                        (mutation.type === 'attributes' && mutation.attributeName === 'aria-label')) {
+                        hasNewContent = true;
+                        console.log('⚡ Text/attribute change detected');
+                    }
+                });
+                
+                // Trigger immediate check if new content detected
+                if (hasNewContent) {
+                    // Debounce rapid changes
+                    clearTimeout(window.facebookMutationTimeout);
+                    window.facebookMutationTimeout = setTimeout(() => {
+                        console.log('⚡ Triggering immediate message check due to DOM changes');
+                        window.dispatchEvent(new CustomEvent('facebookNewContent'));
+                    }, 500); // 500ms debounce
+                }
+            });
+            
+            // Start observing the entire document for changes
+            window.facebookMessageObserver.observe(document.body, {
+                childList: true,
+                subtree: true,
+                characterData: true,
+                attributes: true,
+                attributeFilter: ['aria-label', 'data-testid']
+            });
+            
+            console.log('✅ DOM mutation observer started');
+        });
+        
+        // Listen for the custom event triggered by mutations
+        await this.page.evaluateOnNewDocument(() => {
+            window.addEventListener('facebookNewContent', () => {
+                // This will be handled by the main monitoring loop
+                console.log('🔔 Real-time content change detected');
+            });
+        });
+        
+        // Set up event listener for immediate processing
+        this.page.on('console', async (msg) => {
+            const text = msg.text();
+            if (text.includes('⚡ Triggering immediate message check')) {
+                console.log('🚀 Real-time trigger activated - checking for new messages immediately');
+                try {
+                    await this.checkAllConversationsForNewMessages();
+                } catch (error) {
+                    console.log('⚠️ Real-time check error:', error.message);
+                }
+            }
+        });
+        
+        console.log('✅ Real-time monitoring setup complete');
     }
 
     /**
@@ -785,9 +880,27 @@ class FacebookBrowserService {
     async stop() {
         console.log('🛑 Stopping Facebook Browser Service...');
         
+        // Stop polling interval
         if (this.pollingInterval) {
             clearInterval(this.pollingInterval);
             this.pollingInterval = null;
+        }
+        
+        // Stop real-time monitoring
+        try {
+            if (this.page && !this.page.isClosed()) {
+                await this.page.evaluate(() => {
+                    if (window.facebookMessageObserver) {
+                        window.facebookMessageObserver.disconnect();
+                        console.log('✅ DOM mutation observer stopped');
+                    }
+                    if (window.facebookMutationTimeout) {
+                        clearTimeout(window.facebookMutationTimeout);
+                    }
+                });
+            }
+        } catch (error) {
+            console.log('⚠️ Error stopping real-time monitoring:', error.message);
         }
         
         await this.cleanup();
