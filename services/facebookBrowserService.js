@@ -465,6 +465,136 @@ class FacebookBrowserService {
     }
 
     /**
+     * Handle Facebook security challenges (PIN, verification, etc.)
+     */
+    async handleSecurityChallenges() {
+        try {
+            console.log('🔒 Checking for security challenges...');
+            
+            const securityChecks = await this.page.evaluate(() => {
+                const checks = {
+                    hasPinChallenge: false,
+                    hasVerificationChallenge: false,
+                    hasLoginChallenge: false,
+                    hasBlockedMessage: false,
+                    challengeText: '',
+                    pageTitle: document.title,
+                    bodyText: document.body.textContent.substring(0, 500)
+                };
+                
+                // Check for PIN challenge
+                const pinSelectors = [
+                    'input[type="password"][placeholder*="PIN"]',
+                    'input[type="password"][placeholder*="pin"]',
+                    'input[type="text"][placeholder*="PIN"]',
+                    'input[type="text"][placeholder*="code"]',
+                    '[data-testid="pin-input"]',
+                    '[aria-label*="PIN"]',
+                    '[aria-label*="code"]'
+                ];
+                
+                for (const selector of pinSelectors) {
+                    if (document.querySelector(selector)) {
+                        checks.hasPinChallenge = true;
+                        checks.challengeText = 'PIN input field detected';
+                        break;
+                    }
+                }
+                
+                // Check for verification challenge
+                const verificationKeywords = ['verify', 'verification', 'confirm', 'security check', '驗證', '確認'];
+                const bodyText = document.body.textContent.toLowerCase();
+                
+                for (const keyword of verificationKeywords) {
+                    if (bodyText.includes(keyword.toLowerCase())) {
+                        checks.hasVerificationChallenge = true;
+                        checks.challengeText = `Verification keyword found: ${keyword}`;
+                        break;
+                    }
+                }
+                
+                // Check for login challenge
+                if (bodyText.includes('login') || bodyText.includes('sign in') || bodyText.includes('登入')) {
+                    checks.hasLoginChallenge = true;
+                    checks.challengeText = 'Login challenge detected';
+                }
+                
+                // Check for blocked/restricted access
+                if (bodyText.includes('blocked') || bodyText.includes('restricted') || bodyText.includes('被封鎖')) {
+                    checks.hasBlockedMessage = true;
+                    checks.challengeText = 'Account blocked/restricted message detected';
+                }
+                
+                return checks;
+            });
+            
+            console.log('🔍 Security check results:', {
+                PIN: securityChecks.hasPinChallenge,
+                Verification: securityChecks.hasVerificationChallenge,
+                Login: securityChecks.hasLoginChallenge,
+                Blocked: securityChecks.hasBlockedMessage,
+                Title: securityChecks.pageTitle
+            });
+            
+            // Handle different types of challenges
+            if (securityChecks.hasPinChallenge) {
+                console.log('🚨 PIN CHALLENGE DETECTED!');
+                console.log('📝 Challenge details:', securityChecks.challengeText);
+                console.log('🛠️ MANUAL ACTION REQUIRED:');
+                console.log('   1. Open browser manually and complete PIN verification');
+                console.log('   2. Or provide PIN via environment variable FACEBOOK_PIN');
+                console.log('   3. Or re-extract fresh app state after manual verification');
+                
+                // Try to handle PIN automatically if provided
+                if (process.env.FACEBOOK_PIN) {
+                    console.log('🤖 Attempting automatic PIN entry...');
+                    try {
+                        const pinInput = await this.page.$('input[type="password"], input[type="text"]');
+                        if (pinInput) {
+                            await pinInput.type(process.env.FACEBOOK_PIN);
+                            await this.page.keyboard.press('Enter');
+                            await this.page.waitForTimeout(3000);
+                            console.log('✅ PIN entered automatically');
+                        }
+                    } catch (pinError) {
+                        console.log('❌ Automatic PIN entry failed:', pinError.message);
+                    }
+                }
+                
+                return false; // Indicate challenge needs attention
+            }
+            
+            if (securityChecks.hasVerificationChallenge) {
+                console.log('🚨 VERIFICATION CHALLENGE DETECTED!');
+                console.log('📝 Challenge details:', securityChecks.challengeText);
+                console.log('🛠️ MANUAL ACTION REQUIRED: Complete verification in browser');
+                return false;
+            }
+            
+            if (securityChecks.hasLoginChallenge) {
+                console.log('🚨 LOGIN CHALLENGE DETECTED!');
+                console.log('📝 Challenge details:', securityChecks.challengeText);
+                console.log('🛠️ MANUAL ACTION REQUIRED: Re-login required');
+                return false;
+            }
+            
+            if (securityChecks.hasBlockedMessage) {
+                console.log('🚨 ACCOUNT BLOCKED/RESTRICTED!');
+                console.log('📝 Challenge details:', securityChecks.challengeText);
+                console.log('🛠️ MANUAL ACTION REQUIRED: Account needs manual review');
+                return false;
+            }
+            
+            console.log('✅ No security challenges detected');
+            return true;
+            
+        } catch (error) {
+            console.log('⚠️ Error checking security challenges:', error.message);
+            return true; // Continue anyway
+        }
+    }
+
+    /**
      * Navigate to conversation list
      */
     async navigateToConversationList() {
@@ -518,6 +648,9 @@ class FacebookBrowserService {
             // First, check if we're on the right page
             const currentUrl = await this.page.url();
             console.log('📍 Current URL:', currentUrl);
+            
+            // Check for security challenges (PIN, verification, etc.)
+            await this.handleSecurityChallenges();
             
             // If not on messenger, try to navigate
             if (!currentUrl.includes('messenger') && !currentUrl.includes('/messages')) {
