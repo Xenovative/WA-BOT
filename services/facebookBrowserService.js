@@ -297,25 +297,242 @@ class FacebookBrowserService {
     }
 
     /**
-     * Start monitoring for new messages
+     * Navigate to first available conversation
+     */
+    async navigateToFirstConversation() {
+        console.log('🎯 Navigating to first available conversation...');
+        
+        try {
+            const currentUrl = await this.page.url();
+            
+            // If we're already in a conversation, stay there
+            if (currentUrl.includes('/t/')) {
+                console.log('✅ Already in a conversation');
+                return true;
+            }
+            
+            // Look for conversation threads
+            const conversationFound = await this.page.evaluate(() => {
+                const selectors = [
+                    '[role="gridcell"] [role="link"]',
+                    'a[href*="/t/"]',
+                    '[data-testid="conversation-list"] [role="link"]'
+                ];
+                
+                for (const selector of selectors) {
+                    const elements = document.querySelectorAll(selector);
+                    if (elements.length > 0) {
+                        console.log(`Found ${elements.length} conversations with: ${selector}`);
+                        // Click the first conversation
+                        elements[0].click();
+                        return true;
+                    }
+                }
+                return false;
+            });
+            
+            if (conversationFound) {
+                // Wait for navigation
+                await this.page.waitForTimeout(3000);
+                const newUrl = await this.page.url();
+                console.log('✅ Navigated to conversation:', newUrl);
+                return true;
+            } else {
+                console.log('⚠️ No conversations found to navigate to');
+                return false;
+            }
+            
+        } catch (error) {
+            console.log('❌ Failed to navigate to conversation:', error.message);
+            return false;
+        }
+    }
+
+    /**
+     * Start monitoring for new messages across all conversations
      */
     async startMessageMonitoring() {
-        console.log('👂 Starting Facebook message monitoring...');
+        console.log('👂 Starting Facebook multi-conversation monitoring...');
+        
+        // Navigate back to conversation list for multi-conversation monitoring
+        await this.navigateToConversationList();
         
         // Start polling for new messages every 5 seconds
         this.pollingInterval = setInterval(async () => {
             try {
-                await this.checkForNewMessages();
+                await this.checkAllConversationsForNewMessages();
             } catch (error) {
                 console.log('⚠️ Error checking for messages:', error.message);
             }
         }, 5000);
         
-        console.log('✅ Facebook message monitoring started');
+        console.log('✅ Facebook multi-conversation monitoring started');
     }
 
     /**
-     * Check for new messages
+     * Navigate to conversation list
+     */
+    async navigateToConversationList() {
+        console.log('📋 Navigating to conversation list...');
+        
+        try {
+            const currentUrl = await this.page.url();
+            
+            // If already on conversation list, stay there
+            if (currentUrl.includes('/messages') && !currentUrl.includes('/t/')) {
+                console.log('✅ Already on conversation list');
+                return true;
+            }
+            
+            // Navigate to messages list
+            const navigationUrls = [
+                'https://www.messenger.com',
+                'https://facebook.com/messages'
+            ];
+            
+            for (const url of navigationUrls) {
+                try {
+                    await this.page.goto(url, { waitUntil: 'networkidle0', timeout: 15000 });
+                    await this.page.waitForTimeout(2000);
+                    
+                    const finalUrl = await this.page.url();
+                    if (finalUrl.includes('/messages') || finalUrl.includes('messenger.com')) {
+                        console.log('✅ Successfully navigated to conversation list');
+                        return true;
+                    }
+                } catch (navError) {
+                    console.log(`⚠️ Failed to navigate to ${url}:`, navError.message);
+                }
+            }
+            
+            return false;
+            
+        } catch (error) {
+            console.log('❌ Failed to navigate to conversation list:', error.message);
+            return false;
+        }
+    }
+
+    /**
+     * Check all conversations for new messages
+     */
+    async checkAllConversationsForNewMessages() {
+        try {
+            console.log('🔍 Scanning all conversations for new messages...');
+            
+            // Get conversation threads with unread indicators
+            const conversationsWithNewMessages = await this.page.evaluate(() => {
+                const conversations = [];
+                
+                // Try different selectors for conversation threads
+                const selectors = [
+                    '[role="gridcell"]', // Main conversation cells
+                    '[data-testid="conversation-list-item"]',
+                    '.conversation-list-item'
+                ];
+                
+                let foundThreads = [];
+                
+                for (const selector of selectors) {
+                    const elements = document.querySelectorAll(selector);
+                    if (elements.length > 0) {
+                        foundThreads = Array.from(elements);
+                        console.log(`Found ${elements.length} conversation threads with: ${selector}`);
+                        break;
+                    }
+                }
+                
+                foundThreads.forEach((thread, index) => {
+                    try {
+                        // Look for unread indicators
+                        const hasUnreadBadge = thread.querySelector('[data-testid="unread-count"]') || 
+                                              thread.querySelector('.unread-count') ||
+                                              thread.querySelector('[aria-label*="unread"]') ||
+                                              thread.querySelector('.badge');
+                        
+                        // Look for bold text (indicates unread)
+                        const hasBoldText = thread.querySelector('[style*="font-weight: bold"]') ||
+                                          thread.querySelector('.font-weight-bold');
+                        
+                        // Get conversation name/preview
+                        const nameElement = thread.querySelector('[dir="auto"]');
+                        const name = nameElement ? nameElement.textContent.trim() : `Conversation ${index + 1}`;
+                        
+                        // Get message preview
+                        const previewElements = thread.querySelectorAll('[dir="auto"]');
+                        let messagePreview = '';
+                        if (previewElements.length > 1) {
+                            messagePreview = previewElements[1].textContent.trim();
+                        }
+                        
+                        // Get conversation link
+                        const linkElement = thread.querySelector('a[href*="/t/"]');
+                        const href = linkElement ? linkElement.href : null;
+                        
+                        if (hasUnreadBadge || hasBoldText || messagePreview) {
+                            conversations.push({
+                                name: name.substring(0, 50),
+                                preview: messagePreview.substring(0, 100),
+                                href: href,
+                                hasUnread: !!(hasUnreadBadge || hasBoldText),
+                                threadId: href ? href.split('/t/')[1] : `thread_${index}`
+                            });
+                        }
+                    } catch (error) {
+                        console.log('Error processing thread:', error.message);
+                    }
+                });
+                
+                return conversations;
+            });
+            
+            console.log(`💬 Found ${conversationsWithNewMessages.length} conversations with potential new messages`);
+            
+            // Process each conversation with new messages
+            for (const conversation of conversationsWithNewMessages) {
+                if (conversation.hasUnread && conversation.preview) {
+                    // Create unique message ID
+                    const messageId = `msg_${conversation.threadId}_${conversation.preview.substring(0, 20).replace(/\s+/g, '_')}_${conversation.preview.length}`;
+                    
+                    if (!this.lastMessageIds.has(messageId)) {
+                        this.lastMessageIds.add(messageId);
+                        
+                        console.log('🆕 NEW message from conversation:', conversation.name);
+                        console.log('💬 Message preview:', conversation.preview);
+                        
+                        // Trigger message handlers
+                        for (const handler of this.messageHandlers) {
+                            try {
+                                await handler({
+                                    body: conversation.preview,
+                                    senderID: conversation.name,
+                                    threadID: conversation.threadId,
+                                    messageID: messageId,
+                                    timestamp: Date.now(),
+                                    conversationName: conversation.name,
+                                    isFromConversationList: true
+                                });
+                            } catch (error) {
+                                console.log('⚠️ Message handler error:', error.message);
+                            }
+                        }
+                    }
+                }
+            }
+            
+            // Clean up old message IDs (keep last 200 for multi-conversation)
+            if (this.lastMessageIds.size > 200) {
+                const idsArray = Array.from(this.lastMessageIds);
+                this.lastMessageIds = new Set(idsArray.slice(-200));
+            }
+            
+        } catch (error) {
+            console.log('⚠️ Error in checkAllConversationsForNewMessages:', error.message);
+        }
+    }
+
+    /**
+     * Check for new messages (legacy single conversation method)
      */
     async checkForNewMessages() {
         try {
