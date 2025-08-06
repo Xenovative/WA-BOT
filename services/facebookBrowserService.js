@@ -420,6 +420,16 @@ class FacebookBrowserService {
         try {
             console.log('🔍 Scanning all conversations for new messages...');
             
+            // First, check if we're on the right page
+            const currentUrl = await this.page.url();
+            console.log('📍 Current URL:', currentUrl);
+            
+            // If not on messenger, try to navigate
+            if (!currentUrl.includes('messenger') && !currentUrl.includes('/messages')) {
+                console.log('⚠️ Not on messenger page, attempting navigation...');
+                await this.navigateToConversationList();
+            }
+            
             // Get conversation threads with unread indicators
             const conversationsWithNewMessages = await this.page.evaluate(() => {
                 const conversations = [];
@@ -435,11 +445,32 @@ class FacebookBrowserService {
                 
                 for (const selector of selectors) {
                     const elements = document.querySelectorAll(selector);
+                    console.log(`Trying selector "${selector}": found ${elements.length} elements`);
                     if (elements.length > 0) {
                         foundThreads = Array.from(elements);
-                        console.log(`Found ${elements.length} conversation threads with: ${selector}`);
+                        console.log(`✅ Using selector "${selector}" with ${elements.length} conversation threads`);
                         break;
                     }
+                }
+                
+                // If no specific selectors work, try a more general approach
+                if (foundThreads.length === 0) {
+                    console.log('⚠️ No conversation threads found with specific selectors, trying general approach...');
+                    const allElements = document.querySelectorAll('*');
+                    const potentialConversations = [];
+                    
+                    allElements.forEach(el => {
+                        const text = el.textContent ? el.textContent.trim() : '';
+                        if (text && text.length > 5 && text.length < 100) {
+                            const hasLink = el.querySelector('a[href*="/t/"]') || el.closest('a[href*="/t/"]');
+                            if (hasLink) {
+                                potentialConversations.push(el);
+                            }
+                        }
+                    });
+                    
+                    foundThreads = potentialConversations.slice(0, 10); // Limit to 10
+                    console.log(`🔍 Found ${foundThreads.length} potential conversations using general approach`);
                 }
                 
                 foundThreads.forEach((thread, index) => {
