@@ -3,6 +3,7 @@ const fs = require('fs').promises;
 const path = require('path');
 const crypto = require('crypto');
 const VPSDetection = require('../utils/vpsDetection');
+const AppStateBrowserOptimizer = require('../utils/appStateBrowserOptimizer');
 
 class FacebookBrowserService {
     constructor(email, password, appState) {
@@ -124,10 +125,29 @@ class FacebookBrowserService {
      */
     async loadSession() {
         try {
-            // Try loading from app state first
+            // Try loading from app state first (optimized)
             if (this.appState) {
                 console.log('🔑 Loading Facebook session from app state...');
-                const cookies = JSON.parse(this.appState);
+                
+                // Validate and optimize app state
+                const validation = AppStateBrowserOptimizer.validateAppStateForBrowser(this.appState);
+                if (!validation.valid) {
+                    console.log('❌ App state validation failed:', validation.error);
+                    throw new Error(`Invalid app state: ${validation.error}`);
+                }
+                
+                console.log('✅ App state validation passed:');
+                console.log('   • Cookies found:', validation.cookieCount);
+                console.log('   • Essential cookies:', validation.essentialCookies.join(', '));
+                
+                if (validation.recommendations.length > 0) {
+                    console.log('💡 Recommendations:');
+                    validation.recommendations.forEach(rec => console.log('   •', rec));
+                }
+                
+                // Optimize app state for browser emulation
+                const optimizedAppState = AppStateBrowserOptimizer.optimizeAppStateForBrowser(this.appState);
+                const cookies = JSON.parse(optimizedAppState);
                 
                 await this.navigateWithRetry('https://facebook.com');
                 
