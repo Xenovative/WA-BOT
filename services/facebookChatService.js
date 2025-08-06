@@ -1,4 +1,8 @@
 const login = require('facebook-chat-api');
+const fs = require('fs');
+const path = require('path');
+const crypto = require('crypto');
+const FacebookBrowserService = require('./facebookBrowserService');
 
 /**
  * Validate Facebook app state format and required cookies
@@ -33,9 +37,12 @@ class FacebookChatService {
         this.isLoggedIn = false;
         this.processedMessages = new Set();
         this.pollingInterval = null; // For polling mode
+        this.browserService = null; // For browser emulation
+        this.useBrowserMode = false;
+        this.messageHandlers = []; // Message event handlers
         this.appStatePath = `./facebook_appstate_${Buffer.from(email || 'default').toString('base64').slice(0, 8)}.json`;
         
-        console.log('Facebook Chat service initialized (unofficial API)');
+        console.log('Facebook Chat service initialized (unofficial API + browser fallback)');
         
         // Log authentication method
         if (this.appState) {
@@ -371,8 +378,27 @@ class FacebookChatService {
                             }
                         }
                         
-                        this.isLoggedIn = false;
-                        resolve(false);
+                        // Try browser emulation as final fallback
+                        console.log('\n🌍 TRYING BROWSER EMULATION FALLBACK...');
+                        console.log('   • Switching to Puppeteer browser automation');
+                        console.log('   • This will open a real browser to bypass API blocking');
+                        
+                        this.tryBrowserEmulation().then((browserSuccess) => {
+                            if (browserSuccess) {
+                                console.log('✅ Browser emulation successful!');
+                                this.isLoggedIn = true;
+                                this.useBrowserMode = true;
+                                resolve(true);
+                            } else {
+                                console.log('❌ Browser emulation also failed');
+                                this.isLoggedIn = false;
+                                resolve(false);
+                            }
+                        }).catch((browserError) => {
+                            console.log('❌ Browser emulation error:', browserError.message);
+                            this.isLoggedIn = false;
+                            resolve(false);
+                        });
                         return;
                     }
 
@@ -917,6 +943,104 @@ class FacebookChatService {
             // Continue polling but with simpler approach
             // Just keep the session alive without trying to fetch messages
         });
+    }
+
+    /**
+     * Add message event handler
+     */
+    onMessage(handler) {
+        this.messageHandlers.push(handler);
+    }
+
+    /**
+     * Send message (supports both API and browser mode)
+     */
+    async sendMessage(message, threadID) {
+        if (this.useBrowserMode && this.browserService) {
+            return await this.sendBrowserMessage(message, threadID);
+        } else if (this.api) {
+            return new Promise((resolve, reject) => {
+                this.api.sendMessage(message, threadID, (err) => {
+                    if (err) {
+                        console.log('❌ API sendMessage failed:', err.message);
+                        reject(err);
+                    } else {
+                        console.log('✅ API message sent successfully');
+                        resolve(true);
+                    }
+                });
+            });
+        } else {
+            throw new Error('No Facebook service available (neither API nor browser)');
+        }
+    }
+
+    /**
+     * Try browser emulation as fallback
+     */
+    async tryBrowserEmulation() {
+        try {
+            console.log('🌍 Initializing Facebook Browser Service...');
+            
+            this.browserService = new FacebookBrowserService(
+                this.email, 
+                this.password, 
+                this.appState
+            );
+            
+            await this.browserService.initialize();
+            
+            // Set up message handler to bridge browser messages to existing handlers
+            this.browserService.onMessage((message) => {
+                console.log('💬 Browser message received:', message.body);
+                
+                // Convert browser message format to API format
+                const apiMessage = {
+                    body: message.body,
+                    senderID: message.senderID,
+                    threadID: message.threadID,
+                    messageID: message.messageID,
+                    timestamp: message.timestamp
+                };
+                
+                // Trigger existing message handlers
+                this.messageHandlers.forEach(handler => {
+                    try {
+                        handler(null, apiMessage);
+                    } catch (error) {
+                        console.log('⚠️ Browser message handler error:', error.message);
+                    }
+                });
+            });
+            
+            console.log('✅ Browser emulation initialized successfully');
+            return true;
+            
+        } catch (error) {
+            console.log('❌ Browser emulation failed:', error.message);
+            return false;
+        }
+    }
+
+    /**
+     * Send message using browser emulation
+     */
+    async sendBrowserMessage(message, threadID) {
+        if (!this.browserService) {
+            throw new Error('Browser service not initialized');
+        }
+        
+        return await this.browserService.sendMessage(message, threadID);
+    }
+
+    /**
+     * Stop browser service
+     */
+    async stopBrowserService() {
+        if (this.browserService) {
+            await this.browserService.stop();
+            this.browserService = null;
+        }
     }
 }
 
