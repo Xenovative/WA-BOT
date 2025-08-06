@@ -55,6 +55,10 @@ class FacebookBrowserService {
             await this.page.setViewport({ width: 1366, height: 768 });
             await this.page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36');
             
+            // Set longer timeouts for VPS environments
+            this.page.setDefaultTimeout(60000); // 60 seconds
+            this.page.setDefaultNavigationTimeout(60000); // 60 seconds
+            
             // Load existing session if available
             const loggedIn = await this.loadSession();
             
@@ -62,8 +66,13 @@ class FacebookBrowserService {
                 await this.login();
             }
             
-            // Navigate to Messenger
-            await this.navigateToMessenger();
+            // Navigate to Messenger (with fallback)
+            try {
+                await this.navigateToMessenger();
+            } catch (messengerError) {
+                console.log('⚠️ Messenger navigation failed, trying Facebook main site...');
+                await this.navigateWithRetry('https://facebook.com/messages');
+            }
             
             // Start message monitoring
             await this.startMessageMonitoring();
@@ -79,6 +88,38 @@ class FacebookBrowserService {
     }
 
     /**
+     * Navigate with retry logic for VPS environments
+     */
+    async navigateWithRetry(url, options = {}, maxRetries = 3) {
+        const defaultOptions = { 
+            waitUntil: 'domcontentloaded', // Less strict than networkidle0
+            timeout: 60000 
+        };
+        const finalOptions = { ...defaultOptions, ...options };
+        
+        for (let attempt = 1; attempt <= maxRetries; attempt++) {
+            try {
+                console.log(`🌍 Navigating to ${url} (attempt ${attempt}/${maxRetries})...`);
+                await this.page.goto(url, finalOptions);
+                console.log('✅ Navigation successful');
+                return true;
+            } catch (error) {
+                console.log(`⚠️ Navigation attempt ${attempt} failed:`, error.message);
+                
+                if (attempt === maxRetries) {
+                    console.log('❌ All navigation attempts failed');
+                    throw error;
+                }
+                
+                // Wait before retry (exponential backoff)
+                const waitTime = attempt * 2000;
+                console.log(`🔄 Retrying in ${waitTime/1000} seconds...`);
+                await new Promise(resolve => setTimeout(resolve, waitTime));
+            }
+        }
+    }
+
+    /**
      * Load existing session from cookies
      */
     async loadSession() {
@@ -88,7 +129,7 @@ class FacebookBrowserService {
                 console.log('🔑 Loading Facebook session from app state...');
                 const cookies = JSON.parse(this.appState);
                 
-                await this.page.goto('https://facebook.com', { waitUntil: 'networkidle0' });
+                await this.navigateWithRetry('https://facebook.com');
                 
                 for (const cookie of cookies) {
                     await this.page.setCookie({
@@ -102,7 +143,7 @@ class FacebookBrowserService {
                 }
                 
                 // Test if session is valid
-                await this.page.reload({ waitUntil: 'networkidle0' });
+                await this.page.reload({ waitUntil: 'domcontentloaded', timeout: 60000 });
                 
                 const isLoggedIn = await this.page.evaluate(() => {
                     return !document.querySelector('input[name="email"]') && 
@@ -120,9 +161,9 @@ class FacebookBrowserService {
                 console.log('🔑 Loading Facebook session from file...');
                 const sessionData = JSON.parse(await fs.readFile(this.sessionFile, 'utf8'));
                 
-                await this.page.goto('https://facebook.com', { waitUntil: 'networkidle0' });
+                await this.navigateWithRetry('https://facebook.com');
                 await this.page.setCookie(...sessionData.cookies);
-                await this.page.reload({ waitUntil: 'networkidle0' });
+                await this.page.reload({ waitUntil: 'domcontentloaded', timeout: 60000 });
                 
                 const isLoggedIn = await this.page.evaluate(() => {
                     return !document.querySelector('input[name="email"]') && 
@@ -154,7 +195,7 @@ class FacebookBrowserService {
         
         console.log('🔐 Logging into Facebook...');
         
-        await this.page.goto('https://facebook.com', { waitUntil: 'networkidle0' });
+        await this.navigateWithRetry('https://facebook.com');
         
         // Wait for login form
         await this.page.waitForSelector('input[name="email"]', { timeout: 10000 });
@@ -165,7 +206,7 @@ class FacebookBrowserService {
         
         // Submit login
         await Promise.all([
-            this.page.waitForNavigation({ waitUntil: 'networkidle0' }),
+            this.page.waitForNavigation({ waitUntil: 'domcontentloaded', timeout: 60000 }),
             this.page.click('button[name="login"]')
         ]);
         
@@ -218,7 +259,7 @@ class FacebookBrowserService {
     async navigateToMessenger() {
         console.log('📱 Navigating to Facebook Messenger...');
         
-        await this.page.goto('https://www.messenger.com', { waitUntil: 'networkidle0' });
+        await this.navigateWithRetry('https://www.messenger.com');
         
         // Wait for messenger to load
         await this.page.waitForTimeout(5000);
