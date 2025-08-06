@@ -529,11 +529,21 @@ class FacebookBrowserService {
             const conversationsWithNewMessages = await this.page.evaluate(() => {
                 const conversations = [];
                 
-                // Try different selectors for conversation threads
+                // Try different selectors for conversation threads (expanded list)
                 const selectors = [
                     '[role="gridcell"]', // Main conversation cells
                     '[data-testid="conversation-list-item"]',
-                    '.conversation-list-item'
+                    '.conversation-list-item',
+                    '[data-pagelet="LeftRail"] [role="link"]', // Facebook messages left rail
+                    '[data-pagelet="LeftRail"] a[href*="/t/"]', // Direct conversation links
+                    '[aria-label*="conversation"]', // Conversation elements
+                    '[aria-label*="message"]', // Message elements
+                    '.x1n2onr6 [role="link"]', // Facebook's dynamic classes
+                    '.x78zum5 [role="link"]', // Another common Facebook class
+                    '[data-scope="messages_table"] [role="link"]', // Messages table
+                    'div[role="main"] [role="link"]', // Links in main content area
+                    'a[href*="facebook.com/messages/t/"]', // Full Facebook message URLs
+                    'a[href*="/messages/t/"]' // Relative message URLs
                 ];
                 
                 let foundThreads = [];
@@ -548,24 +558,56 @@ class FacebookBrowserService {
                     }
                 }
                 
-                // If no specific selectors work, try a more general approach
+                // If no specific selectors work, try multiple fallback approaches
                 if (foundThreads.length === 0) {
-                    console.log('⚠️ No conversation threads found with specific selectors, trying general approach...');
-                    const allElements = document.querySelectorAll('*');
+                    console.log('⚠️ No conversation threads found with specific selectors, trying fallback approaches...');
+                    
+                    // Approach 1: Look for any links with conversation-like URLs
+                    const conversationLinks = document.querySelectorAll('a[href]');
                     const potentialConversations = [];
                     
-                    allElements.forEach(el => {
-                        const text = el.textContent ? el.textContent.trim() : '';
-                        if (text && text.length > 5 && text.length < 100) {
-                            const hasLink = el.querySelector('a[href*="/t/"]') || el.closest('a[href*="/t/"]');
-                            if (hasLink) {
-                                potentialConversations.push(el);
-                            }
+                    conversationLinks.forEach(link => {
+                        if (link.href && (link.href.includes('/t/') || link.href.includes('/messages/'))) {
+                            const parent = link.closest('div, li, tr') || link;
+                            potentialConversations.push(parent);
                         }
                     });
                     
-                    foundThreads = potentialConversations.slice(0, 10); // Limit to 10
-                    console.log(`🔍 Found ${foundThreads.length} potential conversations using general approach`);
+                    console.log(`🔍 Approach 1: Found ${potentialConversations.length} conversation links`);
+                    
+                    // Approach 2: Look for elements with person names (common pattern)
+                    if (potentialConversations.length === 0) {
+                        const allElements = document.querySelectorAll('*');
+                        allElements.forEach(el => {
+                            const text = el.textContent ? el.textContent.trim() : '';
+                            // Look for elements that might be person names or conversation titles
+                            if (text && text.length > 2 && text.length < 50 && 
+                                !text.includes('Facebook') && !text.includes('Messages') &&
+                                /^[A-Za-z\u4e00-\u9fff\s]+$/.test(text)) { // Letters, Chinese chars, spaces only
+                                const hasNearbyLink = el.querySelector('a') || el.closest('a') || 
+                                                    el.parentElement?.querySelector('a');
+                                if (hasNearbyLink) {
+                                    potentialConversations.push(el.closest('div, li') || el);
+                                }
+                            }
+                        });
+                        console.log(`🔍 Approach 2: Found ${potentialConversations.length} potential name elements`);
+                    }
+                    
+                    // Approach 3: Look for any clickable elements with meaningful text
+                    if (potentialConversations.length === 0) {
+                        const clickableElements = document.querySelectorAll('[role="button"], [role="link"], a, button');
+                        clickableElements.forEach(el => {
+                            const text = el.textContent ? el.textContent.trim() : '';
+                            if (text && text.length > 3 && text.length < 100) {
+                                potentialConversations.push(el);
+                            }
+                        });
+                        console.log(`🔍 Approach 3: Found ${potentialConversations.length} clickable elements`);
+                    }
+                    
+                    foundThreads = potentialConversations.slice(0, 15); // Increased limit
+                    console.log(`🔍 Final fallback result: ${foundThreads.length} potential conversations`);
                 }
                 
                 foundThreads.forEach((thread, index) => {
