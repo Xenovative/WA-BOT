@@ -355,12 +355,30 @@ class FacebookBrowserService {
                     const text = element.textContent ? element.textContent.trim() : '';
                     
                     if (text && text.length > 0 && text.length < 1000) { // Reasonable message length
+                        // Filter out Facebook UI elements and timestamps
+                        const isTimestamp = /^\d+\s*(分鐘|小時|天|秒|minute|hour|day|second|min|hr|sec|ago|剛才|now)$/i.test(text);
+                        const isUIElement = /^(已讀|seen|delivered|sent|typing|online|active|離線|在線上)$/i.test(text);
+                        const isReaction = /^[👍👎❤️😂😮😢😡🔥💯]$/.test(text);
+                        const isShortText = text.length < 3; // Very short text likely UI
+                        const isNumber = /^\d+$/.test(text); // Pure numbers
+                        
+                        if (isTimestamp || isUIElement || isReaction || isShortText || isNumber) {
+                            console.log(`⏭️ Skipping UI element: "${text}"`);
+                            return; // Skip this element
+                        }
+                        
                         // Try to determine if this is a received message (not sent by us)
                         const isReceived = !element.closest('[data-testid="outgoing_message"]') && 
                                          !element.closest('.x1rg5ohu') && // Sent message class
-                                         !element.closest('[aria-label*="You sent"]');
+                                         !element.closest('[aria-label*="You sent"]') &&
+                                         !element.closest('[data-scope="message_sender"]');
                         
-                        if (isReceived) {
+                        // Additional check: look for message bubble containers
+                        const isInMessageBubble = element.closest('[data-testid="message_bubble"]') || 
+                                                 element.closest('[role="gridcell"]') ||
+                                                 element.closest('.message');
+                        
+                        if (isReceived && isInMessageBubble) {
                             messages.push({
                                 id: `msg_${Date.now()}_${index}`,
                                 text: text,
