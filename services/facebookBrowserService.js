@@ -524,7 +524,18 @@ class FacebookBrowserService {
             
             // Process each conversation with new messages (relaxed criteria)
             for (const conversation of conversationsWithNewMessages) {
-                // Relax the criteria - process if there's any preview text
+                // Filter out messages we sent and system notifications
+                const isSentByUs = conversation.preview.startsWith('你:') || conversation.preview.startsWith('You:');
+                const isSystemNotification = conversation.preview.includes('成為朋友了') || conversation.preview.includes('became friends') || 
+                                            conversation.preview.includes('加入了') || conversation.preview.includes('joined');
+                
+                // Skip our own messages and system notifications
+                if (isSentByUs || isSystemNotification) {
+                    console.log(`⏭️ Skipping: ${isSentByUs ? 'own message' : 'system notification'} - "${conversation.preview}"`);
+                    continue;
+                }
+                
+                // Process if there's any meaningful preview text (even without unread indicator)
                 if (conversation.preview && conversation.preview.length > 2) {
                     // Create unique message ID
                     const messageId = `msg_${conversation.threadId}_${conversation.preview.substring(0, 20).replace(/\s+/g, '_')}_${conversation.preview.length}`;
