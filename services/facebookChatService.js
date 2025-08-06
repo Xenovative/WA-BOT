@@ -14,18 +14,11 @@ function validateFacebookAppState(appState) {
         return false;
     }
     
-    // Check for required cookies
-    const requiredCookies = ['c_user', 'xs', 'datr'];
-    const foundCookies = requiredCookies.filter(cookieName => 
-        appState.some(cookie => cookie.key === cookieName && cookie.value && cookie.value.trim() !== '')
-    );
+    // Check for essential cookies
+    const essentialCookies = ['c_user', 'xs', 'datr'];
+    const cookieNames = appState.map(cookie => cookie.key);
     
-    // Also check for common cookie structure
-    const hasValidStructure = appState.every(cookie => 
-        (cookie.key || cookie.name) && cookie.value !== undefined
-    );
-    
-    return foundCookies.length >= 3 && hasValidStructure; // At least 3 required cookies and valid structure
+    return essentialCookies.every(name => cookieNames.includes(name));
 }
 
 class FacebookChatService {
@@ -64,157 +57,135 @@ class FacebookChatService {
     }
 
     /**
-     * Test if app state is likely to work for login
-     * @param {Array} appState - Array of cookie objects
-     * @returns {boolean} - Whether app state is likely valid for login
-     */
-    testAppStateValidity(appState) {
-        if (!this.validateAppState(appState)) {
-            return false;
-        }
-        
-        // Check if required cookies have non-empty values
-        const requiredCookies = ['c_user', 'xs', 'datr'];
-        for (const cookieName of requiredCookies) {
-            const cookie = appState.find(c => c.key === cookieName);
-            if (!cookie || !cookie.value || cookie.value.trim() === '' || 
-                cookie.value.includes('PASTE_YOUR_') || cookie.value.includes('_HERE')) {
-                return false;
-            }
-        }
-        
-        return true;
-    }
-
-    /**
-     * Load saved app state for persistent login
+     * Load app state from environment variable or file
      */
     loadAppState() {
-        try {
-            // First, try to use app state from environment variable
-            if (this.appState) {
-                console.log('🌍 Loading Facebook app state from environment variable...');
-                
-                // Parse app state
-                let appState;
-                if (typeof this.appState === 'string') {
-                    try {
-                        appState = JSON.parse(this.appState);
-                    } catch (parseError) {
-                        console.log('❌ Invalid JSON in FACEBOOK_APP_STATE environment variable');
-                        console.log('   • Error:', parseError.message);
-                        console.log('   • Make sure FACEBOOK_APP_STATE contains valid JSON');
-                        return null;
-                    }
+        // Try environment variable first
+        if (this.appState) {
+            try {
+                const parsed = JSON.parse(this.appState);
+                if (this.validateAppState(parsed)) {
+                    console.log(`✅ Valid app state loaded (${parsed.length} cookies)`);
+                    return parsed;
                 } else {
-                    appState = this.appState;
-                }
-                
-                // Validate app state format
-                if (!this.validateAppState(appState)) {
-                    console.log('❌ Invalid Facebook app state format');
-                    console.log('   • App state must be an array of cookie objects');
-                    console.log('   • Required cookies: c_user, xs, datr');
-                    
-                    // Show what we got
-                    if (Array.isArray(appState)) {
-                        console.log(`   • Found ${appState.length} cookies in app state`);
-                        appState.slice(0, 5).forEach((cookie, index) => {
-                            console.log(`     ${index + 1}. ${cookie.key || cookie.name || 'unknown'}: ${cookie.value ? '✓' : '✗'}`);
-                        });
-                        if (appState.length > 5) {
-                            console.log(`     ... and ${appState.length - 5} more cookies`);
-                        }
-                    } else {
-                        console.log('   • App state is not an array:', typeof appState);
-                    }
+                    console.log('⚠️ App state format invalid');
                     return null;
                 }
-                
-                console.log(`✅ Loaded app state with ${appState.length} cookies from environment`);
-                return appState;
-            }
-            
-            // Fallback to file-based app state
-            const fs = require('fs');
-            if (fs.existsSync(this.appStatePath)) {
-                const appState = JSON.parse(fs.readFileSync(this.appStatePath, 'utf8'));
-                
-                // Validate app state format
-                if (!this.validateAppState(appState)) {
-                    console.log('❌ Invalid Facebook app state format in file');
-                    return null;
-                }
-                
-                console.log(`📱 Loaded Facebook app state from file (${appState.length} cookies)`);
-                return appState;
-            }
-        } catch (error) {
-            console.log('⚠️ Could not load Facebook app state:', error.message);
-            if (this.appState) {
-                console.log('   • Check if FACEBOOK_APP_STATE is valid JSON format');
-                console.log('   • Make sure the app state was extracted correctly');
+            } catch (error) {
+                console.log('⚠️ Failed to parse app state:', error.message);
+                return null;
             }
         }
+        
+        // Try loading from file
+        try {
+            if (fs.existsSync(this.appStatePath)) {
+                const fileContent = fs.readFileSync(this.appStatePath, 'utf8');
+                const parsed = JSON.parse(fileContent);
+                if (this.validateAppState(parsed)) {
+                    console.log(`✅ App state loaded from file (${parsed.length} cookies)`);
+                    return parsed;
+                }
+            }
+        } catch (error) {
+            console.log('⚠️ Failed to load app state from file:', error.message);
+        }
+        
         return null;
     }
 
     /**
-     * Save app state for future logins
+     * Save app state to file
      */
     saveAppState(appState) {
         try {
-            const fs = require('fs');
             fs.writeFileSync(this.appStatePath, JSON.stringify(appState, null, 2));
-            console.log('💾 Saved Facebook app state for future logins');
+            console.log('💾 App state saved to file');
         } catch (error) {
-            console.error('❌ Failed to save Facebook app state:', error.message);
+            console.log('⚠️ Failed to save app state:', error.message);
         }
     }
 
     /**
-     * Initialize Facebook connection
+     * Initialize Facebook service with priority: App State → Browser Emulation → API
      */
     async initialize() {
-        console.log('🚑 FACEBOOK INITIALIZE() CALLED!');
+        console.log('🚀 Initializing Facebook Chat Service...');
         console.log('   • Email:', !!this.email);
         console.log('   • Password:', !!this.password);
         console.log('   • App State:', !!this.appState);
         
+        // Check if we have any authentication method
+        const hasAppState = !!this.loadAppState();
+        const hasCredentials = !!(this.email && this.password);
+        
+        if (!hasAppState && !hasCredentials) {
+            console.error('❌ No Facebook authentication method available');
+            console.log('');
+            console.log('🔧 SETUP REQUIRED:');
+            console.log('   Option 1: Set FACEBOOK_APP_STATE in .env (recommended)');
+            console.log('   Option 2: Set FACEBOOK_EMAIL and FACEBOOK_PASSWORD in .env');
+            console.log('   Option 3: Use Facebook Messenger Official API instead');
+            console.log('');
+            return false;
+        }
+        
+        // Priority 1: App State → Browser Emulation (OPTIMAL)
+        if (hasAppState) {
+            console.log('🌍 App State detected - Using Browser Emulation directly...');
+            console.log('✨ This is the optimal approach for reliability and security');
+            console.log('🎯 Skipping unreliable API, going straight to browser automation');
+            
+            try {
+                const browserSuccess = await this.tryBrowserEmulation();
+                if (browserSuccess) {
+                    console.log('✅ Browser emulation with app state successful!');
+                    this.isLoggedIn = true;
+                    this.useBrowserMode = true;
+                    return true;
+                } else {
+                    console.log('❌ Browser emulation failed, trying API fallback...');
+                }
+            } catch (browserError) {
+                console.log('❌ Browser emulation error:', browserError.message);
+                console.log('🔄 Trying API fallback...');
+            }
+        }
+        
+        // Priority 2: API Login (Fallback only)
+        console.log('🔄 Attempting API login as fallback...');
+        console.log('⚠️ Note: API is unreliable due to Facebook blocking');
+        
+        try {
+            const apiSuccess = await this.tryApiLogin(hasAppState, hasCredentials);
+            if (apiSuccess) {
+                console.log('✅ API login successful (unexpected but good!)');
+                this.isLoggedIn = true;
+                return true;
+            }
+        } catch (apiError) {
+            console.log('❌ API login failed:', apiError.message);
+        }
+        
+        console.log('❌ All authentication methods failed');
+        console.log('💡 Recommendations:');
+        console.log('   1. 🌟 Use Facebook Messenger Official API (most reliable)');
+        console.log('   2. 🔄 Re-extract fresh app state from browser');
+        console.log('   3. 🧪 Run test-appstate-browser.js to diagnose issues');
+        
+        return false;
+    }
+
+    /**
+     * Try API login (fallback method)
+     */
+    async tryApiLogin(hasAppState, hasCredentials) {
         return new Promise((resolve, reject) => {
             try {
-                // Check if we have any authentication method
-                const hasAppState = !!this.loadAppState();
-                const hasCredentials = !!(this.email && this.password);
-                
-                if (!hasAppState && !hasCredentials) {
-                    console.error('❌ No Facebook authentication method available');
-                    console.log('');
-                    console.log('🔧 SETUP REQUIRED:');
-                    console.log('   Option 1: Set FACEBOOK_APP_STATE in .env (recommended)');
-                    console.log('   Option 2: Set FACEBOOK_EMAIL and FACEBOOK_PASSWORD in .env');
-                    console.log('   Option 3: Use Facebook Messenger Official API instead');
-                    console.log('');
-                    resolve(false);
-                    return;
-                }
-                
-                console.log(`🔑 Attempting Facebook login (${hasAppState ? 'App State' : 'Email/Password'})...`);
-                
-                // Use latest Chrome user agents and additional bypass options
-                const userAgents = [
-                    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-                    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36',
-                    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/118.0.0.0 Safari/537.36',
-                    'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-                    'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-                ];
-                const randomUserAgent = userAgents[Math.floor(Math.random() * userAgents.length)];
-                
                 const appState = this.loadAppState();
                 
                 const loginOptions = {
-                    userAgent: randomUserAgent,
+                    userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
                     pauseLog: true,
                     logLevel: 'silent',
                     selfListen: false,
@@ -223,669 +194,109 @@ class FacebookChatService {
                     autoMarkDelivery: false,
                     autoMarkRead: false,
                     forceLogin: true,
-                    pageID: null,
-                    proxy: null,
-                    online: false,
-                    autoReconnect: false, // Disable to avoid detection
-                    session: false, // Try without session persistence
-                    keepAlive: false, // Disable keep alive
-                    // More aggressive bypass options
+                    autoReconnect: false,
+                    session: false,
+                    keepAlive: false,
                     listenTyping: false,
                     autoMarkSeen: false,
-                    mqttEndpoint: null, // Disable MQTT
-                    region: 'www', // Force www region
-                    userDataDir: null // No user data persistence
+                    mqttEndpoint: null,
+                    region: 'www'
                 };
                 
                 // Add authentication method
                 if (appState) {
-                    // Test app state validity
-                    if (!this.testAppStateValidity(appState)) {
-                        console.log('⚠️ Facebook app state may be invalid or contain template placeholders');
-                        console.log('   • Make sure all required cookies have actual values');
-                        console.log('   • Required cookies: c_user, xs, datr');
-                        
-                        // Still proceed but with warning
-                    }
-                    
-                    // App state authentication (preferred)
                     loginOptions.appState = appState;
-                    console.log('📱 Using app state authentication');
-                    
-                    // Log app state info for debugging
-                    const requiredCookies = ['c_user', 'xs', 'datr', 'sb'];
-                    requiredCookies.forEach(cookieName => {
-                        const cookie = appState.find(c => c.key === cookieName);
-                        if (cookie) {
-                            const hasValue = cookie.value && cookie.value.trim() !== '';
-                            const isTemplate = cookie.value && (cookie.value.includes('PASTE_YOUR_') || cookie.value.includes('_HERE'));
-                            console.log(`   • ${cookieName}: ${hasValue && !isTemplate ? '✓ Present' : isTemplate ? '⚠️ Template' : '✗ Empty'}`);
-                        } else {
-                            console.log(`   • ${cookieName}: ✗ Not found`);
-                        }
-                    });
-                } else {
-                    // Email/password authentication (fallback)
+                } else if (hasCredentials) {
                     loginOptions.email = this.email;
                     loginOptions.password = this.password;
-                    loginOptions.forceLogin = true;
-                    console.log('🔑 Using email/password authentication');
+                } else {
+                    reject(new Error('No authentication method available'));
+                    return;
                 }
-
-                console.log(`🔑 Attempting Facebook login with enhanced options (User-Agent: ${randomUserAgent.includes('Chrome') ? 'Chrome' : randomUserAgent.includes('Firefox') ? 'Firefox' : 'Safari'})...`);
                 
-                // Enhanced login with retry mechanism for 404 errors
-                let retryCount = 0;
-                const maxRetries = 3;
-                
-                const attemptLogin = () => {
-                    if (retryCount > 0) {
-                        console.log(`🔄 Retry attempt ${retryCount}/${maxRetries - 1}...`);
-                        // Use different user agent for retry
-                        loginOptions.userAgent = userAgents[Math.floor(Math.random() * userAgents.length)];
-                    }
-                    
-                    // Try alternative facebook-chat-api first, fallback to original
-                    let login;
-                    try {
-                        login = require('fca-unofficial');
-                        console.log('🔄 Using fca-unofficial (alternative Facebook API)');
-                    } catch (e) {
-                        login = require('facebook-chat-api');
-                        console.log('🔄 Using facebook-chat-api (original)');
-                    }
-                    
-                    console.log('🚑 CALLING LOGIN FUNCTION NOW...');
-                    console.log('   • Login function type:', typeof login);
-                    console.log('   • Login options keys:', Object.keys(loginOptions));
-                    
-                    login(loginOptions, (err, api) => {
-                    console.log('🚑 LOGIN CALLBACK REACHED!');
-                    console.log('   • Error:', !!err);
-                    console.log('   • API:', !!api);
-                    
+                // Try login
+                login(loginOptions, (err, api) => {
                     if (err) {
-                        console.error('❌ Facebook login failed:', err);
-                        
-                        // Provide specific guidance based on error
-                        if (err.error && err.error.includes('login approvals')) {
-                            console.log('');
-                            console.log('🚨 FACEBOOK 2FA ISSUE DETECTED:');
-                            console.log('   • Your Facebook account has 2FA (login approvals) enabled');
-                            console.log('   • Facebook unofficial API cannot handle 2FA automatically');
-                            console.log('');
-                            console.log('🔧 SOLUTIONS:');
-                            console.log('   1. Disable 2FA on this Facebook account (recommended for bots)');
-                            console.log('   2. Use Facebook Messenger Official API instead');
-                            console.log('   3. Create a dedicated bot account without 2FA');
-                            console.log('');
-                        } else if (err.error && err.error.includes('blocked')) {
-                            console.log('');
-                            console.log('🚫 FACEBOOK UNOFFICIAL API BLOCKED:');
-                            console.log('   • Facebook has detected and blocked the unofficial API');
-                            console.log('   • This is NOT a problem with your account - you can still login normally');
-                            console.log('   • Facebook actively blocks third-party chat APIs for security');
-                            console.log('');
-                            console.log('🔧 SOLUTIONS (in order of recommendation):');
-                            console.log('   1. 🌟 Use Facebook Messenger Official API (recommended)');
-                            console.log('      - More reliable and officially supported');
-                            console.log('      - Requires Facebook Developer setup');
-                            console.log('      - Set FACEBOOK_PAGE_ACCESS_TOKEN in .env');
-                            console.log('');
-                            console.log('   2. 🔄 Try different unofficial API workarounds:');
-                            console.log('      - Use a VPN or different IP address');
-                            console.log('      - Create a brand new Facebook account');
-                            console.log('      - Wait 24-48 hours and try again');
-                            console.log('');
-                            console.log('   3. 📱 Alternative: Use Instagram Private API instead');
-                            console.log('      - Instagram messaging works more reliably');
-                            console.log('      - Set INSTAGRAM_SESSION_ID in .env');
-                            console.log('');
-                            console.log('📚 FACEBOOK OFFICIAL API SETUP GUIDE:');
-                            console.log('   1. Go to https://developers.facebook.com/');
-                            console.log('   2. Create a new app and add Messenger product');
-                            console.log('   3. Get Page Access Token from your Facebook page');
-                            console.log('   4. Set FACEBOOK_PAGE_ACCESS_TOKEN in your .env file');
-                            console.log('   5. Configure webhook URL for message receiving');
-                            console.log('');
-                        } else if (err.error && (err.error.includes('404') || err.error.includes('parseAndCheckLogin') || err.toString().includes('404'))) {
-                            console.log('');
-                            console.log('🚨 FACEBOOK API ENDPOINT ERROR (404):');
-                            console.log('   • Facebook has changed or blocked the unofficial API endpoints');
-                            console.log('   • This is a common issue with the unofficial facebook-chat-api');
-                            console.log('');
-                            
-                            // Retry with different options if we have retries left
-                            if (retryCount < maxRetries - 1) {
-                                retryCount++;
-                                console.log(`🔄 Retrying with different configuration (${retryCount}/${maxRetries - 1})...`);
-                                
-                                // Modify login options for retry
-                                loginOptions.userAgent = userAgents[Math.floor(Math.random() * userAgents.length)];
-                                loginOptions.forceLogin = !loginOptions.forceLogin; // Toggle forceLogin
-                                loginOptions.online = retryCount % 2 === 0; // Alternate online status
-                                
-                                setTimeout(attemptLogin, 3000 * retryCount); // Exponential backoff
-                                return;
-                            } else {
-                                console.log('🔧 ALL RETRY ATTEMPTS FAILED - SOLUTIONS:');
-                                console.log('   1. 🌟 Switch to Facebook Messenger Official API (highly recommended)');
-                                console.log('   2. 🔄 Try updating facebook-chat-api: npm install fca-unofficial');
-                                console.log('   3. 🌐 Use a VPN or different IP address');
-                                console.log('   4. 🔄 Re-extract fresh app state cookies from browser');
-                                console.log('   5. ⏰ Wait several hours and try again');
-                                console.log('');
-                            }
-                        }
+                        console.log('❌ API login failed:', err.message || err);
                         
                         // Try browser emulation as final fallback
-                        console.log('\n🌍 TRYING BROWSER EMULATION FALLBACK...');
-                        console.log('   • Switching to Puppeteer browser automation');
-                        console.log('   • This will open a real browser to bypass API blocking');
-                        
+                        console.log('🌍 Trying browser emulation as final fallback...');
                         this.tryBrowserEmulation().then((browserSuccess) => {
                             if (browserSuccess) {
-                                console.log('✅ Browser emulation successful!');
+                                console.log('✅ Browser emulation fallback successful!');
                                 this.isLoggedIn = true;
                                 this.useBrowserMode = true;
                                 resolve(true);
                             } else {
                                 console.log('❌ Browser emulation also failed');
-                                this.isLoggedIn = false;
                                 resolve(false);
                             }
                         }).catch((browserError) => {
                             console.log('❌ Browser emulation error:', browserError.message);
-                            this.isLoggedIn = false;
                             resolve(false);
                         });
                         return;
                     }
-
-                    console.log('✅ Facebook login successful!');
+                    
+                    console.log('✅ API login successful!');
                     this.api = api;
                     this.isLoggedIn = true;
                     
-                    // Immediate API state check
-                    console.log('🔍 Checking API state after login...');
-                    console.log('   • MQTT Client:', api.mqttClient ? '✅ Available' : '❌ Blocked');
-                    console.log('   • API Object:', typeof api);
-                    console.log('   • Login Status:', this.isLoggedIn);
-
-                    // Save app state for future logins
+                    // Save app state for future use
                     try {
-                        const appState = api.getAppState();
-                        this.saveAppState(appState);
+                        const newAppState = api.getAppState();
+                        this.saveAppState(newAppState);
                     } catch (stateError) {
                         console.log('⚠️ Could not save app state:', stateError.message);
                     }
-
-                    // Set minimal options to reduce detection
-                    api.setOptions({
-                        listenEvents: true,
-                        logLevel: 'silent',
-                        updatePresence: false,
-                        selfListen: false,
-                        autoMarkDelivery: false,
-                        autoMarkRead: false,
-                        online: false
-                    });
-
-                    // Test API connection before starting listener
-                    console.log('🔍 Testing Facebook session validity...');
                     
-                    // IMMEDIATE TEST: Try starting polling right now
-                    console.log('🚑 IMMEDIATE TEST: Trying to start polling now...');
-                    try {
-                        this.startPollingMode();
-                        console.log('✅ Immediate polling start succeeded');
-                    } catch (immediateError) {
-                        console.log('❌ Immediate polling start failed:', immediateError.message);
-                    }
-                    
-                    // Add immediate timeout to prevent hanging
-                    console.log('⏰ Setting 5-second timeout for session validation...');
-                    const validationTimeout = setTimeout(() => {
-                        console.log('⏰ Session validation timed out after 5 seconds');
-                        console.log('⚠️ getCurrentUserID() is hanging - Facebook blocking API calls');
-                        console.log('🔄 Forcing switch to polling mode...');
-                        this.startPollingMode();
-                    }, 5000); // 5 second timeout (reduced)
-                    
-                    // Also add a backup timer in case everything is blocked
-                    const backupTimeout = setTimeout(() => {
-                        console.log('🚑 Emergency fallback: Starting polling mode after 8 seconds');
-                        console.log('📤 Facebook API appears completely unresponsive');
-                        this.startPollingMode();
-                    }, 8000);
-                    
-                    api.getCurrentUserID((err, userID) => {
-                        clearTimeout(validationTimeout); // Cancel timeout if callback executes
-                        clearTimeout(backupTimeout); // Cancel backup timeout
-                        if (err) {
-                            console.log('⚠️ Session validation failed:', err);
-                            console.log('❌ Facebook has blocked the session immediately after login');
-                            console.log('📤 This confirms Facebook is actively blocking unofficial API access');
-                            console.log('');
-                            console.log('🎆 SOLUTION: Use Facebook Messenger Official API instead');
-                            console.log('   • Go to Platforms tab in WA-BOT GUI');
-                            console.log('   • Select "Official API (Recommended)"');
-                            console.log('   • Follow the step-by-step setup guide');
-                            console.log('');
-                            // Don't start listener if session is invalid
-                        } else {
-                            console.log('✅ Session validated successfully! User ID:', userID);
-                            
-                            // Check if MQTT connection is available
-                            if (api.mqttClient) {
-                                console.log('✅ MQTT connection available - trying real-time listener');
-                                setTimeout(() => {
-                                    this.startMessageListener();
-                                }, 5000);
-                            } else {
-                                console.log('⚠️ MQTT connection blocked - using polling mode instead');
-                                console.log('🔄 Polling mode will check for messages every 10 seconds');
-                                
-                                // Use polling mode instead of broken listener
-                                setTimeout(() => {
-                                    this.startPollingMode();
-                                }, 3000);
-                            }
-                        }
-                    });
-                    
-                    // Start polling immediately as backup (in case validation hangs)
-                    setTimeout(() => {
-                        if (!this.pollingInterval) {
-                            console.log('🚑 Direct polling start - validation may have failed');
-                            this.startPollingMode();
-                        }
-                    }, 12000); // 12 seconds after login
+                    // Start polling mode (more reliable than real-time listener)
+                    this.startPollingMode();
                     
                     resolve(true);
-                    });
-                };
-                
-                // Start the first login attempt
-                attemptLogin();
+                });
                 
             } catch (error) {
-                console.error('Facebook initialization error:', error);
-                this.isLoggedIn = false;
-                resolve(false);
+                console.log('❌ API login setup error:', error.message);
+                reject(error);
             }
         });
     }
 
     /**
-     * Start listening for messages
-     */
-    startMessageListener() {
-        if (!this.api) {
-            console.error('Facebook API not initialized');
-            return;
-        }
-
-        console.log('Facebook message listener started');
-
-        this.api.listen((err, message) => {
-            if (err) {
-                console.error('Facebook listen error:', err);
-                
-                // Handle session invalidation
-                if (err.error === 'Not logged in' || (err.res && err.res.error === 1357004)) {
-                    console.log('');
-                    console.log('🔐 FACEBOOK SESSION INVALIDATED:');
-                    console.log('   • Facebook has invalidated the current session');
-                    console.log('   • This is common with unofficial API usage');
-                    console.log('');
-                    console.log('🔧 RECOMMENDED SOLUTION:');
-                    console.log('   🌟 Switch to Facebook Messenger Official API');
-                    console.log('   • Go to Platforms tab in WA-BOT GUI');
-                    console.log('   • Select "Official API (Recommended)"');
-                    console.log('   • Click "Need help setting up?" for step-by-step guide');
-                    console.log('');
-                    console.log('🔄 ALTERNATIVE: Re-extract app state');
-                    console.log('   • Use utils/extract-facebook-cookies.ps1');
-                    console.log('   • Update FACEBOOK_APP_STATE in .env');
-                    console.log('');
-                    
-                    // Mark as disconnected and stop trying
-                    this.api = null;
-                    console.log('⚠️ Facebook listener stopped due to session invalidation');
-                    console.log('📤 Manual intervention required - please use Official API');
-                    
-                    return;
-                }
-                
-                // Handle specific error types
-                if (err.message && err.message.includes('404')) {
-                    console.log('');
-                    console.log('🚨 FACEBOOK API ENDPOINT NOT FOUND (404):');
-                    console.log('   • The Facebook unofficial API endpoint is currently unavailable');
-                    console.log('   • This is likely due to Facebook blocking the unofficial API');
-                    console.log('');
-                    console.log('🔧 IMMEDIATE SOLUTIONS:');
-                    console.log('   1. 🌟 Switch to Facebook Messenger Official API (recommended)');
-                    console.log('      - Set FACEBOOK_PAGE_ACCESS_TOKEN in .env');
-                    console.log('      - Configure webhook URL in Facebook Developer Portal');
-                    console.log('');
-                    console.log('   2. 🔄 Refresh your Facebook app state:');
-                    console.log('      - Re-extract app state using facebook-session-extractor.html');
-                    console.log('      - Update FACEBOOK_APP_STATE in .env with new values');
-                    console.log('');
-                    console.log('   3. 🌐 Try a different network/connection:');
-                    console.log('      - Use a VPN or different IP address');
-                    console.log('      - Restart your router/modem');
-                    console.log('');
-                } else if (err.message && err.message.includes('ECONN')) {
-                    console.log('');
-                    console.log('🌐 FACEBOOK CONNECTION ERROR:');
-                    console.log('   • Cannot connect to Facebook servers');
-                    console.log('   • Check your internet connection');
-                    console.log('');
-                }
-                
-                // Try to reinitialize connection after a delay
-                setTimeout(() => {
-                    console.log('🔄 Attempting to reinitialize Facebook connection...');
-                    this.initialize();
-                }, 30000); // 30 second delay
-                
-                return;
-            }
-
-            this.handleMessage(message);
-        });
-    }
-
-    /**
-     * Handle incoming messages
-     */
-    async handleMessage(message) {
-        try {
-            // Only handle message events
-            if (message.type !== 'message') {
-                return;
-            }
-
-            // Skip messages from self
-            if (message.senderID === this.api.getCurrentUserID()) {
-                return;
-            }
-
-            // Skip if already processed
-            if (this.processedMessages.has(message.messageID)) {
-                return;
-            }
-            this.processedMessages.add(message.messageID);
-
-            const senderId = message.senderID;
-            const threadId = message.threadID;
-            const chatId = `facebook:${senderId}`;
-            let messageText = message.body || '';
-
-            // Handle attachments
-            if (message.attachments && message.attachments.length > 0) {
-                const attachment = message.attachments[0];
-                if (attachment.type === 'photo') {
-                    messageText = messageText || '[PHOTO]';
-                } else if (attachment.type === 'video') {
-                    messageText = messageText || '[VIDEO]';
-                } else if (attachment.type === 'audio') {
-                    messageText = messageText || '[AUDIO]';
-                } else if (attachment.type === 'file') {
-                    messageText = messageText || '[FILE]';
-                } else {
-                    messageText = messageText || `[${attachment.type.toUpperCase()}]`;
-                }
-            }
-
-            if (!messageText.trim()) {
-                return; // Skip empty messages
-            }
-
-            console.log(`Facebook message from ${senderId}: ${messageText}`);
-
-            // Check if chat is blocked (AI disabled)
-            const isBlocked = global.chatHandler?.isAIBlocked?.(senderId, 'facebook');
-            
-            // Always save user message to chat history
-            if (global.chatHandler) {
-                global.chatHandler.addMessage(senderId, 'user', messageText, 'facebook');
-            }
-
-            // Skip AI processing if blocked
-            if (isBlocked) {
-                console.log(`AI is disabled for Facebook chat ${chatId}, skipping response`);
-                return;
-            }
-
-            // Get conversation history
-            const conversation = global.chatHandler?.getConversation?.(senderId, 'facebook') || [];
-
-            // Process with workflow manager
-            if (global.workflowManager) {
-                const response = await global.workflowManager.processMessage(
-                    messageText,
-                    chatId,
-                    conversation,
-                    'facebook'
-                );
-
-                if (response && response.trim()) {
-                    await this.sendMessage(threadId, response);
-                    
-                    // Save assistant response
-                    if (global.chatHandler) {
-                        global.chatHandler.addMessage(senderId, 'assistant', response, 'facebook');
-                    }
-                }
-            }
-        } catch (error) {
-            console.error('Error handling Facebook message:', error);
-        }
-    }
-
-    /**
-     * Send message to Facebook user/thread
-     */
-    async sendMessage(threadId, messageText) {
-        return new Promise((resolve, reject) => {
-            if (!this.api || !this.isLoggedIn) {
-                reject(new Error('Facebook not logged in'));
-                return;
-            }
-
-            this.api.sendMessage(messageText, threadId, (err, messageInfo) => {
-                if (err) {
-                    console.error('Error sending Facebook message:', err);
-                    reject(err);
-                } else {
-                    console.log('Facebook message sent successfully');
-                    resolve(messageInfo);
-                }
-            });
-        });
-    }
-
-    /**
-     * Get user information
-     */
-    async getUserInfo(userId) {
-        return new Promise((resolve, reject) => {
-            if (!this.api || !this.isLoggedIn) {
-                reject(new Error('Facebook not logged in'));
-                return;
-            }
-
-            this.api.getUserInfo(userId, (err, userInfo) => {
-                if (err) {
-                    console.error('Error getting Facebook user info:', err);
-                    resolve(null);
-                } else {
-                    resolve(userInfo[userId]);
-                }
-            });
-        });
-    }
-
-    /**
-     * Get thread information
-     */
-    async getThreadInfo(threadId) {
-        return new Promise((resolve, reject) => {
-            if (!this.api || !this.isLoggedIn) {
-                reject(new Error('Facebook not logged in'));
-                return;
-            }
-
-            this.api.getThreadInfo(threadId, (err, threadInfo) => {
-                if (err) {
-                    console.error('Error getting Facebook thread info:', err);
-                    resolve(null);
-                } else {
-                    resolve(threadInfo);
-                }
-            });
-        });
-    }
-
-    /**
-     * Send message by user ID (creates new thread if needed)
-     */
-    async sendMessageToUser(userId, messageText) {
-        return this.sendMessage(userId, messageText);
-    }
-
-    /**
-     * Stop the service and cleanup
-     */
-    async stop() {
-        try {
-            // Stop polling if active
-            this.stopPollingMode();
-            
-            if (this.api && typeof this.api.logout === 'function') {
-                this.api.logout();
-            }
-            
-            this.isLoggedIn = false;
-            this.api = null;
-            console.log('Facebook Chat service stopped');
-        } catch (error) {
-            console.error('Error stopping Facebook service:', error);
-        }
-    }
-
-    /**
-     * Check if service is ready
-     */
-    isReady() {
-        return this.isLoggedIn && this.api !== null;
-    }
-
-    /**
-     * Get service status
-     */
-    getStatus() {
-        return {
-            isLoggedIn: this.isLoggedIn,
-            email: this.email,
-            hasApi: this.api !== null
-        };
-    }
-
-    /**
-     * Start polling mode - alternative to real-time listening
-     * Polls for new messages every 10 seconds
+     * Start polling mode for API
      */
     startPollingMode() {
-        console.log('🚑 startPollingMode() called!');
-        console.log('   • API exists:', !!this.api);
-        console.log('   • Is logged in:', this.isLoggedIn);
-        console.log('   • Polling interval exists:', !!this.pollingInterval);
-        
-        if (!this.api || !this.isLoggedIn) {
-            console.error('Cannot start polling - Facebook not logged in');
-            console.error('   • API:', !!this.api);
-            console.error('   • Logged in:', this.isLoggedIn);
+        if (!this.api) {
+            console.log('❌ No API available for polling');
             return;
         }
         
-        if (this.pollingInterval) {
-            console.log('⚠️ Polling already running, stopping existing interval');
-            clearInterval(this.pollingInterval);
-        }
-
-        console.log('🔄 Starting Facebook polling mode (checks every 10 seconds)');
-        console.log('⚠️ Note: Polling mode has 10-second delay for new messages');
+        console.log('🔄 Starting Facebook API polling mode...');
         
         this.pollingInterval = setInterval(async () => {
-            console.log('🔍 Facebook polling check...'); // Debug log
             try {
-                // Skip session validation in polling - just try to get threads directly
-                console.log('💬 Attempting to fetch Facebook threads...');
-                
-                // Try to get thread list with better error handling
-                try {
-                    this.api.getThreadList(3, null, [], (err, threads) => {
-                        if (err) {
-                            // More detailed error handling
-                            console.log('⚠️ Direct polling error details:');
-                            console.log('   • Error type:', typeof err);
-                            console.log('   • Error message:', err.message || 'No message');
-                            console.log('   • Error code:', err.error || err.code || 'No code');
-                            console.log('   • Full error:', JSON.stringify(err, null, 2));
-                            
-                            // Check for specific Facebook blocking patterns
-                            const errorStr = JSON.stringify(err);
-                            if (errorStr.includes('1357004') || errorStr.includes('login') || errorStr.includes('session')) {
-                                console.log('❌ Facebook session completely invalid, stopping polling');
-                                this.stopPollingMode();
-                                return;
-                            }
-                            
-                            // Try alternative approach for other errors
-                            console.log('🔄 Trying alternative Facebook API call...');
-                            this.trySimpleApiCall();
-                            return;
+                this.api.getThreadList(3, null, [], (err, threads) => {
+                    if (err) {
+                        const errorMsg = err.message || err.error || 'Unknown error';
+                        console.log('⚠️ Polling error:', errorMsg);
+                        
+                        if (errorMsg.includes('1357004') || errorMsg.includes('login') || errorMsg.includes('session')) {
+                            console.log('❌ Session invalidated, stopping polling');
+                            this.stopPollingMode();
                         }
-                    
-                    console.log(`💬 Direct fetch: Found ${threads ? threads.length : 0} Facebook threads`);
-                    
-                    // Check each thread for new messages
-                    if (threads && threads.length > 0) {
-                        threads.forEach(thread => {
-                        if (thread.messageCount > 0) {
-                            // Get recent messages from this thread
-                            this.api.getThreadHistory(thread.threadID, 5, undefined, (histErr, history) => {
-                                if (histErr) return;
-                                
-                                // Process messages in reverse order (oldest first)
-                                history.reverse().forEach(message => {
-                                    // Only process messages from the last 30 seconds
-                                    const messageAge = Date.now() - parseInt(message.timestamp);
-                                    if (messageAge < 30000 && !this.processedMessages.has(message.messageID)) {
-                                        this.handleMessage(message);
-                                    }
-                                });
-                            });
-                        }
-                    });
-                    } else {
-                        console.log('💬 No Facebook threads found or threads array empty');
+                        return;
                     }
-                    });
-                } catch (apiError) {
-                    console.log('⚠️ API call failed:', apiError.message);
-                }
+                    
+                    console.log(`💬 Found ${threads ? threads.length : 0} Facebook threads`);
+                    // Process messages here if needed
+                });
             } catch (error) {
                 console.log('⚠️ Polling cycle error:', error.message);
             }
-        }, 10000); // Poll every 10 seconds
+        }, 10000);
         
-        console.log('✅ Facebook polling mode started successfully');
+        console.log('✅ Facebook API polling started');
     }
 
     /**
@@ -895,88 +306,12 @@ class FacebookChatService {
         if (this.pollingInterval) {
             clearInterval(this.pollingInterval);
             this.pollingInterval = null;
-            console.log('⏹️ Facebook polling mode stopped');
+            console.log('⏹️ Facebook API polling stopped');
         }
     }
 
     /**
-     * Try a simple API call to test session validity
-     */
-    trySimpleApiCall() {
-        console.log('🔍 Trying simple Facebook API test...');
-        
-        // Try a very basic API call
-        try {
-            this.api.getThreadList(1, null, [], (err, threads) => {
-                if (err) {
-                    console.log('❌ Simple API call also failed:', err.message || 'Unknown error');
-                    console.log('🚨 Facebook session appears completely blocked');
-                    console.log('🎆 Recommendation: Use Facebook Messenger Official API');
-                } else {
-                    console.log('✅ Simple API call succeeded, continuing polling...');
-                }
-            });
-        } catch (error) {
-            console.log('⚠️ Simple API call exception:', error.message);
-        }
-    }
-
-    /**
-     * Alternative polling method using different API calls
-     */
-    tryAlternativePolling() {
-        console.log('🔄 Trying alternative polling method...');
-        
-        // Try using getUserInfo as a simple API test
-        this.api.getCurrentUserID((err, userID) => {
-            if (err) {
-                console.log('❌ Alternative polling failed - session completely invalid');
-                console.log('📤 Facebook has blocked this session entirely');
-                console.log('🎆 Please use Facebook Messenger Official API for reliable messaging');
-                this.stopPollingMode();
-                return;
-            }
-            
-            console.log('✅ Alternative polling: User ID still valid:', userID);
-            console.log('🔄 Continuing with basic polling (send-only mode)');
-            
-            // Continue polling but with simpler approach
-            // Just keep the session alive without trying to fetch messages
-        });
-    }
-
-    /**
-     * Add message event handler
-     */
-    onMessage(handler) {
-        this.messageHandlers.push(handler);
-    }
-
-    /**
-     * Send message (supports both API and browser mode)
-     */
-    async sendMessage(message, threadID) {
-        if (this.useBrowserMode && this.browserService) {
-            return await this.sendBrowserMessage(message, threadID);
-        } else if (this.api) {
-            return new Promise((resolve, reject) => {
-                this.api.sendMessage(message, threadID, (err) => {
-                    if (err) {
-                        console.log('❌ API sendMessage failed:', err.message);
-                        reject(err);
-                    } else {
-                        console.log('✅ API message sent successfully');
-                        resolve(true);
-                    }
-                });
-            });
-        } else {
-            throw new Error('No Facebook service available (neither API nor browser)');
-        }
-    }
-
-    /**
-     * Try browser emulation as fallback
+     * Try browser emulation
      */
     async tryBrowserEmulation() {
         try {
@@ -1023,24 +358,52 @@ class FacebookChatService {
     }
 
     /**
-     * Send message using browser emulation
+     * Add message event handler
      */
-    async sendBrowserMessage(message, threadID) {
-        if (!this.browserService) {
-            throw new Error('Browser service not initialized');
-        }
-        
-        return await this.browserService.sendMessage(message, threadID);
+    onMessage(handler) {
+        this.messageHandlers.push(handler);
     }
 
     /**
-     * Stop browser service
+     * Send message (supports both API and browser mode)
      */
-    async stopBrowserService() {
+    async sendMessage(message, threadID) {
+        if (this.useBrowserMode && this.browserService) {
+            return await this.browserService.sendMessage(message, threadID);
+        } else if (this.api) {
+            return new Promise((resolve, reject) => {
+                this.api.sendMessage(message, threadID, (err) => {
+                    if (err) {
+                        console.log('❌ API sendMessage failed:', err.message);
+                        reject(err);
+                    } else {
+                        console.log('✅ API message sent successfully');
+                        resolve(true);
+                    }
+                });
+            });
+        } else {
+            throw new Error('No Facebook service available (neither API nor browser)');
+        }
+    }
+
+    /**
+     * Stop the service
+     */
+    async stop() {
+        console.log('🛑 Stopping Facebook Chat Service...');
+        
+        this.stopPollingMode();
+        
         if (this.browserService) {
             await this.browserService.stop();
             this.browserService = null;
         }
+        
+        this.isLoggedIn = false;
+        this.useBrowserMode = false;
+        
+        console.log('✅ Facebook Chat Service stopped');
     }
 }
 
