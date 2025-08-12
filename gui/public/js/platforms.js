@@ -1,4 +1,93 @@
 // Platform Management JavaScript
+// Auto-detected API base + fetch wrapper
+const Api = (() => {
+    let strategy = null;
+    let resolving = null;
+    const statusPath = '/api/platforms/status';
+
+    function join(base, path) {
+        if (!base) return path;
+        if (path.startsWith('/')) {
+            return base.endsWith('/') ? base.replace(/\/+$/, '') + path : base + path;
+        }
+        return base.endsWith('/') ? base + path : `${base}/${path}`;
+    }
+
+    function buildStrategies() {
+        const list = [];
+        try {
+            if (typeof window !== 'undefined') {
+                if (window.API_BASE_URL) {
+                    list.push({
+                        name: 'base',
+                        build: (p) => join(window.API_BASE_URL, p),
+                        probe: join(window.API_BASE_URL, statusPath)
+                    });
+                }
+                const origin = window.location?.origin || '';
+                if (origin) {
+                    list.push({
+                        name: 'origin',
+                        build: (p) => join(origin, p),
+                        probe: join(origin, statusPath)
+                    });
+                }
+            }
+        } catch (_) {}
+
+        // Absolute path from root
+        list.push({
+            name: 'absolute',
+            build: (p) => p,
+            probe: statusPath
+        });
+        // Relative path (no leading slash) to support subpath deployments
+        list.push({
+            name: 'relative',
+            build: (p) => p.replace(/^\/+/, ''),
+            probe: statusPath.replace(/^\/+/, '')
+        });
+        return list;
+    }
+
+    async function resolve() {
+        if (strategy) return strategy;
+        if (resolving) return resolving;
+
+        const strategies = buildStrategies();
+        resolving = (async () => {
+            for (const s of strategies) {
+                try {
+                    const res = await fetch(s.probe, { method: 'GET' });
+                    if (res && res.ok) {
+                        strategy = s;
+                        return strategy;
+                    }
+                } catch (_) {
+                    // ignore and try next
+                }
+            }
+            // Fallback to absolute root
+            strategy = strategies.find(x => x.name === 'absolute') || strategies[0];
+            return strategy;
+        })();
+        return resolving;
+    }
+
+    function buildUrl(path) {
+        if (!strategy) return path;
+        return strategy.build(path);
+    }
+
+    async function fetchWrap(path, options) {
+        await resolve();
+        const url = buildUrl(path);
+        return fetch(url, options);
+    }
+
+    return { resolve, buildUrl, fetch: fetchWrap };
+})();
+
 class PlatformManager {
     constructor() {
         this.platforms = ['whatsapp', 'telegram', 'facebook', 'instagram'];
@@ -226,8 +315,7 @@ class PlatformManager {
 
     async loadPlatformStatus() {
         try {
-            const base = (typeof window !== 'undefined' && window.API_BASE_URL) ? window.API_BASE_URL : '';
-            const response = await fetch(`${base}/api/platforms/status`);
+            const response = await Api.fetch('/api/platforms/status');
             if (response.ok) {
                 this.platformStatus = await response.json();
                 this.updatePlatformUI();
@@ -424,8 +512,7 @@ class PlatformManager {
 
         try {
             this.updateConnectionStatus(platform, 'connecting');
-            const base = (typeof window !== 'undefined' && window.API_BASE_URL) ? window.API_BASE_URL : '';
-            const response = await fetch(`${base}/api/platforms/${platform}/connect`, {
+            const response = await Api.fetch(`/api/platforms/${platform}/connect`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json'
@@ -451,8 +538,7 @@ class PlatformManager {
 
     async disconnectPlatform(platform) {
         try {
-            const base = (typeof window !== 'undefined' && window.API_BASE_URL) ? window.API_BASE_URL : '';
-            const response = await fetch(`${base}/api/platforms/${platform}/disconnect`, {
+            const response = await Api.fetch(`/api/platforms/${platform}/disconnect`, {
                 method: 'POST'
             });
 
@@ -1314,8 +1400,7 @@ async function testFacebookConnection() {
     
     try {
         // Test the Facebook API connection
-        const base = (typeof window !== 'undefined' && window.API_BASE_URL) ? window.API_BASE_URL : '';
-        const response = await fetch(`${base}/api/platforms/facebook/test`, {
+        const response = await Api.fetch('/api/platforms/facebook/test', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json'
