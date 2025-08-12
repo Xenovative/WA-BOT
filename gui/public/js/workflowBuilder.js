@@ -719,6 +719,42 @@ return out(5);`.trim();
     }
   }
 
+  async function importFromFile(file) {
+    const btn = document.getElementById('import-dsl-btn');
+    withButtonLoading(btn, true);
+    try {
+      const text = await file.text();
+      let json;
+      try { json = JSON.parse(text); } catch (e) { throw new Error('Invalid JSON: ' + e.message); }
+      const nameDefault = (file.name || 'Imported').replace(/\.json$/i, '');
+      let dsl;
+      if (Array.isArray(json)) {
+        dsl = { name: nameDefault, flow: json };
+      } else if (json && (Array.isArray(json.flow) || Array.isArray(json.nodes))) {
+        dsl = { name: json.name || nameDefault, flow: json.flow || json.nodes };
+      } else if (json && Array.isArray(json.flows)) {
+        dsl = { name: json.name || nameDefault, flow: json.flows };
+      } else {
+        throw new Error('Unsupported DSL format');
+      }
+      // Switch to visual, mount, and import
+      setMode('visual');
+      mountDrawflow();
+      importFromDSL(dsl);
+      // Update name and sync JSON editor
+      const nameInput = document.getElementById('dsl-name');
+      if (nameInput) nameInput.value = dsl.name || nameDefault;
+      const ta = document.getElementById('dsl-editor');
+      if (ta) ta.value = JSON.stringify(dsl, null, 2);
+      showToast(`Imported workflow "${dsl.name || nameDefault}"`, 'success');
+    } catch (err) {
+      console.error(err);
+      showToast('Import failed: ' + err.message, 'error');
+    } finally {
+      withButtonLoading(btn, false);
+    }
+  }
+
   async function saveDSL() {
     const btn = document.getElementById('save-dsl-btn');
     const isVisual = document.getElementById('builder-json')?.style.display === 'none';
@@ -825,6 +861,18 @@ return out(5);`.trim();
     // Load controls
     document.getElementById('refresh-load-list-btn')?.addEventListener('click', refreshLoadList);
     document.getElementById('load-dsl-btn')?.addEventListener('click', loadSelectedWorkflow);
+
+    // Import controls
+    document.getElementById('import-dsl-btn')?.addEventListener('click', () => {
+      document.getElementById('builder-import-input')?.click();
+    });
+    document.getElementById('builder-import-input')?.addEventListener('change', async (e) => {
+      const input = e.currentTarget;
+      const file = input && input.files && input.files[0];
+      if (file) await importFromFile(file);
+      // reset input so the same file can be selected again later
+      if (input) input.value = '';
+    });
 
     // If user switches to visual after editing JSON, import it
     const visualBtn = document.getElementById('mode-visual-btn');

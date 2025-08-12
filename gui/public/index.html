@@ -1253,14 +1253,18 @@ Instructions:
                                         <i class="bi bi-download"></i>
                                     </button>
                                 </div>
-                                <button id="save-dsl-btn" class="btn btn-outline-success">
-                                    <i class="bi bi-save me-1"></i> Save
-                                </button>
-                                <button id="deploy-dsl-btn" class="btn btn-primary">
-                                    <i class="bi bi-cloud-upload me-1"></i> Deploy
-                                </button>
-                            </div>
-                        </div>
+                                <button id="import-dsl-btn" class="btn btn-outline-secondary">
+                                     <i class="bi bi-file-earmark-arrow-up me-1"></i> Import
+                                 </button>
+                                 <button id="save-dsl-btn" class="btn btn-outline-success">
+                                     <i class="bi bi-save me-1"></i> Save
+                                 </button>
+                                 <button id="deploy-dsl-btn" class="btn btn-primary">
+                                     <i class="bi bi-cloud-upload me-1"></i> Deploy
+                                 </button>
+                                 <input type="file" id="builder-import-input" accept=".json" style="display:none" />
+                             </div>
+                         </div>
                         <div class="btn-group mb-3" role="group" aria-label="Builder Mode">
                             <button type="button" class="btn btn-outline-primary active" id="mode-visual-btn">
                                 <i class="bi bi-diagram-3 me-1"></i> Visual
