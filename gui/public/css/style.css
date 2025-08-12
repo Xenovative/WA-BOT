@@ -101,9 +101,8 @@ body {
 }
 
 /* Admin Mode Styles */
-.admin-mode .nav-link[data-admin-only],
-.admin-mode .tab-pane[data-admin-only],
-.admin-mode [data-admin-only] {
+/* Do NOT force tab panes visible; Bootstrap controls visibility via .active/.show */
+.admin-mode [data-admin-only]:not(.tab-pane) {
   display: block !important;
 }
 
@@ -124,8 +123,8 @@ body {
   vertical-align: middle;
 }
 
-/* Admin only elements */
-[data-admin-only] {
+/* Admin only elements (non-tab content hidden by default) */
+[data-admin-only]:not(.tab-pane) {
   display: none;
 }
 
