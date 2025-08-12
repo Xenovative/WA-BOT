@@ -13,6 +13,8 @@
     <meta name="theme-color" content="#ffffff">
     <title data-i18n-title-page="dashboard.title">WhatsXENO Management Console</title>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
+    <!-- Drawflow CSS for visual workflow editor -->
+    <link rel="stylesheet" href="https://unpkg.com/drawflow/dist/drawflow.min.css">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
     <!-- Marked.js for markdown rendering -->
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
@@ -48,6 +50,21 @@
             background: #343a40;
             color: white;
         }
+        
+        /* Visual Workflow Editor */
+        .builder-canvas {
+            height: 60vh;
+            background: #ffffff;
+            border: 1px solid #dee2e6;
+            border-radius: .5rem;
+        }
+        .node-palette .btn {
+            width: 100%;
+            margin-bottom: .5rem;
+            text-align: left;
+        }
+        .inspector label { font-weight: 600; }
+        .inspector .form-text { font-size: .8rem; }
         
         /* Facebook Setup Guide Styles */
         .step-card {
@@ -1227,6 +1244,42 @@ Instructions:
                                 </button>
                             </div>
                         </div>
+                        <div class="btn-group mb-3" role="group" aria-label="Builder Mode">
+                            <button type="button" class="btn btn-outline-primary active" id="mode-visual-btn">
+                                <i class="bi bi-diagram-3 me-1"></i> Visual
+                            </button>
+                            <button type="button" class="btn btn-outline-secondary" id="mode-json-btn">
+                                <i class="bi bi-filetype-json me-1"></i> JSON
+                            </button>
+                        </div>
+
+                        <!-- Visual Editor Block -->
+                        <div id="builder-visual" class="card shadow mb-3">
+                            <div class="card-body">
+                                <div class="row g-3">
+                                    <div class="col-md-2">
+                                        <div class="node-palette">
+                                            <div class="mb-2 text-muted small">Nodes</div>
+                                            <button class="btn btn-sm btn-outline-dark" data-node-type="inject">🔁 Inject</button>
+                                            <button class="btn btn-sm btn-outline-dark" data-node-type="debug">🪵 Debug</button>
+                                            <button class="btn btn-sm btn-outline-dark" data-node-type="function">ƒ Function</button>
+                                            <button class="btn btn-sm btn-outline-dark" data-node-type="switch">⤵ Switch</button>
+                                            <button class="btn btn-sm btn-outline-dark" data-node-type="delay">⏲ Delay</button>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-7">
+                                        <div id="drawflow" class="builder-canvas"></div>
+                                    </div>
+                                    <div class="col-md-3">
+                                        <div class="inspector">
+                                            <div class="mb-2 text-muted small">Inspector</div>
+                                            <div id="inspector-content" class="text-muted">Select a node to edit its properties.</div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
                         <div class="card shadow">
                             <div class="card-header py-3">
                                 <div class="row g-2 align-items-center">
@@ -1236,7 +1289,7 @@ Instructions:
                                     </div>
                                 </div>
                             </div>
-                            <div class="card-body">
+                            <div class="card-body" id="builder-json" style="display:none;">
                                 <label for="dsl-editor" class="form-label">DSL JSON</label>
                                 <textarea id="dsl-editor" class="form-control" rows="16" spellcheck="false" style="font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;">
 {
@@ -1572,6 +1625,8 @@ Instructions:
     <script src="/js/branding.js"></script>
     <script src="/js/platforms.js"></script>
     <script src="/js/workflows.js"></script>
+    <!-- Drawflow JS for visual workflow editor -->
+    <script src="https://unpkg.com/drawflow/dist/drawflow.min.js"></script>
     <script src="/js/workflowBuilder.js"></script>
 </body>
 </html>
