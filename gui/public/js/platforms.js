@@ -3,8 +3,15 @@ class PlatformManager {
     constructor() {
         this.platforms = ['whatsapp', 'telegram', 'facebook', 'instagram'];
         this.platformStatus = {};
+        this.statusPollTimer = null;
         this.initializeEventHandlers();
         this.loadPlatformStatus();
+        // Periodically refresh status when Platforms tab is visible
+        this.statusPollTimer = setInterval(() => {
+            if (this.isPlatformsTabVisible()) {
+                this.loadPlatformStatus();
+            }
+        }, 5000);
     }
 
     initializeEventHandlers() {
@@ -103,7 +110,7 @@ class PlatformManager {
         }
     }
 
-    handlePlatformToggle(platform, enabled) {
+    handlePlatformToggle(platform, enabled, suppressDisconnect = false) {
         const platformCard = document.querySelector(`#${platform}-enabled`).closest('.card');
         const connectBtn = document.getElementById(`${platform}-connect-btn`);
         const disconnectBtn = document.getElementById(`${platform}-disconnect-btn`);
@@ -124,7 +131,7 @@ class PlatformManager {
             
             // Disconnect if currently connected
             const status = this.platformStatus[platform];
-            if (status && status.status === 'connected') {
+            if (!suppressDisconnect && status && status.status === 'connected') {
                 this.disconnectPlatform(platform);
             }
         }
@@ -167,7 +174,7 @@ class PlatformManager {
                 
             case 'facebook':
                 // Official API credentials
-                this.setInputValue('facebook-page-access-token', credentials.pageAccessToken);
+                this.setInputValue('facebook-page-token', credentials.pageAccessToken);
                 this.setInputValue('facebook-verify-token', credentials.verifyToken);
                 this.setInputValue('facebook-app-secret', credentials.appSecret);
                 // Easy Setup credentials
@@ -250,7 +257,8 @@ class PlatformManager {
             if (enableToggle) {
                 const isEnabled = status.enabled !== false; // Default to true if not specified
                 enableToggle.checked = isEnabled;
-                this.handlePlatformToggle(platform, isEnabled);
+                // Apply visual state without auto-disconnecting during initialization
+                this.handlePlatformToggle(platform, isEnabled, true);
             }
             
             // Populate credentials from environment variables
@@ -325,6 +333,13 @@ class PlatformManager {
             
             tableBody.appendChild(row);
         });
+    }
+
+    isPlatformsTabVisible() {
+        const pane = document.getElementById('platforms');
+        if (!pane) return false;
+        // Bootstrap tab-pane visibility
+        return pane.classList.contains('active') || pane.classList.contains('show');
     }
 
     getPlatformIcon(platform) {
