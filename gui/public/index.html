@@ -173,6 +173,11 @@
                                 <i class="bi bi-diagram-3 me-2"></i><span data-i18n="nav.workflows">Workflows</span>
                             </a>
                         </li>
+                        <li class="nav-item">
+                            <a class="nav-link" href="#workflow-builder" data-bs-toggle="tab">
+                                <i class="bi bi-braces-asterisk me-2"></i><span>Workflow Builder (Beta)</span>
+                            </a>
+                        </li>
                     </ul>
                 </div>
             </nav>
@@ -1211,6 +1216,57 @@ Instructions:
                         <!-- Hidden file input for workflow upload -->
                         <input type="file" id="workflow-file-input" accept=".json" style="display: none; position: absolute; visibility: hidden;" multiple>
                     </div>
+
+                    <!-- Workflow Builder (Beta) Tab -->
+                    <div class="tab-pane fade" id="workflow-builder" data-admin-only>
+                        <div class="d-flex justify-content-between align-items-center mb-2">
+                            <h4 class="mb-0">Workflow Builder (Beta)</h4>
+                            <div>
+                                <button id="deploy-dsl-btn" class="btn btn-primary">
+                                    <i class="bi bi-cloud-upload me-1"></i> Deploy
+                                </button>
+                            </div>
+                        </div>
+                        <div class="card shadow">
+                            <div class="card-header py-3">
+                                <div class="row g-2 align-items-center">
+                                    <div class="col-md-6">
+                                        <label for="dsl-name" class="form-label mb-0">Workflow Name</label>
+                                        <input type="text" id="dsl-name" class="form-control" placeholder="My Workflow" />
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="card-body">
+                                <label for="dsl-editor" class="form-label">DSL JSON</label>
+                                <textarea id="dsl-editor" class="form-control" rows="16" spellcheck="false" style="font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;">
+{
+  "name": "Sample Flow",
+  "description": "Example flow built via DSL",
+  "nodes": [
+    {
+      "type": "inject",
+      "name": "Trigger",
+      "props": [{ "p": "payload" }],
+      "repeat": "",
+      "once": true,
+      "onceDelay": 0.1,
+      "wires": [["log1"]]
+    },
+    {
+      "id": "log1",
+      "type": "debug",
+      "name": "Log",
+      "active": true,
+      "tosidebar": true,
+      "wires": []
+    }
+  ]
+}
+                                </textarea>
+                                <small class="text-muted">Paste or edit JSON. You can provide either a top-level "flow" array or a simplified "nodes" array. A tab will be created automatically.</small>
+                            </div>
+                        </div>
+                    </div>
                 </div>
             </main>
         </div>
@@ -1515,5 +1571,7 @@ Instructions:
     <script src="/js/admin.js"></script>
     <script src="/js/branding.js"></script>
     <script src="/js/platforms.js"></script>
+    <script src="/js/workflows.js"></script>
+    <script src="/js/workflowBuilder.js"></script>
 </body>
 </html>

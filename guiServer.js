@@ -642,6 +642,44 @@ app.post('/api/workflows/toggle', async (req, res) => {
   }
 });
 
+// Deploy a workflow from DSL JSON
+app.post('/api/workflows/deploy', async (req, res) => {
+  try {
+    const { compile } = require('./workflow/compiler');
+    const dsl = req.body && (req.body.dsl || req.body);
+
+    if (!dsl || typeof dsl !== 'object') {
+      return res.status(400).json({ success: false, error: 'Invalid payload: expected JSON DSL' });
+    }
+
+    // Compile DSL to Node-RED flow
+    const { id, name, flow } = compile(dsl);
+
+    // Persist compiled flow to workflow directory
+    const workflowDir = path.join(__dirname, 'workflow');
+    if (!fs.existsSync(workflowDir)) {
+      fs.mkdirSync(workflowDir, { recursive: true });
+    }
+    const filePath = path.join(workflowDir, `${id}.json`);
+    fs.writeFileSync(filePath, JSON.stringify(flow, null, 2), 'utf8');
+
+    // Deploy to Node-RED
+    const alreadyEnabled = workflowManager.getEnabledWorkflows().includes(id);
+    let deployed = false;
+    if (alreadyEnabled) {
+      deployed = await workflowManager.loadWorkflowFromPath(filePath, id);
+    } else {
+      await workflowManager.enableWorkflow(id);
+      deployed = true;
+    }
+
+    return res.json({ success: true, id, name, file: `${id}.json`, deployed });
+  } catch (error) {
+    console.error('Error deploying workflow from DSL:', error);
+    return res.status(500).json({ success: false, error: error.message });
+  }
+});
+
 // System stats API endpoint
 app.get('/api/stats', (req, res) => {
   try {
