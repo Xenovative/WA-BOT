@@ -10,11 +10,11 @@
     // Bot-focused nodes
     wa_in: {
       name: 'wa_in', inputs: 0, outputs: 1,
-      defaults: { name: 'On WhatsApp Message' }
+      defaults: { name: 'On Message', platform: 'whatsapp' }
     },
     wa_send: {
       name: 'wa_send', inputs: 1, outputs: 1,
-      defaults: { name: 'Send WhatsApp', chatId: '', message: '', fromPayload: true }
+      defaults: { name: 'Send Message', platform: 'whatsapp', chatId: '', message: '', fromPayload: true }
     },
     keyword: {
       name: 'keyword', inputs: 1, outputs: 2,
@@ -40,6 +40,34 @@
     delay: {
       name: 'delay', inputs: 1, outputs: 1,
       defaults: { name: 'Delay', seconds: 5 }
+    }
+  };
+
+  // Pre-defined function snippets available in the editor
+  const FUNCTION_SNIPPETS = {
+    pass_through: {
+      title: 'Pass Through',
+      code: `// Forward the message unchanged\nreturn msg;`
+    },
+    ensure_text_payload: {
+      title: 'Ensure Text Payload',
+      code: `// Normalize to text\nif (msg.text != null) msg.payload = String(msg.text);\nelse if (msg.payload != null) msg.payload = String(msg.payload);\nelse msg.payload = '';\nreturn msg;`
+    },
+    set_field: {
+      title: 'Set Field',
+      code: `// Set a field on msg\nmsg.myField = msg.myField ?? 'value';\nreturn msg;`
+    },
+    extract_wa_basics: {
+      title: 'Extract WA Basics',
+      code: `// Extract common WhatsApp fields from inbound MQTT payload\nconst p = msg.payload || {};\nmsg.chatId = msg.chatId || p.from || p.chatId || msg.from;\nmsg.text = msg.text || p.text || p.body || p.message || '';\nreturn msg;`
+    },
+    wa_send_via_global_bot: {
+      title: 'WA Send via global bot',
+      code: `// Send a WhatsApp message using global bot; keeps flow going\nconst bot = global.get && global.get('bot');\nif (!bot) { node.warn('global bot not available'); return msg; }\nconst chatId = msg.chatId || msg.from || (msg.payload && msg.payload.from) || '';\nconst text = msg.text || msg.payload || '';\nif (chatId && text) { try { bot.sendMessage(chatId, text); } catch (e) { node.error(e.message, msg); } }\nreturn msg;`
+    },
+    route_keyword: {
+      title: 'Route by Keyword (flag only)',
+      code: `// Adds flags when msg.text matches keywords; combine with Switch node\nconst text = (msg.text || msg.payload || '').toString();\nconst pattern = /hi|hello|help/i;\nmsg.keywordMatched = pattern.test(text);\nreturn msg;`
     }
   };
 
@@ -92,6 +120,32 @@
     document.querySelectorAll('.node-palette [data-node-type]').forEach(btn => {
       btn.addEventListener('click', () => addNode(btn.dataset.nodeType));
     });
+
+    // Append function snippet buttons to the palette
+    const palette = document.querySelector('.node-palette');
+    if (palette) {
+      const sep = document.createElement('hr');
+      sep.className = 'my-2';
+      palette.appendChild(sep);
+      const title = document.createElement('div');
+      title.className = 'mb-1 text-muted small';
+      title.textContent = 'Function Snippets';
+      palette.appendChild(title);
+      Object.entries(FUNCTION_SNIPPETS).forEach(([key, snip]) => {
+        const b = document.createElement('button');
+        b.className = 'btn btn-sm btn-outline-dark';
+        b.textContent = `ƒ ${snip.title}`;
+        b.addEventListener('click', () => {
+          const id = addNode('function');
+          const node = df.getNodeFromId(id);
+          const data = Object.assign({}, node.data, { name: snip.title, func: snip.code });
+          ensureNodeRedId(data);
+          df.updateNodeDataFromId(id, data);
+          renderInspector(id);
+        });
+        palette.appendChild(b);
+      });
+    }
   }
 
   function addNode(type, pos) {
@@ -136,13 +190,29 @@
       </div>`);
 
     if (type === 'function') {
+      // Preset selector
+      const options = Object.entries(FUNCTION_SNIPPETS).map(([k, s]) => `<option value="${k}">${s.title}</option>`).join('');
       fields.push(`
         <div class="mb-2">
+          <label class="form-label">Preset</label>
+          <div class="input-group">
+            <select class="form-select" id="fn-preset-select">${options}</select>
+            <button class="btn btn-outline-secondary" type="button" id="fn-preset-apply">Apply</button>
+          </div>
+          <div class="form-text">Apply replaces current code.</div>
+        </div>
+        <div class="mb-2">
           <label class="form-label">Code</label>
-          <textarea class="form-control" rows="6" data-field="func">${escapeHtml(data.func || 'return msg;')}</textarea>
+          <textarea class="form-control" rows="8" data-field="func">${escapeHtml(data.func || 'return msg;')}</textarea>
           <div class="form-text">The function receives and returns <code>msg</code>.</div>
         </div>`);
     } else if (type === 'wa_send') {
+      const platformOptions = ['whatsapp','telegram','facebook','instagram'].map(p => `<option value="${p}" ${((data.platform||'whatsapp')===p?'selected':'')}>${p}</option>`).join('');
+      fields.push(`
+        <div class="mb-2">
+          <label class="form-label">Platform</label>
+          <select class="form-select" data-field="platform">${platformOptions}</select>
+        </div>`);
       fields.push(`
         <div class="mb-2">
           <label class="form-label">Chat ID (optional)</label>
@@ -156,6 +226,14 @@
         <div class="mb-2">
           <label class="form-label">Message (used when not from payload)</label>
           <textarea class="form-control" rows="3" data-field="message" placeholder="Hello!">${escapeHtml(data.message || '')}</textarea>
+        </div>`);
+    } else if (type === 'wa_in') {
+      const platformOptions = ['whatsapp','telegram','facebook','instagram'].map(p => `<option value="${p}" ${((data.platform||'whatsapp')===p?'selected':'')}>${p}</option>`).join('');
+      fields.push(`
+        <div class="mb-2">
+          <label class="form-label">Platform</label>
+          <select class="form-select" data-field="platform">${platformOptions}</select>
+          <div class="form-text">Subscribes to MQTT topic <code>{platform}/messages</code></div>
         </div>`);
     } else if (type === 'keyword') {
       fields.push(`
@@ -215,6 +293,29 @@
       el.addEventListener('input', () => inspectorCommit(id));
       el.addEventListener('change', () => inspectorCommit(id));
     });
+
+    // Hook preset apply for function nodes
+    if (type === 'function') {
+      const sel = panel.querySelector('#fn-preset-select');
+      const apply = panel.querySelector('#fn-preset-apply');
+      if (sel && apply) {
+        apply.addEventListener('click', () => {
+          const key = sel.value;
+          const snip = FUNCTION_SNIPPETS[key];
+          if (!snip) return;
+          const ta = panel.querySelector('textarea[data-field="func"]');
+          if (ta) {
+            ta.value = snip.code;
+          }
+          // Auto-name if default
+          const nameEl = panel.querySelector('input[data-field="name"]');
+          if (nameEl && (!nameEl.value || nameEl.value === 'Function')) {
+            nameEl.value = snip.title;
+          }
+          inspectorCommit(id);
+        });
+      }
+    }
   }
 
   function inspectorCommit(id) {
@@ -287,46 +388,71 @@
         base.func = d.func || 'return msg;';
         base.outputs = 1;
       } else if (n.name === 'wa_in') {
-        // Compile to MQTT IN node subscribed to whatsapp/messages
+        // Compile to MQTT IN node subscribed to <platform>/messages
         base.type = 'mqtt in';
-        base.topic = 'whatsapp/messages';
+        const plat = (d.platform || 'whatsapp').toString().toLowerCase();
+        base.topic = `${plat}/messages`;
         base.qos = '1';
         base.datatype = 'json';
         base.broker = ensureMqttConfig();
         base._visual = 'wa_in';
         base._data = d;
       } else if (n.name === 'wa_send') {
-        // Compile to a function node that uses functionGlobalContext.bot
+        // Compile to a function node that uses functionGlobalContext.bot and routes per platform
         base.type = 'function';
         base.outputs = 1;
         const esc = (s) => String(s).replace(/`/g, '\\`');
         const staticMsg = esc(d.message || '');
         const usePayload = !!d.fromPayload;
         const chatIdStr = esc(d.chatId || '');
+        const plat = (d.platform || 'whatsapp').toString().toLowerCase();
         base._visual = 'wa_send';
         base._data = d;
         base.func = `
-// Send WhatsApp message using bot in functionGlobalContext
+// Send message using global bot context per platform
 const bot = global.get('bot');
-if (!bot || !bot.whatsappClient) {
-  node.warn('WhatsApp client not available');
-  return msg;
-}
+const platform = '${plat}';
+if (!bot) { node.warn('global bot not available'); return msg; }
 const p = (msg && typeof msg.payload === 'object') ? msg.payload : {};
-const target = (${JSON.stringify(!!chatIdStr)} && '${chatIdStr}') || msg.chatId || msg.to || p.chatId || (p.originalMessage && p.originalMessage.from) || msg.from;
+let target = (${JSON.stringify(!!chatIdStr)} && '${chatIdStr}') || msg.chatId || msg.to || p.chatId || (p.originalMessage && p.originalMessage.from) || msg.from;
 const text = ${usePayload ? `(
   (typeof msg.text !== 'undefined' && String(msg.text)) ||
   (typeof p.text !== 'undefined' && String(p.text)) ||
   (typeof msg.payload === 'string' ? msg.payload : (typeof p.body !== 'undefined' ? String(p.body) : ''))
 )` : `'${staticMsg}'`};
-try {
-  // Fire-and-forget; Node-RED function won't await
-  bot.whatsappClient.client.sendMessage(target, text)
-    .then(() => node.status({fill:'green',shape:'dot',text:'sent'}))
-    .catch(err => node.error('Send failed: ' + err.message));
-} catch (e) {
-  node.error('Send error: ' + e.message);
+if (!target || !text) { node.warn('Missing target or text'); return msg; }
+// strip platform prefixes if present
+if (typeof target === 'string') {
+  if (target.startsWith(platform + ':')) target = target.slice(platform.length + 1);
+  else if (target.startsWith(platform + '_')) target = target.slice(platform.length + 1);
 }
+function doneOk(){ node.status({fill:'green',shape:'dot',text: platform + ' sent'}); }
+function doneErr(err){ node.error('Send failed: ' + (err && err.message || err)); node.status({fill:'red',shape:'ring',text:'failed'}); }
+try {
+  if (platform === 'telegram') {
+    if (!bot.telegramBot || typeof bot.telegramBot.sendMessage !== 'function') { node.warn('Telegram bot not available'); return msg; }
+    Promise.resolve(bot.telegramBot.sendMessage(target, text)).then(doneOk).catch(doneErr);
+  } else if (platform === 'facebook') {
+    const fb = bot.facebookMessenger || bot.facebookChatService;
+    if (!fb || typeof fb.sendMessage !== 'function') { node.warn('Facebook client not available'); return msg; }
+    Promise.resolve(fb.sendMessage(target, text)).then(doneOk).catch(doneErr);
+  } else if (platform === 'instagram') {
+    if (bot.instagramService && typeof bot.instagramService.sendMessage === 'function') {
+      Promise.resolve(bot.instagramService.sendMessage(target, text)).then(doneOk).catch(doneErr);
+    } else if (bot.instagramPrivateService && typeof bot.instagramPrivateService.sendDirectMessageToUser === 'function') {
+      Promise.resolve(bot.instagramPrivateService.sendDirectMessageToUser(target, text)).then(doneOk).catch(doneErr);
+    } else if (bot.instagramWebService && typeof bot.instagramWebService.sendMessageToUser === 'function') {
+      Promise.resolve(bot.instagramWebService.sendMessageToUser(target, text)).then(doneOk).catch(doneErr);
+    } else {
+      node.warn('Instagram service not available');
+    }
+  } else {
+    // default to WhatsApp
+    if (!bot.whatsappClient || !bot.whatsappClient.client) { node.warn('WhatsApp client not available'); return msg; }
+    const waId = (typeof target === 'string') ? target.replace('_c.us', '@c.us') : target;
+    Promise.resolve(bot.whatsappClient.client.sendMessage(waId, text)).then(doneOk).catch(doneErr);
+  }
+} catch (e) { doneErr(e); }
 return msg;`.trim();
       } else if (n.name === 'inject') {
         base.props = [{ p: 'payload' }];
@@ -412,8 +538,17 @@ return [null, msg];`.trim();
       // Choose a visual type pref from metadata, else heuristic mapping
       let type = n._visual || n.type || 'function';
       if (!NODES[type]) {
-        if (n.type === 'mqtt in' && n.topic === 'whatsapp/messages') type = 'wa_in';
-        else type = 'function';
+        // Map MQTT topics like "<platform>/messages" back to wa_in with platform restored
+        if (n.type === 'mqtt in' && typeof n.topic === 'string') {
+          const m = n.topic.match(/^([a-z]+)\/messages$/i);
+          if (m && ['whatsapp','telegram','facebook','instagram'].includes(m[1].toLowerCase())) {
+            type = 'wa_in';
+          } else {
+            type = 'function';
+          }
+        } else {
+          type = 'function';
+        }
       }
       const def = NODES[type] || NODES.function;
       const col = i % 4, row = Math.floor(i / 4);
@@ -426,6 +561,11 @@ return [null, msg];`.trim();
       // Restore metadata-backed configs for our visual nodes
       if (n._data && typeof n._data === 'object') {
         Object.assign(data, n._data);
+      }
+      // If mqtt in, restore platform from topic when possible
+      if (type === 'wa_in' && n.type === 'mqtt in' && typeof n.topic === 'string') {
+        const m = n.topic.match(/^([a-z]+)\/messages$/i);
+        if (m) data.platform = m[1].toLowerCase();
       }
       if (type === 'inject') {
         data.once = n.once ?? true;

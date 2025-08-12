@@ -1265,7 +1265,7 @@ client.on('message', async (message) => {
     
     // Forward the cleaned message to workflow system
     try {
-      await workflowManager.publishWhatsAppMessage({
+      await workflowManager.publishMessage('whatsapp', {
         chatId,
         body: cleanMessageText,
         from: message.from,
@@ -1401,7 +1401,7 @@ client.on('message', async (message) => {
   // Forward message to workflow system for keyword triggers
   try {
     // Publish message to MQTT for workflow triggers
-    await workflowManager.publishWhatsAppMessage({
+    await workflowManager.publishMessage('whatsapp', {
       chatId,
       body: messageText,
       from: message.from,

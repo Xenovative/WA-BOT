@@ -218,7 +218,15 @@ class WorkflowManager extends EventEmitter {
       console.log('[WorkflowManager] Initializing workflow system...');
       
       // Store bot components in function context
-      this.settings.functionGlobalContext.bot = botComponents;
+      // Enrich with available platform clients for use inside Function nodes
+      this.settings.functionGlobalContext.bot = {
+        ...botComponents,
+        telegramBot: global.telegramBot,
+        facebookMessenger: global.facebookMessenger,
+        instagramService: global.instagramService,
+        instagramPrivateService: global.instagramPrivateService,
+        instagramWebService: global.instagramWebService
+      };
       
       // Start MQTT broker
       await this.startMQTTBroker();
@@ -367,47 +375,85 @@ class WorkflowManager extends EventEmitter {
     try {
       console.log('[WorkflowManager] Setting up API endpoints for Node-RED integration');
       
-      // Create API endpoints for Node-RED to interact with the WhatsApp bot
+      // Create API endpoints for Node-RED to interact with messaging platforms
       this.app.post('/api/workflow/send-message', express.json(), async (req, res) => {
         try {
-          // Support both recipient and chatId parameters for compatibility
-          const { recipient, chatId, message, messageType = 'text' } = req.body;
-          const targetId = chatId || recipient;
-          
-          if (!targetId || !message) {
+          // Support both recipient and chatId parameters for compatibility, and a platform param
+          const { recipient, chatId, message, messageType = 'text', platform: reqPlatform } = req.body;
+          const targetIdRaw = chatId || recipient;
+
+          if (!targetIdRaw || !message) {
             return res.status(400).json({ success: false, error: 'Missing required parameters: chatId/recipient or message' });
           }
-          
-          // Get WhatsApp client from global context or function context
-          const whatsapp = global.whatsappClient || this.botComponents?.whatsappClient;
-          
-          if (!whatsapp) {
-            return res.status(500).json({ success: false, error: 'WhatsApp client not available' });
+
+          // Determine platform (explicit param has priority)
+          let platform = (reqPlatform || '').toString().toLowerCase();
+          if (!platform) {
+            if (/^telegram[:_]/i.test(targetIdRaw)) platform = 'telegram';
+            else if (/^facebook[:_]/i.test(targetIdRaw)) platform = 'facebook';
+            else if (/^instagram[:_]/i.test(targetIdRaw)) platform = 'instagram';
+            else platform = 'whatsapp';
           }
-          
-          let result;
+
+          // Clean chatId by stripping any leading platform prefixes like telegram:, telegram_
+          let cleanChatId = targetIdRaw;
+          if (cleanChatId.startsWith(`${platform}:`)) cleanChatId = cleanChatId.replace(`${platform}:`, '');
+          if (cleanChatId.startsWith(`${platform}_`)) cleanChatId = cleanChatId.replace(`${platform}_`, '');
+
+          let resultInfo = { platform, target: cleanChatId };
           try {
-            if (messageType === 'text') {
-              result = await whatsapp.client.sendMessage(targetId, message);
-            } else if (messageType === 'file' || messageType === 'image') {
-              const { MessageMedia } = require('whatsapp-web.js');
-              const media = MessageMedia.fromFilePath(message);
-              result = await whatsapp.client.sendMessage(targetId, media);
+            if (platform === 'telegram') {
+              const client = global.telegramBot;
+              if (!client) throw new Error('Telegram bot not available');
+              await client.sendMessage(cleanChatId, message);
+              console.log(`[WorkflowManager] Telegram message sent to ${cleanChatId}`);
+            } else if (platform === 'facebook') {
+              const client = global.facebookMessenger || global.facebookChatService;
+              if (!client || typeof client.sendMessage !== 'function') throw new Error('Facebook Messenger not available');
+              await client.sendMessage(cleanChatId, message);
+              console.log(`[WorkflowManager] Facebook message sent to ${cleanChatId}`);
+            } else if (platform === 'instagram') {
+              const igOfficial = global.instagramService;
+              const igPrivate = global.instagramPrivateService;
+              const igWeb = global.instagramWebService;
+              if (igOfficial && typeof igOfficial.sendMessage === 'function') {
+                await igOfficial.sendMessage(cleanChatId, message);
+              } else if (igPrivate && typeof igPrivate.sendDirectMessageToUser === 'function') {
+                await igPrivate.sendDirectMessageToUser(cleanChatId, message);
+              } else if (igWeb && typeof igWeb.sendMessageToUser === 'function') {
+                await igWeb.sendMessageToUser(cleanChatId, message);
+              } else {
+                throw new Error('Instagram service not available');
+              }
+              console.log(`[WorkflowManager] Instagram message sent to ${cleanChatId}`);
+            } else {
+              // WhatsApp default
+              const whatsapp = global.whatsappClient || this.botComponents?.whatsappClient;
+              if (!whatsapp?.client) throw new Error('WhatsApp client not available');
+              const waId = cleanChatId.replace('_c.us', '@c.us');
+              if (messageType === 'text') {
+                await whatsapp.client.sendMessage(waId, message);
+              } else if (messageType === 'file' || messageType === 'image') {
+                const { MessageMedia } = require('whatsapp-web.js');
+                const media = MessageMedia.fromFilePath(message);
+                await whatsapp.client.sendMessage(waId, media);
+              } else {
+                await whatsapp.client.sendMessage(waId, message);
+              }
+              console.log(`[WorkflowManager] WhatsApp message sent to ${waId}`);
             }
-            
-            console.log(`[WorkflowManager] Message sent to ${targetId}`);
           } catch (err) {
-            console.error(`[WorkflowManager] Error sending message: ${err.message}`);
+            console.error(`[WorkflowManager] Error sending ${platform} message: ${err.message}`);
             throw err;
           }
-          
-          res.json({ success: true, messageId: result.id._serialized });
+
+          res.json({ success: true, result: resultInfo });
         } catch (error) {
           console.error('[WorkflowManager] Error sending message:', error);
           res.status(500).json({ success: false, error: error.message });
         }
       });
-      
+
       // API endpoint to run a command
       this.app.post('/api/workflow/run-command', express.json(), async (req, res) => {
         try {
@@ -539,65 +585,63 @@ class WorkflowManager extends EventEmitter {
   }
   
   /**
-   * Publish a WhatsApp message to MQTT for workflow triggers
-   * @param {Object} message - The WhatsApp message object
-   * @returns {boolean} - Success status
+   * Publish a WhatsApp message (backward compatibility)
+   * @param {Object} message
    */
   async publishWhatsAppMessage(message) {
+    return this.publishMessage('whatsapp', message);
+  }
+
+  /**
+   * Publish a platform message to MQTT for workflow triggers
+   * @param {string} platform - e.g. 'whatsapp', 'telegram', 'facebook', 'instagram'
+   * @param {Object} message - Original platform message object
+   * @returns {boolean}
+   */
+  async publishMessage(platform, message) {
+    // Normalize platform
+    const plat = String(platform || 'whatsapp').toLowerCase();
+    
     // Try to reconnect if not connected
     if (!this.mqttClient || !this.mqttConnected) {
       console.log('[WorkflowManager] MQTT not connected for publishing, attempting to reconnect...');
-      
       try {
-        // End existing client if any
-        if (this.mqttClient) {
-          this.mqttClient.end(true);
-        }
-        
-        // Reinitialize MQTT
+        if (this.mqttClient) this.mqttClient.end(true);
         await this.initMQTT();
-        
-        // Short wait for connection
         await new Promise(resolve => setTimeout(resolve, 1000));
       } catch (err) {
         console.error('[WorkflowManager] Failed to reconnect to MQTT:', err.message);
       }
     }
     
-    // Check again after reconnection attempt
     if (!this.mqttClient) {
       console.warn('[WorkflowManager] MQTT not initialized, cannot publish message');
       return false;
     }
-    
     if (!this.mqttConnected) {
       console.warn('[WorkflowManager] MQTT still not connected after reconnection attempt, cannot publish message');
       return false;
     }
     
     try {
-      // Format the message to match Node-RED flow expectations
+      // Format a generic payload
       const mqttPayload = {
-        chatId: message.chatId || message.from,
-        text: message.body,
-        from: message.from,
-        timestamp: message.timestamp || Date.now(),
-        type: message.type || 'text',
-        // Include common WhatsApp message fields
-        body: message.body,
-        // Include the original message for reference
+        platform: plat,
+        chatId: message.chatId || message.from || message.userId || message.threadId || message.chat?.id,
+        text: message.text || message.body || message.caption || message.message || '',
+        from: message.from || message.senderId || message.user || message.author,
+        timestamp: message.timestamp || message.date || Date.now(),
+        type: message.type || message.kind || 'text',
+        body: message.body || message.text || '',
         originalMessage: message
       };
-      
-      // Publish to whatsapp/messages topic
+      const topic = `${plat}/messages`;
       const payloadStr = JSON.stringify(mqttPayload);
-      this.mqttClient.publish('whatsapp/messages', payloadStr, { qos: 1 });
-      console.log(`[WorkflowManager] Published message to MQTT: ${message.body?.substring(0, 20)}...`);
-      console.log(`[WorkflowManager] Message chatId: ${mqttPayload.chatId}`);
-      console.log(`[WorkflowManager] Full MQTT payload: ${payloadStr}`);
+      this.mqttClient.publish(topic, payloadStr, { qos: 1 });
+      console.log(`[WorkflowManager] Published ${plat} message to MQTT topic "${topic}"`);
       return true;
     } catch (error) {
-      console.error(`[WorkflowManager] Error publishing message to MQTT: ${error.message}`);
+      console.error(`[WorkflowManager] Error publishing ${platform} message to MQTT: ${error.message}`);
       return false;
     }
   }
