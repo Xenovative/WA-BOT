@@ -4,6 +4,7 @@ class PlatformManager {
         this.platforms = ['whatsapp', 'telegram', 'facebook', 'instagram'];
         this.platformStatus = {};
         this.statusPollTimer = null;
+        this._lastStatusErrorAt = 0;
         this.initializeEventHandlers();
         this.loadPlatformStatus();
         // Periodically refresh status when Platforms tab is visible
@@ -110,6 +111,21 @@ class PlatformManager {
         }
     }
 
+    // Safe toast helper that delegates to the global UI toast when available
+    showToast(message, type = 'info') {
+        try {
+            // Prefer the UI's global showToast from script.js if present
+            if (typeof window !== 'undefined' && typeof window.showToast === 'function' && window.showToast !== this.showToast) {
+                return window.showToast(message, type);
+            }
+            // If a global function named showToast exists and it's not this method, call it
+            if (typeof showToast === 'function' && showToast !== this.showToast) {
+                return showToast(message, type);
+            }
+        } catch (_) { /* no-op */ }
+        console.log(`${(type || 'info').toUpperCase()}: ${message}`);
+    }
+
     handlePlatformToggle(platform, enabled, suppressDisconnect = false) {
         const platformCard = document.querySelector(`#${platform}-enabled`).closest('.card');
         const connectBtn = document.getElementById(`${platform}-connect-btn`);
@@ -142,7 +158,8 @@ class PlatformManager {
 
     async savePlatformEnabledState(platform, enabled) {
         try {
-            await fetch(`/api/platforms/${platform}/enabled`, {
+            const base = (typeof window !== 'undefined' && window.API_BASE_URL) ? window.API_BASE_URL : '';
+            await fetch(`${base}/api/platforms/${platform}/enabled`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json'
@@ -209,18 +226,31 @@ class PlatformManager {
 
     async loadPlatformStatus() {
         try {
-            const response = await fetch('/api/platforms/status');
+            const base = (typeof window !== 'undefined' && window.API_BASE_URL) ? window.API_BASE_URL : '';
+            const response = await fetch(`${base}/api/platforms/status`);
             if (response.ok) {
                 this.platformStatus = await response.json();
                 this.updatePlatformUI();
                 this.updateStatusTable();
             } else {
-                console.error('Failed to load platform status');
-                this.showToast(window.i18n?.t('platforms.connection_failed') || 'Failed to load platform status', 'error');
+                console.warn('Failed to load platform status', response.status, response.statusText);
+                // Throttle status error toast to at most once per 30s
+                const now = Date.now();
+                if (now - this._lastStatusErrorAt > 30000) {
+                    this._lastStatusErrorAt = now;
+                    // Avoid noisy toasts for 404s in non-matching environments
+                    if (response.status !== 404) {
+                        this.showToast(window.i18n?.t('platforms.connection_failed') || 'Failed to load platform status', 'error');
+                    }
+                }
             }
         } catch (error) {
             console.error('Error loading platform status:', error);
-            this.showToast(window.i18n?.t('platforms.connection_failed') || 'Failed to load platform status', 'error');
+            const now = Date.now();
+            if (now - this._lastStatusErrorAt > 30000) {
+                this._lastStatusErrorAt = now;
+                this.showToast(window.i18n?.t('platforms.connection_failed') || 'Failed to load platform status', 'error');
+            }
         }
     }
 
@@ -386,7 +416,6 @@ class PlatformManager {
             this.showQRModal();
             return;
         }
-
         const config = this.getPlatformConfig(platform);
         if (!config) {
             this.showToast(window.i18n?.t('platforms.invalid_credentials') || 'Invalid credentials', 'error');
@@ -395,8 +424,8 @@ class PlatformManager {
 
         try {
             this.updateConnectionStatus(platform, 'connecting');
-            
-            const response = await fetch(`/api/platforms/${platform}/connect`, {
+            const base = (typeof window !== 'undefined' && window.API_BASE_URL) ? window.API_BASE_URL : '';
+            const response = await fetch(`${base}/api/platforms/${platform}/connect`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json'
@@ -405,7 +434,7 @@ class PlatformManager {
             });
 
             const result = await response.json();
-            
+
             if (response.ok && result.success) {
                 this.showToast(window.i18n?.t('platforms.connected_success') || 'Connected successfully', 'success');
                 this.loadPlatformStatus();
@@ -422,12 +451,13 @@ class PlatformManager {
 
     async disconnectPlatform(platform) {
         try {
-            const response = await fetch(`/api/platforms/${platform}/disconnect`, {
+            const base = (typeof window !== 'undefined' && window.API_BASE_URL) ? window.API_BASE_URL : '';
+            const response = await fetch(`${base}/api/platforms/${platform}/disconnect`, {
                 method: 'POST'
             });
 
             const result = await response.json();
-            
+
             if (response.ok && result.success) {
                 this.showToast(window.i18n?.t('platforms.disconnected_success') || 'Disconnected successfully', 'success');
                 this.loadPlatformStatus();
@@ -526,14 +556,6 @@ class PlatformManager {
     showQRModal() {
         const qrModal = new bootstrap.Modal(document.getElementById('qrScannerModal'));
         qrModal.show();
-    }
-
-    showToast(message, type = 'info') {
-        if (window.showToast) {
-            window.showToast(message, type);
-        } else {
-            console.log(`${type.toUpperCase()}: ${message}`);
-        }
     }
     
     /**
@@ -1292,7 +1314,8 @@ async function testFacebookConnection() {
     
     try {
         // Test the Facebook API connection
-        const response = await fetch('/api/platforms/facebook/test', {
+        const base = (typeof window !== 'undefined' && window.API_BASE_URL) ? window.API_BASE_URL : '';
+        const response = await fetch(`${base}/api/platforms/facebook/test`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json'
@@ -1359,11 +1382,4 @@ function togglePasswordVisibility(inputId) {
     }
 }
 
-// Helper function to show toast notifications
-function showToast(message, type = 'info') {
-    if (window.showToast) {
-        window.showToast(message, type);
-    } else {
-        console.log(`${type.toUpperCase()}: ${message}`);
-    }
-}
+// (Removed duplicate global showToast to avoid recursion with script.js' showToast)
