@@ -1132,36 +1132,52 @@ document.addEventListener('DOMContentLoaded', () => {
 let currentChatId = null;
 
 async function exportCurrentChat() {
-  if (!currentChatId) return;
-  
+  // Resolve the active chat ID from multiple sources to avoid nulls
+  const chatId = window.currentOpenChatId || window.currentChatId || currentOpenChatId || currentChatId;
+  if (!chatId) {
+    showToast('No chat selected to export', 'warning');
+    return;
+  }
+
   try {
     // Get the chat data
-    const response = await fetch(`/api/chats/${encodeURIComponent(currentChatId)}`);
+    const response = await fetch(`/api/chats/${encodeURIComponent(chatId)}`);
     if (!response.ok) throw new Error('Failed to fetch chat for export');
-    
+
     const result = await response.json();
     if (!result.success) throw new Error(result.error || 'Failed to export chat');
-    
+
     const messages = result.conversation || [];
-    
-    // Format messages as text
-    const formattedMessages = messages.map(msg => {
-      const role = msg.role === 'user' ? 'User' : 'Assistant';
-      const time = new Date(msg.timestamp).toLocaleString();
-      return `[${time}] ${role}: ${msg.content}`;
-    }).join('\n\n');
-    
-    // Create a download link
-    const blob = new Blob([formattedMessages], { type: 'text/plain;charset=utf-8' });
+
+    // Build CSV with proper escaping
+    const csvEscape = (val) => {
+      const s = (val ?? '').toString();
+      // Normalize newlines for CSV, Excel-friendly
+      const n = s.replace(/\r?\n/g, '\n');
+      if ([',', '"', '\n'].some(ch => n.includes(ch))) {
+        return '"' + n.replace(/"/g, '""') + '"';
+      }
+      return n;
+    };
+
+    const header = ['timestamp', 'role', 'content'];
+    const rows = messages.map(m => [m.timestamp || '', m.role || '', m.content || '']);
+    const csvLines = [header, ...rows]
+      .map(cols => cols.map(csvEscape).join(','))
+      .join('\r\n');
+
+    // Prepend BOM for Excel compatibility on Windows
+    const bom = '\ufeff';
+    const blob = new Blob([bom + csvLines], { type: 'text/csv;charset=utf-8' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `chat-${currentChatId}-${new Date().toISOString().split('T')[0]}.txt`;
+    a.download = `chat-${chatId}-${new Date().toISOString().split('T')[0]}.csv`;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
-    
+
     showToast(window.i18n ? window.i18n.t('toast.chat_exported') : 'Chat exported successfully', 'success');
   } catch (error) {
     console.error('Error exporting chat:', error);
