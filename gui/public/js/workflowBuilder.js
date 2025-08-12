@@ -7,6 +7,20 @@
   let idCounter = 0;
 
   const NODES = {
+    // Bot-focused nodes
+    wa_in: {
+      name: 'wa_in', inputs: 0, outputs: 1,
+      defaults: { name: 'On WhatsApp Message' }
+    },
+    wa_send: {
+      name: 'wa_send', inputs: 1, outputs: 1,
+      defaults: { name: 'Send WhatsApp', chatId: '', message: '', fromPayload: true }
+    },
+    keyword: {
+      name: 'keyword', inputs: 1, outputs: 2,
+      defaults: { name: 'Keyword Filter', pattern: 'hi|hello', caseInsensitive: true, source: 'text' }
+    },
+    // Generic logic nodes
     inject: {
       name: 'inject', inputs: 0, outputs: 1,
       defaults: { name: 'Trigger', once: true, onceDelay: 0.1 }
@@ -128,6 +142,39 @@
           <textarea class="form-control" rows="6" data-field="func">${escapeHtml(data.func || 'return msg;')}</textarea>
           <div class="form-text">The function receives and returns <code>msg</code>.</div>
         </div>`);
+    } else if (type === 'wa_send') {
+      fields.push(`
+        <div class="mb-2">
+          <label class="form-label">Chat ID (optional)</label>
+          <input type="text" class="form-control" data-field="chatId" placeholder="e.g. 85290897701@c.us" value="${escapeHtml(data.chatId || '')}">
+          <div class="form-text">Defaults to <code>msg.chatId</code> or <code>msg.from</code> when empty.</div>
+        </div>
+        <div class="mb-2 form-check">
+          <input class="form-check-input" type="checkbox" data-field="fromPayload" ${data.fromPayload ? 'checked' : ''} id="fld-fromPayload">
+          <label class="form-check-label" for="fld-fromPayload">Use <code>msg.text</code> / <code>msg.payload</code> as message</label>
+        </div>
+        <div class="mb-2">
+          <label class="form-label">Message (used when not from payload)</label>
+          <textarea class="form-control" rows="3" data-field="message" placeholder="Hello!">${escapeHtml(data.message || '')}</textarea>
+        </div>`);
+    } else if (type === 'keyword') {
+      fields.push(`
+        <div class="mb-2">
+          <label class="form-label">Pattern</label>
+          <input type="text" class="form-control" data-field="pattern" value="${escapeHtml(data.pattern || 'hi|hello')}">
+          <div class="form-text">Pipe-separated or regex (e.g. <code>hi|hello</code>)</div>
+        </div>
+        <div class="mb-2">
+          <label class="form-label">Source</label>
+          <select class="form-select" data-field="source">
+            <option value="text" ${data.source === 'text' ? 'selected' : ''}>msg.text</option>
+            <option value="payload" ${data.source === 'payload' ? 'selected' : ''}>msg.payload</option>
+          </select>
+        </div>
+        <div class="mb-2 form-check">
+          <input class="form-check-input" type="checkbox" data-field="caseInsensitive" ${data.caseInsensitive ? 'checked' : ''} id="fld-ci">
+          <label class="form-check-label" for="fld-ci">Case insensitive</label>
+        </div>`);
     } else if (type === 'inject') {
       fields.push(`
         <div class="mb-2 form-check">
@@ -199,6 +246,29 @@
 
     // Build mapping for IDs and wires
     const nodes = [];
+    const extraNodes = [];
+    let mqttConfigId = null;
+    function ensureMqttConfig() {
+      if (mqttConfigId) return mqttConfigId;
+      mqttConfigId = uniq('mqtt');
+      // Minimal mqtt-broker config node
+      extraNodes.push({
+        id: mqttConfigId,
+        type: 'mqtt-broker',
+        name: 'Local MQTT',
+        broker: 'localhost',
+        port: '1883',
+        clientid: '',
+        usetls: false,
+        protocolVersion: '4',
+        keepalive: '60',
+        cleansession: true,
+        birthTopic: '', birthQos: '0', birthRetain: false, birthPayload: '',
+        closeTopic: '', closePayload: '',
+        willTopic: '', willQos: '0', willRetain: false, willPayload: ''
+      });
+      return mqttConfigId;
+    }
     const idMap = {}; // drawflow id -> node-red id
     Object.keys(data).forEach(dfId => {
       const n = data[dfId];
@@ -216,6 +286,48 @@
       if (n.name === 'function') {
         base.func = d.func || 'return msg;';
         base.outputs = 1;
+      } else if (n.name === 'wa_in') {
+        // Compile to MQTT IN node subscribed to whatsapp/messages
+        base.type = 'mqtt in';
+        base.topic = 'whatsapp/messages';
+        base.qos = '1';
+        base.datatype = 'json';
+        base.broker = ensureMqttConfig();
+        base._visual = 'wa_in';
+        base._data = d;
+      } else if (n.name === 'wa_send') {
+        // Compile to a function node that uses functionGlobalContext.bot
+        base.type = 'function';
+        base.outputs = 1;
+        const esc = (s) => String(s).replace(/`/g, '\\`');
+        const staticMsg = esc(d.message || '');
+        const usePayload = !!d.fromPayload;
+        const chatIdStr = esc(d.chatId || '');
+        base._visual = 'wa_send';
+        base._data = d;
+        base.func = `
+// Send WhatsApp message using bot in functionGlobalContext
+const bot = global.get('bot');
+if (!bot || !bot.whatsappClient) {
+  node.warn('WhatsApp client not available');
+  return msg;
+}
+const p = (msg && typeof msg.payload === 'object') ? msg.payload : {};
+const target = (${JSON.stringify(!!chatIdStr)} && '${chatIdStr}') || msg.chatId || msg.to || p.chatId || (p.originalMessage && p.originalMessage.from) || msg.from;
+const text = ${usePayload ? `(
+  (typeof msg.text !== 'undefined' && String(msg.text)) ||
+  (typeof p.text !== 'undefined' && String(p.text)) ||
+  (typeof msg.payload === 'string' ? msg.payload : (typeof p.body !== 'undefined' ? String(p.body) : ''))
+)` : `'${staticMsg}'`};
+try {
+  // Fire-and-forget; Node-RED function won't await
+  bot.whatsappClient.client.sendMessage(target, text)
+    .then(() => node.status({fill:'green',shape:'dot',text:'sent'}))
+    .catch(err => node.error('Send failed: ' + err.message));
+} catch (e) {
+  node.error('Send error: ' + e.message);
+}
+return msg;`.trim();
       } else if (n.name === 'inject') {
         base.props = [{ p: 'payload' }];
         base.repeat = '';
@@ -234,6 +346,28 @@
         base.rules = [{ t: 'truthy' }, { t: 'else' }];
         base.checkall = 'true';
         base.outputs = 2;
+      } else if (n.name === 'keyword') {
+        // Compile to function node with 2 outputs: [match, no-match]
+        base.type = 'function';
+        base.outputs = 2;
+        const src = (d.source === 'payload') ? 'payload' : 'text';
+        const flags = d.caseInsensitive ? 'i' : '';
+        const pat = String(d.pattern || '');
+        const esc = (s) => s.replace(/`/g, '\\`');
+        base._visual = 'keyword';
+        base._data = d;
+        base.func = `
+// Keyword filter: output[0]=match, output[1]=no match
+const p = (msg && typeof msg.payload === 'object') ? msg.payload : {};
+let srcVal;
+if ('${src}' === 'payload') {
+  srcVal = (typeof msg.payload === 'string') ? msg.payload : (typeof p.body !== 'undefined' ? String(p.body) : '');
+} else {
+  srcVal = (typeof msg.text !== 'undefined') ? String(msg.text) : (typeof p.text !== 'undefined' ? String(p.text) : '');
+}
+const re = new RegExp(${JSON.stringify(pat)}, '${flags}');
+if (re.test(srcVal)) { return [msg, null]; }
+return [null, msg];`.trim();
       }
 
       nodes.push(base);
@@ -259,7 +393,9 @@
       });
     });
 
-    return { name: flowName, nodes };
+    // Include any required config nodes
+    const out = { name: flowName, nodes: nodes.concat(extraNodes) };
+    return out;
   }
 
   function importFromDSL(dsl) {
@@ -270,9 +406,15 @@
     const posIndex = {};
     const added = {};
 
-    // First pass: add nodes
+    // First pass: add nodes (skip tab/config nodes)
     nodes.forEach((n, i) => {
-      const type = n.type || 'function';
+      if (!n || n.type === 'tab' || n.type === 'mqtt-broker' || /-broker$/.test(n.type || '')) return;
+      // Choose a visual type pref from metadata, else heuristic mapping
+      let type = n._visual || n.type || 'function';
+      if (!NODES[type]) {
+        if (n.type === 'mqtt in' && n.topic === 'whatsapp/messages') type = 'wa_in';
+        else type = 'function';
+      }
       const def = NODES[type] || NODES.function;
       const col = i % 4, row = Math.floor(i / 4);
       const x = 100 + col * gridX;
@@ -281,6 +423,10 @@
       data.name = n.name || def.name;
       // copy specific config
       if (type === 'function' && n.func) data.func = n.func;
+      // Restore metadata-backed configs for our visual nodes
+      if (n._data && typeof n._data === 'object') {
+        Object.assign(data, n._data);
+      }
       if (type === 'inject') {
         data.once = n.once ?? true;
         data.onceDelay = n.onceDelay ?? 0.1;
@@ -366,9 +512,94 @@
       if (!res.ok || !data.success) throw new Error(data?.error || 'Deploy failed');
       showToast(`Deployed workflow "${data.name}" (id: ${data.id})`, 'success');
       if (typeof loadWorkflows === 'function') setTimeout(loadWorkflows, 800);
+      setTimeout(refreshLoadList, 800);
     } catch (err) {
       console.error(err);
       showToast('Deploy failed: ' + err.message, 'error');
+    } finally {
+      withButtonLoading(btn, false);
+    }
+  }
+
+  async function saveDSL() {
+    const btn = document.getElementById('save-dsl-btn');
+    const isVisual = document.getElementById('builder-json')?.style.display === 'none';
+    let dsl;
+    if (isVisual) {
+      dsl = exportToDSL();
+    } else {
+      const nameInput = document.getElementById('dsl-name');
+      const editorEl = document.getElementById('dsl-editor');
+      if (!editorEl) return;
+      try { dsl = getJson(editorEl); } catch (e) { showToast(e.message, 'error'); return; }
+      const uiName = (nameInput && nameInput.value.trim()) || '';
+      if (uiName) dsl.name = uiName;
+    }
+
+    withButtonLoading(btn, true);
+    try {
+      const res = await fetch('/api/workflows/save', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(dsl)
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) throw new Error(data?.error || 'Save failed');
+      showToast(`Saved workflow "${data.name}" (id: ${data.id})`, 'success');
+      if (typeof loadWorkflows === 'function') setTimeout(loadWorkflows, 800);
+      setTimeout(refreshLoadList, 800);
+    } catch (err) {
+      console.error(err);
+      showToast('Save failed: ' + err.message, 'error');
+    } finally {
+      withButtonLoading(btn, false);
+    }
+  }
+
+  async function refreshLoadList() {
+    const select = document.getElementById('load-workflow-select');
+    if (!select) return;
+    try {
+      const res = await fetch('/api/workflows');
+      const data = await res.json();
+      if (!res.ok || !data.success) throw new Error(data?.error || 'Failed to list workflows');
+      const current = select.value;
+      select.innerHTML = '<option value="" disabled selected>Choose workflow…</option>';
+      data.workflows.forEach(w => {
+        const opt = document.createElement('option');
+        opt.value = w.id;
+        opt.textContent = w.name || w.id;
+        select.appendChild(opt);
+      });
+      // Try to preserve previous selection
+      if (current) select.value = current;
+    } catch (e) {
+      console.error(e);
+    }
+  }
+
+  async function loadSelectedWorkflow() {
+    const select = document.getElementById('load-workflow-select');
+    const id = select?.value;
+    if (!id) { showToast('Pick a workflow to load', 'error'); return; }
+    const btn = document.getElementById('load-dsl-btn');
+    withButtonLoading(btn, true);
+    try {
+      const res = await fetch(`/api/workflows/${encodeURIComponent(id)}`);
+      const data = await res.json();
+      if (!res.ok || !data.success) throw new Error(data?.error || 'Failed to fetch workflow');
+      const wf = data.workflow;
+      // Switch to visual mode and import full flow to keep wires/config
+      setMode('visual');
+      mountDrawflow();
+      importFromDSL({ flow: wf.config });
+      const nameInput = document.getElementById('dsl-name');
+      if (nameInput) nameInput.value = wf.name || id;
+      // Sync JSON editor too
+      const ta = document.getElementById('dsl-editor');
+      if (ta) ta.value = JSON.stringify({ flow: wf.config, name: wf.name || id }, null, 2);
+      showToast(`Loaded workflow "${wf.name || id}"`, 'success');
+    } catch (err) {
+      console.error(err);
+      showToast('Load failed: ' + err.message, 'error');
     } finally {
       withButtonLoading(btn, false);
     }
@@ -390,6 +621,13 @@
     // Deploy
     document.getElementById('deploy-dsl-btn')?.addEventListener('click', deploy);
 
+    // Save
+    document.getElementById('save-dsl-btn')?.addEventListener('click', saveDSL);
+
+    // Load controls
+    document.getElementById('refresh-load-list-btn')?.addEventListener('click', refreshLoadList);
+    document.getElementById('load-dsl-btn')?.addEventListener('click', loadSelectedWorkflow);
+
     // If user switches to visual after editing JSON, import it
     const visualBtn = document.getElementById('mode-visual-btn');
     if (visualBtn) {
@@ -410,6 +648,9 @@
     if (document.getElementById('workflow-builder')?.classList.contains('active')) {
       mountDrawflow();
     }
+
+    // Populate load list initially
+    refreshLoadList();
   }
 
   document.addEventListener('DOMContentLoaded', init);

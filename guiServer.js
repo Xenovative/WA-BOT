@@ -224,6 +224,34 @@ app.get('/api/whatsapp/qr', (req, res) => {
     }
 });
 
+// Save a workflow (no deploy) from DSL JSON
+app.post('/api/workflows/save', async (req, res) => {
+  try {
+    const { compile } = require('./workflow/compiler');
+    const dsl = req.body && (req.body.dsl || req.body);
+
+    if (!dsl || typeof dsl !== 'object') {
+      return res.status(400).json({ success: false, error: 'Invalid payload: expected JSON DSL' });
+    }
+
+    // Compile DSL to Node-RED flow array
+    const { id, name, flow } = compile(dsl);
+
+    // Persist compiled flow to workflow directory
+    const workflowDir = path.join(__dirname, 'workflow');
+    if (!fs.existsSync(workflowDir)) {
+      fs.mkdirSync(workflowDir, { recursive: true });
+    }
+    const filePath = path.join(workflowDir, `${id}.json`);
+    fs.writeFileSync(filePath, JSON.stringify(flow, null, 2), 'utf8');
+
+    return res.json({ success: true, id, name, file: `${id}.json` });
+  } catch (error) {
+    console.error('Error saving workflow from DSL:', error);
+    return res.status(500).json({ success: false, error: error.message });
+  }
+});
+
 // Check WhatsApp authentication status
 app.get('/api/whatsapp/status', (req, res) => {
     try {

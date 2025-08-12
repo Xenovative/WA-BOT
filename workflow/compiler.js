@@ -68,14 +68,23 @@ function compile(dsl) {
     });
   }
 
-  // Ensure all non-tab nodes belong to this tab
+  // Ensure nodes are normalized and attached to the tab where appropriate
+  const CONFIG_NODE_TYPES = new Set([
+    'mqtt-broker'
+  ]);
   flow.forEach((node) => {
-    if (node && node.type !== 'tab') {
+    if (!node || node.type === 'tab') return;
+    // Generate missing node ids if needed
+    if (!node.id) node.id = crypto.randomUUID ? crypto.randomUUID() : crypto.randomBytes(8).toString('hex');
+
+    const isConfig = CONFIG_NODE_TYPES.has(node.type);
+    if (!isConfig) {
       if (!node.z) node.z = id;
-      // Generate missing node ids if needed
-      if (!node.id) node.id = crypto.randomUUID ? crypto.randomUUID() : crypto.randomBytes(8).toString('hex');
-      // Normalize wires
+      // Normalize wires for non-config nodes
       if (node.wires && !Array.isArray(node.wires)) node.wires = [];
+    } else {
+      // Ensure config nodes do not have a tab reference
+      if (node.z) delete node.z;
     }
   });
 

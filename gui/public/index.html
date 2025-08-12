@@ -1238,7 +1238,24 @@ Instructions:
                     <div class="tab-pane fade" id="workflow-builder" data-admin-only>
                         <div class="d-flex justify-content-between align-items-center mb-2">
                             <h4 class="mb-0">Workflow Builder (Beta)</h4>
-                            <div>
+                            <div class="d-flex align-items-center gap-2">
+                                <div class="input-group input-group-sm" style="max-width: 360px;">
+                                    <span class="input-group-text" id="builder-load-label">
+                                        <i class="bi bi-folder2-open me-1"></i> Load
+                                    </span>
+                                    <select id="load-workflow-select" class="form-select" aria-labelledby="builder-load-label">
+                                        <option value="" selected disabled>Choose workflow…</option>
+                                    </select>
+                                    <button id="refresh-load-list-btn" class="btn btn-outline-secondary" type="button" title="Refresh list">
+                                        <i class="bi bi-arrow-clockwise"></i>
+                                    </button>
+                                    <button id="load-dsl-btn" class="btn btn-outline-primary" type="button" title="Load into editor">
+                                        <i class="bi bi-download"></i>
+                                    </button>
+                                </div>
+                                <button id="save-dsl-btn" class="btn btn-outline-success">
+                                    <i class="bi bi-save me-1"></i> Save
+                                </button>
                                 <button id="deploy-dsl-btn" class="btn btn-primary">
                                     <i class="bi bi-cloud-upload me-1"></i> Deploy
                                 </button>
@@ -1258,13 +1275,18 @@ Instructions:
                             <div class="card-body">
                                 <div class="row g-3">
                                     <div class="col-md-2">
-                                        <div class="node-palette">
-                                            <div class="mb-2 text-muted small">Nodes</div>
+                                        <div class="node-palette d-grid gap-2">
+                                            <div class="mb-1 text-muted small">Bot Nodes</div>
+                                            <button class="btn btn-sm btn-outline-success" data-node-type="wa_in">📥 WhatsApp In</button>
+                                            <button class="btn btn-sm btn-outline-success" data-node-type="keyword">🔎 Keyword Filter</button>
+                                            <button class="btn btn-sm btn-outline-success" data-node-type="wa_send">📤 Send WhatsApp</button>
+                                            <hr class="my-2">
+                                            <div class="mb-1 text-muted small">Logic</div>
                                             <button class="btn btn-sm btn-outline-dark" data-node-type="inject">🔁 Inject</button>
-                                            <button class="btn btn-sm btn-outline-dark" data-node-type="debug">🪵 Debug</button>
                                             <button class="btn btn-sm btn-outline-dark" data-node-type="function">ƒ Function</button>
                                             <button class="btn btn-sm btn-outline-dark" data-node-type="switch">⤵ Switch</button>
                                             <button class="btn btn-sm btn-outline-dark" data-node-type="delay">⏲ Delay</button>
+                                            <button class="btn btn-sm btn-outline-dark" data-node-type="debug">🪵 Debug</button>
                                         </div>
                                     </div>
                                     <div class="col-md-7">
