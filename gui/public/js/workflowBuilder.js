@@ -20,6 +20,10 @@
       name: 'keyword', inputs: 1, outputs: 2,
       defaults: { name: 'Keyword Filter', pattern: 'hi|hello', caseInsensitive: true, source: 'text' }
     },
+    media_detect: {
+      name: 'media_detect', inputs: 1, outputs: 6,
+      defaults: { name: 'Detect Media', treatVoiceAsAudio: true }
+    },
     // Generic logic nodes
     inject: {
       name: 'inject', inputs: 0, outputs: 1,
@@ -252,6 +256,15 @@
         <div class="mb-2 form-check">
           <input class="form-check-input" type="checkbox" data-field="caseInsensitive" ${data.caseInsensitive ? 'checked' : ''} id="fld-ci">
           <label class="form-check-label" for="fld-ci">Case insensitive</label>
+        </div>`);
+    } else if (type === 'media_detect') {
+      fields.push(`
+        <div class="mb-2 form-check">
+          <input class="form-check-input" type="checkbox" data-field="treatVoiceAsAudio" ${data.treatVoiceAsAudio ? 'checked' : ''} id="fld-voiceaudio">
+          <label class="form-check-label" for="fld-voiceaudio">Treat voice notes as audio</label>
+        </div>
+        <div class="mb-2 small text-muted">
+          Outputs: [0]=text, [1]=image, [2]=video, [3]=audio, [4]=document, [5]=other
         </div>`);
     } else if (type === 'inject') {
       fields.push(`
@@ -494,6 +507,51 @@ if ('${src}' === 'payload') {
 const re = new RegExp(${JSON.stringify(pat)}, '${flags}');
 if (re.test(srcVal)) { return [msg, null]; }
 return [null, msg];`.trim();
+      } else if (n.name === 'media_detect') {
+        // Compile to function node with 6 outputs: [text, image, video, audio, document, other]
+        base.type = 'function';
+        base.outputs = 6;
+        base._visual = 'media_detect';
+        base._data = d;
+        const voiceAsAudio = d.treatVoiceAsAudio ? 'true' : 'false';
+        base.func = `
+// Media detect: outputs [0]=text, [1]=image, [2]=video, [3]=audio, [4]=document, [5]=other
+const p = (msg && typeof msg.payload === 'object') ? msg.payload : {};
+const om = (p && typeof p.originalMessage === 'object') ? p.originalMessage : (msg && typeof msg.originalMessage === 'object' ? msg.originalMessage : {});
+const typeRaw = (msg && msg.type) || (p && p.type) || (om && (om.type || om.kind)) || '';
+const t = String(typeRaw || '').toLowerCase();
+const voiceAsAudio = ${voiceAsAudio};
+
+function out(idx){ const arr=[null,null,null,null,null,null]; arr[idx]=msg; return arr; }
+function setType(x){ msg.mediaType = x; }
+
+// Quick text detection first
+if (t === 'text' || typeof msg.text !== 'undefined' || typeof p.text !== 'undefined') { setType('text'); return out(0); }
+
+// Check explicit type matches
+const imageTypes = ['image','photo','sticker'];
+const videoTypes = ['video','animation'];
+const audioTypes = ['audio','music'];
+const voiceTypes = ['ptt','voice','voicenote','voice_note','ogg_opus'];
+const docTypes   = ['document','file','doc','pdf','spreadsheet','presentation'];
+
+if (imageTypes.includes(t)) { setType('image'); return out(1); }
+if (videoTypes.includes(t)) { setType('video'); return out(2); }
+if ((voiceAsAudio && voiceTypes.includes(t)) || audioTypes.includes(t)) { setType('audio'); return out(3); }
+if (docTypes.includes(t))   { setType('document'); return out(4); }
+
+// Heuristics by payload structure when type not clear
+if (om && (om.photo || om.image || (Array.isArray(om.photos) && om.photos.length))) { setType('image'); return out(1); }
+if (p && (p.photo || p.image || (Array.isArray(p.photos) && p.photos.length))) { setType('image'); return out(1); }
+if (om && (om.video || (Array.isArray(om.videos) && om.videos.length))) { setType('video'); return out(2); }
+if (p && (p.video || (Array.isArray(p.videos) && p.videos.length))) { setType('video'); return out(2); }
+if (om && (om.voice || om.audio)) { setType('audio'); return out(3); }
+if (p && (p.voice || p.audio)) { setType('audio'); return out(3); }
+if (om && (om.document || om.file)) { setType('document'); return out(4); }
+if (p && (p.document || p.file)) { setType('document'); return out(4); }
+
+setType(t || 'other');
+return out(5);`.trim();
       }
 
       nodes.push(base);
