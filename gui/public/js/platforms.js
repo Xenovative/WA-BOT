@@ -337,7 +337,8 @@ class PlatformManager {
 
     isPlatformsTabVisible() {
         const pane = document.getElementById('platforms');
-        if (!pane) return false;
+        // If we can't find the element (ID differences), default to true to keep polling
+        if (!pane) return true;
         // Bootstrap tab-pane visibility
         return pane.classList.contains('active') || pane.classList.contains('show');
     }

@@ -2304,16 +2304,16 @@ app.get('/api/platforms/status', (req, res) => {
   try {
     const status = {
       whatsapp: {
-        status: global.whatsappBot && global.whatsappBot.info ? 'connected' : 'not_connected',
+        status: (global.whatsappClient && global.whatsappClient.client) ? 'connected' : 'not_connected',
         method: 'web',
-        lastActivity: global.whatsappBot?.lastActivity || null,
+        lastActivity: global.whatsappClient?.lastActivity || null,
         enabled: process.env.WHATSAPP_ENABLED !== 'false',
         credentials: {
           // WhatsApp uses QR code, no stored credentials
         }
       },
       telegram: {
-        status: global.telegramBot ? 'connected' : 'not_connected',
+        status: (global.telegramBot && (global.telegramBot.polling || global.telegramBot.bot)) ? 'connected' : 'not_connected',
         method: 'api',
         lastActivity: global.telegramBot?.lastActivity || null,
         enabled: process.env.TELEGRAM_ENABLED !== 'false',
