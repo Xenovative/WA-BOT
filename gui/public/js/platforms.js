@@ -32,6 +32,17 @@ const Api = (() => {
                         probe: join(origin, statusPath)
                     });
                 }
+                // Additional candidate bases (e.g., different port/host/subpath)
+                if (Array.isArray(window.API_BASE_URL_CANDIDATES)) {
+                    for (const base of window.API_BASE_URL_CANDIDATES) {
+                        if (!base || typeof base !== 'string') continue;
+                        list.push({
+                            name: `candidate:${base}`,
+                            build: (p) => join(base, p),
+                            probe: join(base, statusPath)
+                        });
+                    }
+                }
             }
         } catch (_) {}
 
