@@ -1225,8 +1225,13 @@ function showFacebookAppStateHelp() {
     });
 }
 
-// Initialize platform manager when DOM is loaded
-document.addEventListener('DOMContentLoaded', () => {
+// Initialize platform manager when DOM is loaded (pre-resolve API base)
+document.addEventListener('DOMContentLoaded', async () => {
+    try {
+        await Api.resolve();
+    } catch (e) {
+        console.warn('API base resolve failed at init:', e);
+    }
     window.platformManager = new PlatformManager();
 });
 

@@ -696,7 +696,7 @@ document.addEventListener('DOMContentLoaded', () => {
 // API functions
 async function loadStatus() {
   try {
-    const response = await fetch(`/api/status?app=${window.currentApp}`);
+    const response = await Api.fetch(`/api/status?app=${window.currentApp}`);
     if (!response.ok) {
       throw new Error(`HTTP error! status: ${response.status}`);
     }
@@ -1382,7 +1382,7 @@ function generateQRCode(qrData, container) {
  */
 async function checkWhatsAppAuth() {
     try {
-        const response = await fetch('/api/whatsapp/status');
+        const response = await Api.fetch('/api/whatsapp/status');
         const data = await response.json();
         
         if (data.authenticated) {
@@ -1436,7 +1436,7 @@ async function startQRCodeGeneration() {
         qrStatus.textContent = window.i18n ? window.i18n.t('qr.generating') : 'Generating QR code...';
         
         // Get QR code data from server
-        const response = await fetch('/api/whatsapp/qr');
+        const response = await Api.fetch('/api/whatsapp/qr');
         if (!response.ok) {
             throw new Error('Failed to get QR code');
         }
@@ -1498,7 +1498,7 @@ function updateTelegramStatus(message, type = 'info') {
     statusElement.className = `small ${textClass}`;
 }
 
-// Initialize QR code scanner modal
+// Initialize QR code scanner modal and Telegram token save
 document.addEventListener('DOMContentLoaded', function() {
     const qrScannerModal = document.getElementById('qrScannerModal');
     if (qrScannerModal) {
@@ -1543,7 +1543,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 localStorage.setItem('telegram_bot_token', token);
                 
                 // Send token to server
-                const response = await fetch('/api/telegram/set-token', {
+                const response = await Api.fetch('/api/telegram/set-token', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
