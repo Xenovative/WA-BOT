@@ -6,6 +6,16 @@ class OllamaClient extends BaseLLMClient {
     super();
     this.baseUrl = process.env.OLLAMA_BASE_URL || 'http://localhost:11434';
     this.model = process.env.OLLAMA_MODEL || 'llama2';
+    // Keep the model loaded between requests to reduce cold-start latency
+    // Accepts duration string (e.g., '1h', '30m'), boolean, or number (seconds)
+    this.keepAlive = process.env.OLLAMA_KEEP_ALIVE || '1h';
+    // Default stop sequences to prevent the model from auto-continuing into the next turn
+    // Covers common chat templates that switch back to 'User:'/'Human:' or repeat 'Assistant:'
+    this.stopSequences = [
+      '\nUser:', '\nuser:', 'User:', 'user:',
+      '\nHuman:', '\nhuman:', 'Human:', 'human:',
+      '\nAssistant:', '\nassistant:', 'Assistant:', 'assistant:'
+    ];
   }
 
   /**
@@ -52,7 +62,11 @@ class OllamaClient extends BaseLLMClient {
       const requestBody = {
         model: this.model,
         prompt: formattedPrompt,
-        stream: false
+        stream: false,
+        // Keep the model hot per Ollama API
+        keep_alive: this.keepAlive,
+        // Prevent auto-prompt by stopping when the model tries to start a new turn
+        stop: this.stopSequences
       };
       
       // Map our parameters to Ollama parameters
@@ -61,6 +75,10 @@ class OllamaClient extends BaseLLMClient {
       // Note: Ollama might not support all parameters like frequency_penalty and presence_penalty
       // Add additional Ollama-specific parameters
       if (parameters.max_tokens !== undefined) requestBody.num_predict = parameters.max_tokens;
+      // Allow per-call override for keep_alive
+      if (parameters.keep_alive !== undefined) requestBody.keep_alive = parameters.keep_alive;
+      // Allow per-call override for stop sequences
+      if (parameters.stop !== undefined) requestBody.stop = Array.isArray(parameters.stop) ? parameters.stop : [parameters.stop];
       
       const response = await fetch(apiUrl, {
         method: 'POST',
@@ -77,6 +95,15 @@ class OllamaClient extends BaseLLMClient {
 
       const data = await response.json();
       let responseText = data.response.trim();
+
+      // Post-process to prevent auto-prompt leakage
+      // 1) Remove a leading Assistant: label if present
+      responseText = responseText.replace(/^\s*Assistant:\s*/i, '');
+      // 2) If the model started a new turn like "User:" or "Human:", cut it off
+      const boundaryIdx = responseText.search(/(?:^|\n)(User:|Human:)/i);
+      if (boundaryIdx !== -1) {
+        responseText = responseText.slice(0, boundaryIdx).trimEnd();
+      }
       
       // Filter out thinking content
       responseText = this.filterThinkingContent(responseText);

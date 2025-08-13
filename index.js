@@ -3,6 +3,13 @@ const { Client, LocalAuth, MessageMedia, ClientState } = require('whatsapp-web.j
 const qrcode = require('qrcode-terminal');
 const path = require('path');
 const fs = require('fs');
+const mqtt = require('mqtt');
+const MQTT_URL = process.env.MQTT_URL || 'mqtt://127.0.0.1:1883';
+const MQTT_USER = process.env.MQTT_USER;
+const MQTT_PASS = process.env.MQTT_PASS;
+const mqttClient = mqtt.connect(MQTT_URL, { username: MQTT_USER, password: MQTT_PASS });
+mqttClient.on('connect', () => console.log('[MQTT] connected', MQTT_URL));
+mqttClient.on('error', err => console.error('[MQTT] error', err));
 const LLMFactory = require('./llm/llmFactory');
 const chatHandler = require('./handlers/chatHandler');
 const commandHandler = require('./handlers/commandHandler');
@@ -465,6 +472,43 @@ global.client = client;
 // Initialize the LLM client
 updateLLMClient();
 
+// === MQTT helpers for WhatsApp events ===
+function looksLikeMediaRequest(text) {
+  const s = String(text || '');
+  return /(photo|image|picture|pic|screenshot|video|audio|voice|document|file|media|attachment|upload|send|receipt|proof)/i.test(s)
+      || /相片|照片|圖片|截圖|影片|語音|錄音|文件|檔案|媒體|收據|單據|凭证|憑證|上傳|上載|發送|发送|傳送/.test(s);
+}
+
+function publishBotOutgoing(chatId, content) {
+  if (!chatId) return;
+  const payload = {
+    platform: 'whatsapp',
+    to: chatId,
+    text: typeof content === 'string' ? content : '',
+    requireMedia: looksLikeMediaRequest(content)
+  };
+  try {
+    mqttClient.publish('bot/outgoing', JSON.stringify({ payload }), { qos: 1 });
+  } catch (e) {
+    console.error('[MQTT] publish bot/outgoing failed', e);
+  }
+}
+
+function publishInboundWhatsApp(message) {
+  try {
+    const payload = {
+      platform: 'whatsapp',
+      chatId: message.from,
+      text: message.body,
+      hasMedia: !!message.hasMedia,
+      type: message.type
+    };
+    mqttClient.publish('whatsapp/messages', JSON.stringify({ payload }), { qos: 1 });
+  } catch (e) {
+    console.error('[MQTT] publish whatsapp/messages failed', e);
+  }
+}
+
 // Store original sendMessage
 const originalSendMessage = client.sendMessage.bind(client);
 
@@ -499,6 +543,9 @@ client.sendMessage = async function(chatId, content, options = {}) {
     console.log(`[${timestamp}] [${debugId}] [Message-Debug] Skipping group message`);
     return originalSendMessage(chatId, content, options);
   }
+  
+  // Publish outgoing to MQTT for reminders (skip groups above)
+  try { publishBotOutgoing(chatId, typeof content === 'string' ? content : ''); } catch (e) { console.error('[MQTT] publish bot/outgoing failed', e); }
   
   // Skip if it's an automated message, bot response, or forwarded message
   if (options.isAutomated || options.isBotResponse || options.isResponseToUser) {
@@ -756,6 +803,9 @@ client.on('message', async (message) => {
     return;
   }
   
+  // Publish inbound WhatsApp message to MQTT
+  try { publishInboundWhatsApp(message); } catch (e) { console.error('[MQTT] publish inbound error', e); }
+
   // Initialize message type flags if not set
   message.isCommand = message.isCommand || false;
   message.isReplyToBot = message.isReplyToBot || false;
