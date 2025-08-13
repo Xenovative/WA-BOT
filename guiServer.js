@@ -62,6 +62,64 @@ app.get('/utils/instagram-session-extractor.html', (req, res) => {
   res.sendFile(path.join(__dirname, 'utils', 'instagram-session-extractor.html'));
 });
 
+// API endpoint to forward a previously received WhatsApp message (e.g., proof of payment)
+app.post('/api/workflow/forward-proof', express.json(), async (req, res) => {
+  try {
+    const { messageId, sourceMessageId, recipients, recipient, caption, note } = req.body || {};
+    const id = messageId || sourceMessageId;
+    let dests = recipients || recipient || [];
+    if (!Array.isArray(dests)) {
+      if (typeof dests === 'string') dests = dests.split(',').map(s => s.trim()).filter(Boolean);
+      else dests = [];
+    }
+    if (!id || dests.length === 0) {
+      return res.status(400).json({ success: false, error: 'messageId and recipients are required' });
+    }
+
+    const whatsapp = global.whatsappClient;
+    if (!whatsapp || !whatsapp.client) {
+      return res.status(500).json({ success: false, error: 'WhatsApp client not available' });
+    }
+
+    const cache = global.whatsappMessageCache;
+    const original = cache && cache.get ? cache.get(id) : null;
+    if (!original) {
+      return res.status(404).json({ success: false, error: 'Original message not found in cache' });
+    }
+
+    const prefix = note || caption || `Proof forward from ${original.author || original.from} (${original.from})`;
+    let forwarded = 0;
+
+    try {
+      if (original.hasMedia) {
+        const mediaData = await original.downloadMedia();
+        if (!mediaData) throw new Error('Failed to download media from original message');
+        const filename = mediaData.filename || 'proof';
+        const media = new MessageMedia(mediaData.mimetype, mediaData.data, filename);
+        for (const to of dests) {
+          const opts = mediaData.mimetype && mediaData.mimetype.includes('application') ? { sendMediaAsDocument: true, caption: prefix } : { caption: prefix };
+          await whatsapp.client.sendMessage(to, media, opts);
+          forwarded++;
+        }
+      } else {
+        const text = original.body || original.message || '';
+        for (const to of dests) {
+          await whatsapp.client.sendMessage(to, `${prefix}: ${text}`.trim());
+          forwarded++;
+        }
+      }
+    } catch (err) {
+      console.error('Forward-proof send error:', err);
+      return res.status(500).json({ success: false, error: err.message });
+    }
+
+    return res.json({ success: true, forwarded, recipients: dests });
+  } catch (error) {
+    console.error('Error in /api/workflow/forward-proof:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
 // Proxy Node-RED editor requests to the workflow manager
 const workflowPort = process.env.WORKFLOW_PORT || 1880;
 app.use('/red', createProxyMiddleware({

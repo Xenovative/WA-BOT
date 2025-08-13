@@ -484,6 +484,7 @@ function publishBotOutgoing(chatId, content) {
   const payload = {
     platform: 'whatsapp',
     to: chatId,
+    chatId: chatId,
     text: typeof content === 'string' ? content : '',
     requireMedia: looksLikeMediaRequest(content)
   };
@@ -496,9 +497,21 @@ function publishBotOutgoing(chatId, content) {
 
 function publishInboundWhatsApp(message) {
   try {
+    // Cache inbound message by id for later forwarding (e.g., proofs)
+    try {
+      const mid = (message && message.id && (message.id._serialized || message.id.id || message.id)) || null;
+      if (mid) {
+        if (!global.whatsappMessageCache) global.whatsappMessageCache = new Map();
+        global.whatsappMessageCache.set(mid, message);
+      }
+    } catch(_) {}
+
     const payload = {
       platform: 'whatsapp',
       chatId: message.from,
+      messageId: (message && message.id && (message.id._serialized || message.id.id || message.id)) || null,
+      author: message.author || null,
+      isGroup: !!(message.from && message.from.includes('@g.us')),
       text: message.body,
       hasMedia: !!message.hasMedia,
       type: message.type
@@ -538,13 +551,14 @@ client.sendMessage = async function(chatId, content, options = {}) {
     }
   });
 
-  // Skip if it's a group message
+  // If it's a group message, still publish to MQTT so workflows can react, then send.
   if (chatId.includes('@g.us')) {
-    console.log(`[${timestamp}] [${debugId}] [Message-Debug] Skipping group message`);
+    try { publishBotOutgoing(chatId, typeof content === 'string' ? content : ''); } catch (e) { console.error('[MQTT] publish bot/outgoing failed', e); }
+    console.log(`[${timestamp}] [${debugId}] [Message-Debug] Skipping bot logic for group message after MQTT publish`);
     return originalSendMessage(chatId, content, options);
   }
   
-  // Publish outgoing to MQTT for reminders (skip groups above)
+  // Publish outgoing to MQTT for reminders
   try { publishBotOutgoing(chatId, typeof content === 'string' ? content : ''); } catch (e) { console.error('[MQTT] publish bot/outgoing failed', e); }
   
   // Skip if it's an automated message, bot response, or forwarded message
