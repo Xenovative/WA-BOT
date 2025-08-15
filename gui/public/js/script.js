@@ -2600,6 +2600,315 @@ window.testAIToggle = function() {
   }
 };
 
+// WhatsApp History Import Functionality
+let whatsappImportModal = null;
+let availableChats = [];
+let importInProgress = false;
+
+// Initialize WhatsApp import functionality
+function initializeWhatsAppImport() {
+  const importBtn = document.getElementById('import-whatsapp-history');
+  if (importBtn) {
+    importBtn.addEventListener('click', openWhatsAppImportModal);
+  }
+  
+  // Initialize modal
+  const modalElement = document.getElementById('whatsappImportModal');
+  if (modalElement) {
+    whatsappImportModal = new bootstrap.Modal(modalElement);
+    
+    // Set up modal event listeners
+    modalElement.addEventListener('shown.bs.modal', onImportModalShown);
+    modalElement.addEventListener('hidden.bs.modal', onImportModalHidden);
+    
+    // Set up form event listeners
+    const startImportBtn = document.getElementById('start-import-btn');
+    if (startImportBtn) {
+      startImportBtn.addEventListener('click', startWhatsAppImport);
+    }
+    
+    // Set default dates (last 7 days)
+    const endDate = new Date();
+    const startDate = new Date();
+    startDate.setDate(endDate.getDate() - 7);
+    
+    const startDateInput = document.getElementById('import-start-date');
+    const endDateInput = document.getElementById('import-end-date');
+    
+    if (startDateInput) {
+      startDateInput.value = startDate.toISOString().split('T')[0];
+    }
+    if (endDateInput) {
+      endDateInput.value = endDate.toISOString().split('T')[0];
+    }
+  }
+}
+
+// Open WhatsApp import modal
+async function openWhatsAppImportModal() {
+  if (!whatsappImportModal) {
+    console.error('WhatsApp import modal not initialized');
+    return;
+  }
+  
+  // Reset form
+  resetImportForm();
+  
+  // Show modal
+  whatsappImportModal.show();
+}
+
+// Reset import form
+function resetImportForm() {
+  const form = document.getElementById('whatsapp-import-form');
+  if (form) {
+    // Reset checkboxes to default
+    const mediaCheckbox = document.getElementById('import-media-messages');
+    const systemCheckbox = document.getElementById('import-system-messages');
+    
+    if (mediaCheckbox) mediaCheckbox.checked = true;
+    if (systemCheckbox) systemCheckbox.checked = false;
+  }
+  
+  // Hide progress bar
+  const progressDiv = document.getElementById('import-progress');
+  if (progressDiv) {
+    progressDiv.style.display = 'none';
+  }
+  
+  // Reset progress
+  updateImportProgress(0, window.i18n?.t('chat.preparing_import') || 'Preparing import...');
+  
+  // Enable start button
+  const startBtn = document.getElementById('start-import-btn');
+  if (startBtn) {
+    startBtn.disabled = false;
+    startBtn.innerHTML = `<i class="bi bi-download me-1"></i> ${window.i18n?.t('chat.start_import') || 'Start Import'}`;
+  }
+  
+  importInProgress = false;
+}
+
+// Modal shown event handler
+async function onImportModalShown() {
+  console.log('WhatsApp import modal shown, loading available chats...');
+  await loadAvailableChats();
+}
+
+// Modal hidden event handler
+function onImportModalHidden() {
+  if (importInProgress) {
+    // Cancel import if in progress
+    cancelWhatsAppImport();
+  }
+}
+
+// Load available WhatsApp chats
+async function loadAvailableChats() {
+  const chatSelect = document.getElementById('import-chat-select');
+  if (!chatSelect) return;
+  
+  try {
+    chatSelect.innerHTML = `<option value="">${window.i18n?.t('chat.fetching_chats') || 'Fetching available chats...'}</option>`;
+    chatSelect.disabled = true;
+    
+    const response = await fetch('/api/whatsapp/chats');
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+    }
+    
+    const data = await response.json();
+    availableChats = data.chats || [];
+    
+    // Populate chat select
+    chatSelect.innerHTML = '';
+    
+    if (availableChats.length === 0) {
+      chatSelect.innerHTML = `<option value="">${window.i18n?.t('chat.no_chats') || 'No chats available'}</option>`;
+      return;
+    }
+    
+    // Add default option
+    chatSelect.innerHTML = `<option value="">${window.i18n?.t('chat.select_chat') || 'Select Chat'}</option>`;
+    
+    // Add chat options
+    availableChats.forEach(chat => {
+      const option = document.createElement('option');
+      option.value = chat.id._serialized;
+      option.textContent = chat.name || chat.id._serialized;
+      chatSelect.appendChild(option);
+    });
+    
+    chatSelect.disabled = false;
+    
+  } catch (error) {
+    console.error('Error loading available chats:', error);
+    chatSelect.innerHTML = `<option value="">${window.i18n?.t('chat.import_failed') || 'Failed to load chats'}</option>`;
+    
+    showToast(
+      window.i18n?.t('chat.import_failed') || 'Failed to load available chats',
+      'danger'
+    );
+  }
+}
+
+// Start WhatsApp import
+async function startWhatsAppImport() {
+  if (importInProgress) return;
+  
+  const form = document.getElementById('whatsapp-import-form');
+  const startBtn = document.getElementById('start-import-btn');
+  
+  if (!form || !startBtn) return;
+  
+  // Validate form
+  const startDate = document.getElementById('import-start-date')?.value;
+  const endDate = document.getElementById('import-end-date')?.value;
+  const chatId = document.getElementById('import-chat-select')?.value;
+  
+  if (!startDate || !endDate || !chatId) {
+    showToast(
+      window.i18n?.t('chat.import_failed') || 'Please fill in all required fields',
+      'warning'
+    );
+    return;
+  }
+  
+  // Validate date range
+  if (new Date(startDate) > new Date(endDate)) {
+    showToast(
+      window.i18n?.t('chat.import_failed') || 'Start date must be before end date',
+      'warning'
+    );
+    return;
+  }
+  
+  importInProgress = true;
+  
+  // Update UI
+  startBtn.disabled = true;
+  startBtn.innerHTML = `<span class="spinner-border spinner-border-sm me-2"></span>${window.i18n?.t('chat.importing_messages') || 'Importing...'}`;
+  
+  // Show progress bar
+  const progressDiv = document.getElementById('import-progress');
+  if (progressDiv) {
+    progressDiv.style.display = 'block';
+  }
+  
+  try {
+    // Get form data
+    const includeMedia = document.getElementById('import-media-messages')?.checked || false;
+    const includeSystem = document.getElementById('import-system-messages')?.checked || false;
+    
+    const importData = {
+      chatId,
+      startDate,
+      endDate,
+      includeMedia,
+      includeSystem
+    };
+    
+    console.log('Starting WhatsApp import with data:', importData);
+    updateImportProgress(10, window.i18n?.t('chat.preparing_import') || 'Preparing import...');
+    
+    // Start import
+    const response = await fetch('/api/whatsapp/import-history', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(importData)
+    });
+    
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+    }
+    
+    const result = await response.json();
+    
+    if (result.success) {
+      updateImportProgress(100, window.i18n?.t('chat.import_complete') || 'Import completed');
+      
+      showToast(
+        `${window.i18n?.t('chat.import_success') || 'Chat history imported successfully'} (${result.imported || 0} messages)`,
+        'success'
+      );
+      
+      // Refresh chat list
+      if (typeof loadChats === 'function') {
+        loadChats();
+      }
+      
+      // Close modal after a delay
+      setTimeout(() => {
+        whatsappImportModal.hide();
+      }, 2000);
+      
+    } else {
+      throw new Error(result.error || 'Import failed');
+    }
+    
+  } catch (error) {
+    console.error('Error importing WhatsApp history:', error);
+    updateImportProgress(0, window.i18n?.t('chat.import_failed') || 'Import failed');
+    
+    showToast(
+      `${window.i18n?.t('chat.import_failed') || 'Failed to import chat history'}: ${error.message}`,
+      'danger'
+    );
+  } finally {
+    importInProgress = false;
+    
+    // Reset button
+    startBtn.disabled = false;
+    startBtn.innerHTML = `<i class="bi bi-download me-1"></i> ${window.i18n?.t('chat.start_import') || 'Start Import'}`;
+  }
+}
+
+// Update import progress
+function updateImportProgress(percentage, status) {
+  const progressBar = document.querySelector('#import-progress .progress-bar');
+  const statusText = document.getElementById('import-status');
+  
+  if (progressBar) {
+    progressBar.style.width = `${percentage}%`;
+    progressBar.setAttribute('aria-valuenow', percentage);
+    progressBar.textContent = `${percentage}%`;
+  }
+  
+  if (statusText) {
+    statusText.textContent = status;
+  }
+}
+
+// Cancel WhatsApp import
+function cancelWhatsAppImport() {
+  if (!importInProgress) return;
+  
+  console.log('Cancelling WhatsApp import...');
+  importInProgress = false;
+  
+  // Reset UI
+  const startBtn = document.getElementById('start-import-btn');
+  if (startBtn) {
+    startBtn.disabled = false;
+    startBtn.innerHTML = `<i class="bi bi-download me-1"></i> ${window.i18n?.t('chat.start_import') || 'Start Import'}`;
+  }
+  
+  updateImportProgress(0, window.i18n?.t('chat.import_cancelled') || 'Import cancelled');
+  
+  showToast(
+    window.i18n?.t('chat.import_cancelled') || 'Import cancelled',
+    'info'
+  );
+}
+
+// Make WhatsApp import functions globally available
+window.initializeWhatsAppImport = initializeWhatsAppImport;
+window.openWhatsAppImportModal = openWhatsAppImportModal;
+window.startWhatsAppImport = startWhatsAppImport;
+window.cancelWhatsAppImport = cancelWhatsAppImport;
+
 window.testRefreshButton = function() {
   console.log('Testing refresh button manually...');
   const refreshBtn = document.getElementById('chatModalRefreshBtn');

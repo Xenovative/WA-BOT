@@ -483,7 +483,10 @@
                         <div class="d-flex justify-content-between align-items-center mb-2">
                             <h4 class="mb-0" data-i18n="chat.title">Chat History</h4>
                             <div>
-                                <button id="refresh-chats" class="btn btn-outline-secondary btn-sm">
+                                <button id="import-whatsapp-history" class="btn btn-outline-primary btn-sm">
+                                    <i class="bi bi-download"></i> <span data-i18n="chat.import_whatsapp">Import WhatsApp History</span>
+                                </button>
+                                <button id="refresh-chats" class="btn btn-outline-secondary btn-sm ms-2">
                                     <i class="bi bi-arrow-clockwise"></i> <span data-i18n="button.refresh">Refresh</span>
                                 </button>
                                 <button id="clear-all-chats" class="btn btn-outline-danger btn-sm ms-2">
@@ -1486,6 +1489,86 @@ Instructions:
         </div>
     </div>
     
+    <!-- WhatsApp History Import Modal -->
+    <div class="modal fade" id="whatsappImportModal" tabindex="-1" aria-labelledby="whatsappImportModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header bg-primary text-white">
+                    <h5 class="modal-title" id="whatsappImportModalLabel">
+                        <i class="bi bi-whatsapp me-2"></i><span data-i18n="chat.import_whatsapp_title">Import WhatsApp Chat History</span>
+                    </h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="alert alert-info">
+                        <i class="bi bi-info-circle me-2"></i>
+                        <span data-i18n="chat.import_info">Import messages from your WhatsApp chats within a specific date range. This will fetch messages directly from WhatsApp and save them to your chat history.</span>
+                    </div>
+                    
+                    <form id="whatsapp-import-form">
+                        <!-- Date Range Selection -->
+                        <div class="row mb-3">
+                            <div class="col-md-6">
+                                <label for="import-start-date" class="form-label" data-i18n="chat.start_date">Start Date:</label>
+                                <input type="date" class="form-control" id="import-start-date" required>
+                            </div>
+                            <div class="col-md-6">
+                                <label for="import-end-date" class="form-label" data-i18n="chat.end_date">End Date:</label>
+                                <input type="date" class="form-control" id="import-end-date" required>
+                            </div>
+                        </div>
+                        
+                        <!-- Chat Selection -->
+                        <div class="mb-3">
+                            <label for="import-chat-select" class="form-label" data-i18n="chat.select_chat">Select Chat:</label>
+                            <select class="form-select" id="import-chat-select" required>
+                                <option value="" data-i18n="chat.loading_chats">Loading available chats...</option>
+                            </select>
+                            <div class="form-text">
+                                <span data-i18n="chat.select_chat_help">Choose which WhatsApp chat to import messages from</span>
+                            </div>
+                        </div>
+                        
+                        <!-- Import Options -->
+                        <div class="mb-3">
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" id="import-media-messages" checked>
+                                <label class="form-check-label" for="import-media-messages" data-i18n="chat.include_media">
+                                    Include media messages
+                                </label>
+                            </div>
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" id="import-system-messages">
+                                <label class="form-check-label" for="import-system-messages" data-i18n="chat.include_system">
+                                    Include system messages (joins, leaves, etc.)
+                                </label>
+                            </div>
+                        </div>
+                        
+                        <!-- Progress Bar -->
+                        <div id="import-progress" class="mb-3" style="display: none;">
+                            <label class="form-label" data-i18n="chat.import_progress">Import Progress:</label>
+                            <div class="progress">
+                                <div class="progress-bar" role="progressbar" style="width: 0%" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100">0%</div>
+                            </div>
+                            <div class="mt-2">
+                                <small id="import-status" class="text-muted" data-i18n="chat.preparing_import">Preparing import...</small>
+                            </div>
+                        </div>
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+                        <i class="bi bi-x-circle me-1"></i> <span data-i18n="button.cancel">Cancel</span>
+                    </button>
+                    <button type="button" class="btn btn-primary" id="start-import-btn">
+                        <i class="bi bi-download me-1"></i> <span data-i18n="chat.start_import">Start Import</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+    
     <!-- Facebook Setup Guide Modal -->
     <div class="modal fade" id="facebookSetupGuideModal" tabindex="-1" aria-labelledby="facebookSetupGuideModalLabel" aria-hidden="true">
         <div class="modal-dialog modal-lg modal-dialog-scrollable">
@@ -1652,6 +1735,16 @@ Instructions:
     <script src="/js/branding.js"></script>
     <script src="/js/platforms.js"></script>
     <script src="/js/workflows.js"></script>
+    
+    <!-- Initialize WhatsApp Import functionality -->
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            // Initialize WhatsApp import functionality
+            if (typeof initializeWhatsAppImport === 'function') {
+                initializeWhatsAppImport();
+            }
+        });
+    </script>
     <!-- Drawflow JS for visual workflow editor -->
     <script src="https://unpkg.com/drawflow/dist/drawflow.min.js"></script>
     <script src="/js/workflowBuilder.js"></script>

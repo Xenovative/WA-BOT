@@ -2299,6 +2299,225 @@ app.post('/api/triggers', express.json(), (req, res) => {
   }
 });
 
+// WhatsApp Chat History Import API endpoints
+app.get('/api/whatsapp/chats', async (req, res) => {
+  try {
+    if (!global.client) {
+      return res.status(503).json({ 
+        success: false, 
+        error: 'WhatsApp client not available' 
+      });
+    }
+
+    // Check if client is ready
+    if (!global.client.info) {
+      return res.status(503).json({ 
+        success: false, 
+        error: 'WhatsApp client not ready' 
+      });
+    }
+
+    console.log('Fetching available WhatsApp chats...');
+    
+    // Get all chats from WhatsApp
+    const chats = await global.client.getChats();
+    
+    // Filter and format chats for the UI
+    const availableChats = chats
+      .filter(chat => {
+        // Include individual chats and groups
+        return chat.id._serialized && (chat.isGroup || !chat.isGroup);
+      })
+      .map(chat => ({
+        id: {
+          _serialized: chat.id._serialized
+        },
+        name: chat.name || chat.id.user || chat.id._serialized,
+        isGroup: chat.isGroup || false,
+        lastMessage: chat.lastMessage ? {
+          body: chat.lastMessage.body || '',
+          timestamp: chat.lastMessage.timestamp || 0
+        } : null
+      }))
+      .sort((a, b) => {
+        // Sort by last message timestamp, most recent first
+        const aTime = a.lastMessage?.timestamp || 0;
+        const bTime = b.lastMessage?.timestamp || 0;
+        return bTime - aTime;
+      })
+      .slice(0, 50); // Limit to 50 most recent chats
+
+    console.log(`Found ${availableChats.length} available chats`);
+    
+    res.json({ 
+      success: true, 
+      chats: availableChats 
+    });
+    
+  } catch (error) {
+    console.error('Error fetching WhatsApp chats:', error);
+    res.status(500).json({ 
+      success: false, 
+      error: error.message 
+    });
+  }
+});
+
+app.post('/api/whatsapp/import-history', express.json(), async (req, res) => {
+  try {
+    const { chatId, startDate, endDate, includeMedia, includeSystem } = req.body;
+    
+    // Validate required parameters
+    if (!chatId || !startDate || !endDate) {
+      return res.status(400).json({
+        success: false,
+        error: 'Missing required parameters: chatId, startDate, endDate'
+      });
+    }
+
+    if (!global.client) {
+      return res.status(503).json({
+        success: false,
+        error: 'WhatsApp client not available'
+      });
+    }
+
+    // Check if client is ready
+    if (!global.client.info) {
+      return res.status(503).json({
+        success: false,
+        error: 'WhatsApp client not ready'
+      });
+    }
+
+    console.log(`Starting WhatsApp history import for chat ${chatId} from ${startDate} to ${endDate}`);
+    
+    // Parse dates
+    const start = new Date(startDate);
+    const end = new Date(endDate);
+    end.setHours(23, 59, 59, 999); // Include the entire end date
+    
+    // Get the chat
+    const chat = await global.client.getChatById(chatId);
+    if (!chat) {
+      return res.status(404).json({
+        success: false,
+        error: 'Chat not found'
+      });
+    }
+
+    console.log(`Fetching messages for chat: ${chat.name || chatId}`);
+    
+    // Fetch messages from the chat
+    // Note: WhatsApp Web.js has limitations on fetching historical messages
+    // It can only fetch messages that are loaded in the chat history
+    let messages = [];
+    let searchOptions = {
+      limit: 1000, // Fetch up to 1000 messages
+      fromMe: null // Include messages from both directions
+    };
+
+    try {
+      // Fetch messages from the chat
+      messages = await chat.fetchMessages(searchOptions);
+      console.log(`Fetched ${messages.length} messages from WhatsApp`);
+    } catch (fetchError) {
+      console.error('Error fetching messages from WhatsApp:', fetchError);
+      return res.status(500).json({
+        success: false,
+        error: 'Failed to fetch messages from WhatsApp: ' + fetchError.message
+      });
+    }
+
+    // Filter messages by date range and options
+    const filteredMessages = messages.filter(msg => {
+      const msgDate = new Date(msg.timestamp * 1000);
+      
+      // Check date range
+      if (msgDate < start || msgDate > end) {
+        return false;
+      }
+      
+      // Filter by message type based on options
+      if (!includeSystem && (msg.type === 'notification' || msg.type === 'system')) {
+        return false;
+      }
+      
+      if (!includeMedia && msg.hasMedia) {
+        return false;
+      }
+      
+      return true;
+    });
+
+    console.log(`Filtered to ${filteredMessages.length} messages within date range`);
+
+    // Import messages into chat history
+    let importedCount = 0;
+    const chatHandler = global.chatHandler;
+    
+    if (!chatHandler) {
+      return res.status(500).json({
+        success: false,
+        error: 'Chat handler not available'
+      });
+    }
+
+    // Sort messages by timestamp (oldest first)
+    filteredMessages.sort((a, b) => a.timestamp - b.timestamp);
+
+    for (const msg of filteredMessages) {
+      try {
+        const timestamp = new Date(msg.timestamp * 1000);
+        let content = msg.body || '';
+        
+        // Handle different message types
+        if (msg.hasMedia) {
+          content = `[MEDIA: ${msg.type}] ${content}`;
+        } else if (msg.type === 'notification') {
+          content = `[NOTIFICATION] ${content}`;
+        } else if (msg.type === 'system') {
+          content = `[SYSTEM] ${content}`;
+        }
+        
+        // Determine role (user or assistant)
+        const role = msg.fromMe ? 'assistant' : 'user';
+        
+        // Add message to chat history with timestamp
+        chatHandler.addMessage(chatId, role, content, 'whatsapp', timestamp);
+        importedCount++;
+        
+      } catch (msgError) {
+        console.error('Error importing message:', msgError);
+        // Continue with other messages
+      }
+    }
+
+    // Save the updated chat history
+    try {
+      await chatHandler.saveConversations();
+    } catch (saveError) {
+      console.error('Error saving chat history:', saveError);
+    }
+
+    console.log(`Successfully imported ${importedCount} messages`);
+    
+    res.json({
+      success: true,
+      imported: importedCount,
+      total: filteredMessages.length,
+      message: `Successfully imported ${importedCount} messages`
+    });
+    
+  } catch (error) {
+    console.error('Error importing WhatsApp history:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
 // For any non-API routes, serve the index.html file
 app.get('*', (req, res, next) => {
   // Skip workflow paths - let Node-RED handle them

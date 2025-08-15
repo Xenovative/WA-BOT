@@ -38,8 +38,9 @@ class ChatHandler {
    * @param {string} role - 'user' or 'assistant'
    * @param {string} content - Message content
    * @param {string} [platform] - Platform identifier ('telegram', 'whatsapp', etc.)
+   * @param {Date|string} [customTimestamp] - Custom timestamp for imported messages
    */
-  addMessage(chatId, role, content, platform) {
+  addMessage(chatId, role, content, platform, customTimestamp) {
     try {
       const platformChatId = platform ? this.getPlatformChatId(platform, chatId) : chatId;
       
@@ -52,7 +53,14 @@ class ChatHandler {
       this.conversations.set(platformChatId, existingMessages);
       
       const conversation = this.conversations.get(platformChatId);
-      const timestamp = new Date().toISOString();
+      
+      // Use custom timestamp if provided, otherwise use current time
+      let timestamp;
+      if (customTimestamp) {
+        timestamp = customTimestamp instanceof Date ? customTimestamp.toISOString() : customTimestamp;
+      } else {
+        timestamp = new Date().toISOString();
+      }
       
       const message = { 
         role, 
