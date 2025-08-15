@@ -486,6 +486,9 @@
                                 <button id="import-whatsapp-history" class="btn btn-outline-primary btn-sm">
                                     <i class="bi bi-download"></i> <span data-i18n="chat.import_whatsapp">Import WhatsApp History</span>
                                 </button>
+                                <button id="export-csv" class="btn btn-outline-info btn-sm ms-2" onclick="exportChatIndexCSV()">
+                                    <i class="bi bi-file-earmark-spreadsheet"></i> <span data-i18n="chats.export_csv">Export CSV</span>
+                                </button>
                                 <button id="refresh-chats" class="btn btn-outline-secondary btn-sm ms-2">
                                     <i class="bi bi-arrow-clockwise"></i> <span data-i18n="button.refresh">Refresh</span>
                                 </button>
@@ -1520,12 +1523,25 @@ Instructions:
                         
                         <!-- Chat Selection -->
                         <div class="mb-3">
-                            <label for="import-chat-select" class="form-label" data-i18n="chat.select_chat">Select Chat:</label>
-                            <select class="form-select" id="import-chat-select" required>
-                                <option value="" data-i18n="chat.loading_chats">Loading available chats...</option>
-                            </select>
-                            <div class="form-text">
-                                <span data-i18n="chat.select_chat_help">Choose which WhatsApp chat to import messages from</span>
+                            <div class="d-flex justify-content-between align-items-center mb-2">
+                                <label class="form-label mb-0" data-i18n="chat.select_chats">Select Chats:</label>
+                                <div>
+                                    <button type="button" class="btn btn-sm btn-outline-primary me-2" id="select-all-chats">
+                                        <i class="bi bi-check-all"></i> <span data-i18n="chat.select_all">Select All</span>
+                                    </button>
+                                    <button type="button" class="btn btn-sm btn-outline-secondary" id="deselect-all-chats">
+                                        <i class="bi bi-x-square"></i> <span data-i18n="chat.deselect_all">Deselect All</span>
+                                    </button>
+                                </div>
+                            </div>
+                            <div class="border rounded p-3" style="max-height: 300px; overflow-y: auto;" id="chat-selection-container">
+                                <div class="text-center text-muted py-3" id="chat-loading">
+                                    <i class="bi bi-hourglass-split me-2"></i>
+                                    <span data-i18n="chat.loading_chats">Loading available chats...</span>
+                                </div>
+                            </div>
+                            <div class="form-text mt-2">
+                                <span data-i18n="chat.select_chats_help">Choose which WhatsApp chats to import messages from. Only chats with messages in the selected date range will be shown.</span>
                             </div>
                         </div>
                         

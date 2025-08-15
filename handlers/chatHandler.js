@@ -218,6 +218,89 @@ class ChatHandler {
       throw error; // Re-throw to be handled by the API
     }
   }
+
+  /**
+   * Export chat index to CSV format
+   * @returns {string} CSV formatted string of all chats
+   */
+  exportChatIndexToCSV() {
+    try {
+      const chats = this.getAllChats();
+      
+      if (!chats || chats.length === 0) {
+        return 'Chat ID,Platform,Last Message,Message Count,Last Active,Created Date\n';
+      }
+
+      // CSV headers
+      const headers = [
+        'Chat ID',
+        'Platform', 
+        'Last Message',
+        'Message Count',
+        'Last Active',
+        'Created Date'
+      ];
+
+      // Helper function to escape CSV values
+      const escapeCSV = (value) => {
+        if (value === null || value === undefined) return '';
+        const str = String(value);
+        // Escape quotes and wrap in quotes if contains comma, quote, or newline
+        if (str.includes(',') || str.includes('"') || str.includes('\n') || str.includes('\r')) {
+          return '"' + str.replace(/"/g, '""') + '"';
+        }
+        return str;
+      };
+
+      // Helper function to extract platform from chat ID
+      const extractPlatform = (chatId) => {
+        if (chatId.startsWith('whatsapp:')) return 'WhatsApp';
+        if (chatId.startsWith('telegram:')) return 'Telegram';
+        if (chatId.startsWith('facebook:')) return 'Facebook';
+        if (chatId.startsWith('instagram:')) return 'Instagram';
+        return 'Unknown';
+      };
+
+      // Helper function to format date
+      const formatDate = (timestamp) => {
+        if (!timestamp) return '';
+        try {
+          return new Date(timestamp).toISOString().split('T')[0]; // YYYY-MM-DD format
+        } catch (error) {
+          return '';
+        }
+      };
+
+      // Helper function to truncate message preview
+      const truncateMessage = (message, maxLength = 100) => {
+        if (!message) return '';
+        const cleaned = message.replace(/\n/g, ' ').replace(/\r/g, ' ').trim();
+        return cleaned.length > maxLength ? cleaned.substring(0, maxLength) + '...' : cleaned;
+      };
+
+      // Build CSV rows
+      const csvRows = [headers.join(',')];
+      
+      chats.forEach(chat => {
+        const row = [
+          escapeCSV(chat.id || ''),
+          escapeCSV(extractPlatform(chat.id || '')),
+          escapeCSV(truncateMessage(chat.preview)),
+          escapeCSV(chat.messageCount || 0),
+          escapeCSV(formatDate(chat.timestamp)),
+          escapeCSV(formatDate(chat.createdAt || chat.timestamp))
+        ];
+        csvRows.push(row.join(','));
+      });
+
+      console.log(`[ChatHandler] Exported ${chats.length} chats to CSV format`);
+      return csvRows.join('\n');
+      
+    } catch (error) {
+      console.error('Error exporting chat index to CSV:', error);
+      throw error;
+    }
+  }
   
   /**
    * Get the path for a chat's history file

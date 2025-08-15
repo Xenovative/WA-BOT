@@ -104,8 +104,10 @@ class I18n {
             
             // Chat History
             'chat.title': 'Chat History',
-            'chat.search_placeholder': 'Search chats...',
-            'chat.no_chats': 'No chats found',
+            'chats.refresh': 'Refresh',
+            'chats.clear_all': 'Clear All',
+            'chats.export_csv': 'Export CSV',
+            'chats.no_chats': 'No chat histories found.',
             'chat.loading': 'Loading chats...',
             'chat.send_message': 'Send Message',
             'chat.message_placeholder': 'Enter your message...',
@@ -148,9 +150,14 @@ class I18n {
             'chat.import_info': 'Import messages from your WhatsApp chats within a specific date range. This will fetch messages directly from WhatsApp and save them to your chat history.',
             'chat.start_date': 'Start Date',
             'chat.end_date': 'End Date',
-            'chat.select_chat': 'Select Chat',
-            'chat.loading_chats': 'Loading available chats...',
-            'chat.select_chat_help': 'Choose which WhatsApp chat to import messages from',
+            'whatsapp_import.select_chat': 'Select Chat',
+            'whatsapp_import.select_chats': 'Select Chats',
+            'whatsapp_import.select_all': 'Select All',
+            'whatsapp_import.deselect_all': 'Deselect All',
+            'whatsapp_import.select_chats_help': 'Choose which WhatsApp chats to import messages from. Only chats with messages in the selected date range will be shown.',
+            'whatsapp_import.loading_chats': 'Loading available chats...',
+            'whatsapp_import.no_chats': 'No chats available',
+            'whatsapp_import.no_chats_in_range': 'No chats found with messages in the selected date range',
             'chat.include_media': 'Include media messages',
             'chat.include_system': 'Include system messages (joins, leaves, etc.)',
             'chat.import_progress': 'Import Progress',
@@ -449,6 +456,10 @@ class I18n {
             
             // Chat History
             'chat.title': '聊天記錄',
+            'chats.refresh': '刷新',
+            'chats.clear_all': '清除全部',
+            'chats.export_csv': '匯出 CSV',
+            'chats.no_chats': '未找到聊天記錄',
             'chat.search_placeholder': '搜尋聊天...',
             'chat.no_chats': '找不到聊天記錄',
             'chat.loading': '載入聊天中...',
@@ -825,6 +836,10 @@ class I18n {
             
             // Chat History
             'chat.title': '聊天记录',
+            'chats.refresh': '刷新',
+            'chats.clear_all': '清除全部',
+            'chats.export_csv': '导出 CSV',
+            'chats.no_chats': '未找到聊天记录',
             'chat.search_placeholder': '搜索聊天...',
             'chat.no_chats': '未找到聊天记录',
             'chat.loading': '加载聊天中...',

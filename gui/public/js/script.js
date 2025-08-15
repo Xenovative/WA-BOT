@@ -2627,13 +2627,32 @@ function initializeWhatsAppImport() {
       startImportBtn.addEventListener('click', startWhatsAppImport);
     }
     
+    // Set up select all/deselect all buttons
+    const selectAllBtn = document.getElementById('select-all-chats');
+    const deselectAllBtn = document.getElementById('deselect-all-chats');
+    
+    if (selectAllBtn) {
+      selectAllBtn.addEventListener('click', selectAllChats);
+    }
+    if (deselectAllBtn) {
+      deselectAllBtn.addEventListener('click', deselectAllChats);
+    }
+    
+    // Set up date change listeners for filtering
+    const startDateInput = document.getElementById('import-start-date');
+    const endDateInput = document.getElementById('import-end-date');
+    
+    if (startDateInput) {
+      startDateInput.addEventListener('change', onDateRangeChange);
+    }
+    if (endDateInput) {
+      endDateInput.addEventListener('change', onDateRangeChange);
+    }
+    
     // Set default dates (last 7 days)
     const endDate = new Date();
     const startDate = new Date();
     startDate.setDate(endDate.getDate() - 7);
-    
-    const startDateInput = document.getElementById('import-start-date');
-    const endDateInput = document.getElementById('import-end-date');
     
     if (startDateInput) {
       startDateInput.value = startDate.toISOString().split('T')[0];
@@ -2705,50 +2724,137 @@ function onImportModalHidden() {
 
 // Load available WhatsApp chats
 async function loadAvailableChats() {
-  const chatSelect = document.getElementById('import-chat-select');
-  if (!chatSelect) return;
-  
   try {
-    chatSelect.innerHTML = `<option value="">${window.i18n?.t('chat.fetching_chats') || 'Fetching available chats...'}</option>`;
-    chatSelect.disabled = true;
+    console.log('Loading available WhatsApp chats...');
     
     const response = await fetch('/api/whatsapp/chats');
     if (!response.ok) {
-      throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      throw new Error(`Failed to fetch chats: ${response.statusText}`);
     }
     
-    const data = await response.json();
-    availableChats = data.chats || [];
-    
-    // Populate chat select
-    chatSelect.innerHTML = '';
-    
-    if (availableChats.length === 0) {
-      chatSelect.innerHTML = `<option value="">${window.i18n?.t('chat.no_chats') || 'No chats available'}</option>`;
-      return;
+    const result = await response.json();
+    if (!result.success) {
+      throw new Error(result.error || 'Failed to load chats');
     }
     
-    // Add default option
-    chatSelect.innerHTML = `<option value="">${window.i18n?.t('chat.select_chat') || 'Select Chat'}</option>`;
+    availableChats = result.chats || [];
+    console.log(`Loaded ${availableChats.length} available chats`);
     
-    // Add chat options
-    availableChats.forEach(chat => {
-      const option = document.createElement('option');
-      option.value = chat.id._serialized;
-      option.textContent = chat.name || chat.id._serialized;
-      chatSelect.appendChild(option);
-    });
-    
-    chatSelect.disabled = false;
+    // Filter chats based on date range
+    filterAndDisplayChats();
     
   } catch (error) {
     console.error('Error loading available chats:', error);
-    chatSelect.innerHTML = `<option value="">${window.i18n?.t('chat.import_failed') || 'Failed to load chats'}</option>`;
+    showToast(`Failed to load chats: ${error.message}`, 'error');
     
-    showToast(
-      window.i18n?.t('chat.import_failed') || 'Failed to load available chats',
-      'danger'
-    );
+    const container = document.getElementById('chat-selection-container');
+    if (container) {
+      container.innerHTML = `
+        <div class="text-center text-danger py-3">
+          <i class="bi bi-exclamation-triangle me-2"></i>
+          Error loading chats: ${error.message}
+        </div>
+      `;
+    }
+  }
+}
+
+// Filter and display chats based on date range
+function filterAndDisplayChats() {
+  const container = document.getElementById('chat-selection-container');
+  if (!container) return;
+  
+  const startDateInput = document.getElementById('import-start-date');
+  const endDateInput = document.getElementById('import-end-date');
+  
+  if (!startDateInput || !endDateInput || !startDateInput.value || !endDateInput.value) {
+    // If no date range is set, show all chats
+    displayChatSelection(availableChats);
+    return;
+  }
+  
+  const startDate = new Date(startDateInput.value);
+  const endDate = new Date(endDateInput.value);
+  endDate.setHours(23, 59, 59, 999); // Include the entire end date
+  
+  // Filter chats that have messages in the date range
+  // For now, we'll show all chats since we don't have message timestamps in the chat list
+  // In a real implementation, you might want to fetch message counts per chat for the date range
+  const filteredChats = availableChats.filter(chat => {
+    if (!chat.lastMessage || !chat.lastMessage.timestamp) {
+      return true; // Include chats without timestamp info
+    }
+    
+    const lastMessageDate = new Date(chat.lastMessage.timestamp * 1000);
+    return lastMessageDate >= startDate && lastMessageDate <= endDate;
+  });
+  
+  displayChatSelection(filteredChats);
+}
+
+// Display chat selection checkboxes
+function displayChatSelection(chats) {
+  const container = document.getElementById('chat-selection-container');
+  if (!container) return;
+  
+  if (chats.length === 0) {
+    container.innerHTML = `
+      <div class="text-center text-muted py-3">
+        <i class="bi bi-chat-square-text me-2"></i>
+        <span data-i18n="whatsapp_import.no_chats_in_range">No chats found with messages in the selected date range</span>
+      </div>
+    `;
+    return;
+  }
+  
+  container.innerHTML = '';
+  
+  chats.forEach(chat => {
+    const chatItem = document.createElement('div');
+    chatItem.className = 'form-check mb-2 p-2 border rounded';
+    chatItem.innerHTML = `
+      <input class="form-check-input chat-checkbox" type="checkbox" value="${chat.id._serialized}" id="chat-${chat.id._serialized}">
+      <label class="form-check-label d-flex justify-content-between align-items-center w-100" for="chat-${chat.id._serialized}">
+        <div>
+          <div class="fw-bold">${escapeHtml(chat.name)} ${chat.isGroup ? '<span class="badge bg-secondary">Group</span>' : ''}</div>
+          <small class="text-muted">${chat.lastMessage ? escapeHtml(chat.lastMessage.body || '').substring(0, 50) + '...' : 'No recent messages'}</small>
+        </div>
+        <small class="text-muted">
+          ${chat.lastMessage && chat.lastMessage.timestamp ? new Date(chat.lastMessage.timestamp * 1000).toLocaleDateString() : ''}
+        </small>
+      </label>
+    `;
+    container.appendChild(chatItem);
+  });
+}
+
+// Helper function to escape HTML
+function escapeHtml(text) {
+  const div = document.createElement('div');
+  div.textContent = text;
+  return div.innerHTML;
+}
+
+// Select all chats
+function selectAllChats() {
+  const checkboxes = document.querySelectorAll('.chat-checkbox');
+  checkboxes.forEach(checkbox => {
+    checkbox.checked = true;
+  });
+}
+
+// Deselect all chats
+function deselectAllChats() {
+  const checkboxes = document.querySelectorAll('.chat-checkbox');
+  checkboxes.forEach(checkbox => {
+    checkbox.checked = false;
+  });
+}
+
+// Handle date range change
+function onDateRangeChange() {
+  if (availableChats.length > 0) {
+    filterAndDisplayChats();
   }
 }
 
@@ -2764,11 +2870,17 @@ async function startWhatsAppImport() {
   // Validate form
   const startDate = document.getElementById('import-start-date')?.value;
   const endDate = document.getElementById('import-end-date')?.value;
-  const chatId = document.getElementById('import-chat-select')?.value;
   
-  if (!startDate || !endDate || !chatId) {
+  // Get selected chats
+  const selectedChats = [];
+  const checkboxes = document.querySelectorAll('.chat-checkbox:checked');
+  checkboxes.forEach(checkbox => {
+    selectedChats.push(checkbox.value);
+  });
+  
+  if (!startDate || !endDate || selectedChats.length === 0) {
     showToast(
-      window.i18n?.t('chat.import_failed') || 'Please fill in all required fields',
+      'Please fill in all required fields and select at least one chat',
       'warning'
     );
     return;
@@ -2777,7 +2889,7 @@ async function startWhatsAppImport() {
   // Validate date range
   if (new Date(startDate) > new Date(endDate)) {
     showToast(
-      window.i18n?.t('chat.import_failed') || 'Start date must be before end date',
+      'Start date must be before end date',
       'warning'
     );
     return;
@@ -2800,42 +2912,81 @@ async function startWhatsAppImport() {
     const includeMedia = document.getElementById('import-media-messages')?.checked || false;
     const includeSystem = document.getElementById('import-system-messages')?.checked || false;
     
-    const importData = {
-      chatId,
-      startDate,
-      endDate,
-      includeMedia,
-      includeSystem
-    };
+    console.log(`Starting WhatsApp import for ${selectedChats.length} chats`);
+    updateImportProgress(5, `Importing ${selectedChats.length} chats...`);
     
-    console.log('Starting WhatsApp import with data:', importData);
-    updateImportProgress(10, window.i18n?.t('chat.preparing_import') || 'Preparing import...');
+    let totalImported = 0;
+    let successCount = 0;
+    let failedChats = [];
     
-    // Start import
-    const response = await fetch('/api/whatsapp/import-history', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify(importData)
-    });
-    
-    if (!response.ok) {
-      throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+    // Import each selected chat
+    for (let i = 0; i < selectedChats.length; i++) {
+      const chatId = selectedChats[i];
+      const chatName = availableChats.find(c => c.id._serialized === chatId)?.name || chatId;
+      
+      try {
+        const progress = Math.round(((i + 1) / selectedChats.length) * 90) + 5;
+        updateImportProgress(progress, `Importing chat: ${chatName} (${i + 1}/${selectedChats.length})`);
+        
+        const importData = {
+          chatId,
+          startDate,
+          endDate,
+          includeMedia,
+          includeSystem
+        };
+        
+        console.log(`Importing chat ${i + 1}/${selectedChats.length}: ${chatName}`);
+        
+        // Start import for this chat
+        const response = await fetch('/api/whatsapp/import-history', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify(importData)
+        });
+        
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
+        
+        const result = await response.json();
+        
+        if (result.success) {
+          totalImported += result.imported || 0;
+          successCount++;
+          console.log(`Successfully imported ${result.imported || 0} messages from ${chatName}`);
+        } else {
+          throw new Error(result.error || 'Import failed');
+        }
+        
+      } catch (chatError) {
+        console.error(`Failed to import chat ${chatName}:`, chatError);
+        failedChats.push({ name: chatName, error: chatError.message });
+      }
     }
     
-    const result = await response.json();
+    updateImportProgress(100, 'Import completed');
     
-    if (result.success) {
-      updateImportProgress(100, window.i18n?.t('chat.import_complete') || 'Import completed');
-      
-      showToast(
-        `${window.i18n?.t('chat.import_success') || 'Chat history imported successfully'} (${result.imported || 0} messages)`,
-        'success'
-      );
-      
-      // Refresh chat list
-      if (typeof loadChats === 'function') {
+    // Show results
+    if (successCount > 0) {
+      let message = `Successfully imported ${totalImported} messages from ${successCount} chat(s)`;
+      if (failedChats.length > 0) {
+        message += `. Failed to import ${failedChats.length} chat(s)`;
+      }
+      showToast(message, successCount === selectedChats.length ? 'success' : 'warning');
+    } else {
+      showToast('Failed to import any chats', 'error');
+    }
+    
+    // Show detailed error info if needed
+    if (failedChats.length > 0) {
+      console.error('Failed chats:', failedChats);
+    }
+    
+    // Refresh chat list
+    if (typeof loadChats === 'function') {
         loadChats();
       }
       
@@ -2844,10 +2995,6 @@ async function startWhatsAppImport() {
         whatsappImportModal.hide();
       }, 2000);
       
-    } else {
-      throw new Error(result.error || 'Import failed');
-    }
-    
   } catch (error) {
     console.error('Error importing WhatsApp history:', error);
     updateImportProgress(0, window.i18n?.t('chat.import_failed') || 'Import failed');
@@ -2903,11 +3050,53 @@ function cancelWhatsAppImport() {
   );
 }
 
+// Export chat index to CSV
+function exportChatIndexCSV() {
+  try {
+    // Show loading state
+    const exportBtn = document.getElementById('export-csv');
+    const originalText = exportBtn.innerHTML;
+    exportBtn.disabled = true;
+    exportBtn.innerHTML = '<i class="bi bi-hourglass-split"></i> Exporting...';
+    
+    // Create a temporary link to trigger download
+    const link = document.createElement('a');
+    link.href = '/api/chats/export/csv';
+    link.download = `wa-bot-chat-index-${new Date().toISOString().split('T')[0]}.csv`;
+    
+    // Trigger download
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    
+    // Show success message
+    showToast('CSV export started successfully', 'success');
+    
+    // Reset button after a short delay
+    setTimeout(() => {
+      exportBtn.disabled = false;
+      exportBtn.innerHTML = originalText;
+    }, 2000);
+    
+  } catch (error) {
+    console.error('Error exporting CSV:', error);
+    showToast('Failed to export CSV: ' + error.message, 'error');
+    
+    // Reset button on error
+    const exportBtn = document.getElementById('export-csv');
+    if (exportBtn) {
+      exportBtn.disabled = false;
+      exportBtn.innerHTML = '<i class="bi bi-file-earmark-spreadsheet"></i> <span data-i18n="chats.export_csv">Export CSV</span>';
+    }
+  }
+}
+
 // Make WhatsApp import functions globally available
 window.initializeWhatsAppImport = initializeWhatsAppImport;
 window.openWhatsAppImportModal = openWhatsAppImportModal;
 window.startWhatsAppImport = startWhatsAppImport;
 window.cancelWhatsAppImport = cancelWhatsAppImport;
+window.exportChatIndexCSV = exportChatIndexCSV;
 
 window.testRefreshButton = function() {
   console.log('Testing refresh button manually...');

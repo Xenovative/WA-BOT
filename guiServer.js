@@ -2518,6 +2518,40 @@ app.post('/api/whatsapp/import-history', express.json(), async (req, res) => {
   }
 });
 
+// Export chat index to CSV
+app.get('/api/chats/export/csv', (req, res) => {
+  try {
+    if (!global.chatHandler) {
+      return res.status(500).json({
+        success: false,
+        error: 'Chat handler not available'
+      });
+    }
+
+    console.log('Exporting chat index to CSV...');
+    
+    const csvData = global.chatHandler.exportChatIndexToCSV();
+    
+    // Set headers for CSV download
+    const timestamp = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
+    const filename = `wa-bot-chat-index-${timestamp}.csv`;
+    
+    res.setHeader('Content-Type', 'text/csv');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    res.setHeader('Cache-Control', 'no-cache');
+    
+    console.log(`Successfully exported chat index CSV: ${filename}`);
+    res.send(csvData);
+    
+  } catch (error) {
+    console.error('Error exporting chat index to CSV:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
 // For any non-API routes, serve the index.html file
 app.get('*', (req, res, next) => {
   // Skip workflow paths - let Node-RED handle them
