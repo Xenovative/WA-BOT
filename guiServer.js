@@ -2663,16 +2663,21 @@ app.get('/api/chats/export/csv', (req, res) => {
     
     const csvData = global.chatHandler.exportChatIndexToCSV();
     
-    // Set headers for CSV download
+    // Set headers for CSV download with proper UTF-8 encoding
     const timestamp = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
     const filename = `wa-bot-chat-index-${timestamp}.csv`;
     
-    res.setHeader('Content-Type', 'text/csv');
-    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    // Add UTF-8 BOM (Byte Order Mark) for proper Excel compatibility
+    const utf8BOM = '\uFEFF';
+    const csvWithBOM = utf8BOM + csvData;
+    
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename*=UTF-8''${encodeURIComponent(filename)}`);
     res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Content-Encoding', 'identity');
     
     console.log(`Successfully exported chat index CSV: ${filename}`);
-    res.send(csvData);
+    res.send(Buffer.from(csvWithBOM, 'utf8'));
     
   } catch (error) {
     console.error('Error exporting chat index to CSV:', error);

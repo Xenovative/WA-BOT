@@ -241,15 +241,22 @@ class ChatHandler {
         'Created Date'
       ];
 
-      // Helper function to escape CSV values
+      // Helper function to escape CSV values with proper UTF-8 handling
       const escapeCSV = (value) => {
         if (value === null || value === undefined) return '';
-        const str = String(value);
-        // Escape quotes and wrap in quotes if contains comma, quote, or newline
-        if (str.includes(',') || str.includes('"') || str.includes('\n') || str.includes('\r')) {
-          return '"' + str.replace(/"/g, '""') + '"';
-        }
-        return str;
+        let str = String(value);
+        
+        // Normalize Unicode characters to ensure consistent encoding
+        str = str.normalize('NFC');
+        
+        // Replace problematic characters that might cause issues
+        str = str.replace(/[\r\n\t]/g, ' '); // Replace line breaks and tabs with spaces
+        str = str.replace(/\s+/g, ' '); // Collapse multiple spaces
+        str = str.trim();
+        
+        // Always wrap in quotes for CSV safety with UTF-8 content
+        // This ensures proper handling of international characters, emojis, etc.
+        return '"' + str.replace(/"/g, '""') + '"';
       };
 
       // Helper function to extract platform from chat ID
