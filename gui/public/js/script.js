@@ -2957,6 +2957,16 @@ async function startWhatsAppImport() {
           totalImported += result.imported || 0;
           successCount++;
           console.log(`Successfully imported ${result.imported || 0} messages from ${chatName}`);
+          
+          // Log warnings if any
+          if (result.warnings && result.warnings.length > 0) {
+            console.warn(`Warnings for ${chatName}:`, result.warnings);
+            
+            // Show warning for empty imports
+            if (result.imported === 0) {
+              console.warn(`No messages imported from ${chatName}. Fetched: ${result.fetched || 0}, Filtered: ${result.total || 0}`);
+            }
+          }
         } else {
           throw new Error(result.error || 'Import failed');
         }

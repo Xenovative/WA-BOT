@@ -2410,22 +2410,98 @@ app.post('/api/whatsapp/import-history', express.json(), async (req, res) => {
     
     // Fetch messages from the chat
     // Note: WhatsApp Web.js has limitations on fetching historical messages
-    // It can only fetch messages that are loaded in the chat history
+    // It can only fetch messages that are currently loaded in the WhatsApp Web interface
     let messages = [];
-    let searchOptions = {
-      limit: 1000, // Fetch up to 1000 messages
-      fromMe: null // Include messages from both directions
-    };
-
+    let totalFetched = 0;
+    
     try {
-      // Fetch messages from the chat
-      messages = await chat.fetchMessages(searchOptions);
-      console.log(`Fetched ${messages.length} messages from WhatsApp`);
+      // Try to fetch messages in batches to get more history
+      const batchSize = 50;
+      let lastMessage = null;
+      let attempts = 0;
+      const maxAttempts = 20; // Limit attempts to prevent infinite loops
+      
+      console.log(`Attempting to fetch historical messages in batches...`);
+      
+      while (attempts < maxAttempts) {
+        const searchOptions = {
+          limit: batchSize,
+          fromMe: null
+        };
+        
+        let batchMessages = [];
+        
+        try {
+          batchMessages = await chat.fetchMessages(searchOptions);
+          console.log(`Batch ${attempts + 1}: Fetched ${batchMessages.length} messages`);
+          
+          if (batchMessages.length === 0) {
+            console.log('No more messages available, stopping fetch');
+            break;
+          }
+          
+          // Check if we got the same messages as before (indicates we've reached the limit)
+          if (lastMessage && batchMessages.length > 0) {
+            const firstNewMessage = batchMessages[batchMessages.length - 1];
+            if (firstNewMessage.id._serialized === lastMessage.id._serialized) {
+              console.log('Reached the limit of available messages');
+              break;
+            }
+          }
+          
+          // Add new messages to our collection
+          const newMessages = messages.length === 0 ? batchMessages : 
+            batchMessages.filter(msg => !messages.some(existing => existing.id._serialized === msg.id._serialized));
+          
+          messages = messages.concat(newMessages);
+          totalFetched += newMessages.length;
+          
+          if (batchMessages.length > 0) {
+            lastMessage = batchMessages[batchMessages.length - 1];
+          }
+          
+          // If we got fewer messages than requested, we've likely reached the end
+          if (batchMessages.length < batchSize) {
+            console.log('Received fewer messages than requested, likely reached end of available history');
+            break;
+          }
+          
+          attempts++;
+          
+          // Small delay between batches to avoid overwhelming WhatsApp
+          await new Promise(resolve => setTimeout(resolve, 100));
+          
+        } catch (batchError) {
+          console.error(`Error in batch ${attempts + 1}:`, batchError);
+          break;
+        }
+      }
+      
+      console.log(`Total fetched: ${totalFetched} messages from ${attempts} batches`);
+      
+      // If we still have no messages, try a simple fetch as fallback
+      if (messages.length === 0) {
+        console.log('Fallback: Attempting simple message fetch...');
+        messages = await chat.fetchMessages({ limit: 100 });
+        console.log(`Fallback fetch returned ${messages.length} messages`);
+      }
+      
     } catch (fetchError) {
       console.error('Error fetching messages from WhatsApp:', fetchError);
+      
+      // Provide more detailed error information
+      let errorMessage = 'Failed to fetch messages from WhatsApp';
+      if (fetchError.message.includes('not loaded')) {
+        errorMessage += '. The chat may not be loaded in WhatsApp Web. Please open the chat in WhatsApp Web first.';
+      } else if (fetchError.message.includes('timeout')) {
+        errorMessage += '. Request timed out. The chat may have too many messages or WhatsApp is slow to respond.';
+      } else {
+        errorMessage += ': ' + fetchError.message;
+      }
+      
       return res.status(500).json({
         success: false,
-        error: 'Failed to fetch messages from WhatsApp: ' + fetchError.message
+        error: errorMessage
       });
     }
 
@@ -2463,6 +2539,21 @@ app.post('/api/whatsapp/import-history', express.json(), async (req, res) => {
       });
     }
 
+    // Always create/ensure the chat exists in the index, even if empty
+    const platformChatId = `whatsapp:${chatId}`;
+    
+    // Load existing chat or create empty one
+    let existingMessages = [];
+    try {
+      existingMessages = chatHandler.loadChat(platformChatId);
+    } catch (loadError) {
+      console.log(`Creating new empty chat entry for ${platformChatId}`);
+      existingMessages = [];
+    }
+    
+    // Ensure the chat is in memory and will be indexed
+    chatHandler.conversations.set(platformChatId, existingMessages);
+
     // Sort messages by timestamp (oldest first)
     filteredMessages.sort((a, b) => a.timestamp - b.timestamp);
 
@@ -2493,20 +2584,60 @@ app.post('/api/whatsapp/import-history', express.json(), async (req, res) => {
       }
     }
 
-    // Save the updated chat history
+    // If no messages were imported, add a placeholder entry to mark the chat as imported
+    if (importedCount === 0 && filteredMessages.length === 0) {
+      const now = new Date();
+      const importNote = `[IMPORT] Chat imported on ${now.toISOString().split('T')[0]} - No messages found in date range ${startDate} to ${endDate}`;
+      
+      try {
+        chatHandler.addMessage(chatId, 'system', importNote, 'whatsapp', now);
+        console.log(`Added import placeholder for empty chat: ${chatId}`);
+      } catch (placeholderError) {
+        console.error('Error adding import placeholder:', placeholderError);
+      }
+    }
+
+    // Always save the chat (even if empty) to ensure it appears in the index
     try {
-      await chatHandler.saveConversations();
+      const chatFile = chatHandler.getChatFilePath(platformChatId);
+      const conversation = chatHandler.conversations.get(platformChatId) || [];
+      const jsonContent = JSON.stringify(conversation, null, 2);
+      require('fs').writeFileSync(chatFile, jsonContent, 'utf8');
+      console.log(`Saved chat ${platformChatId} with ${conversation.length} messages`);
+      
+      // Update the chat index
+      chatHandler.updateChatIndex();
+      
     } catch (saveError) {
       console.error('Error saving chat history:', saveError);
     }
 
     console.log(`Successfully imported ${importedCount} messages`);
     
+    // Prepare response with additional context about WhatsApp Web.js limitations
+    let responseMessage = `Successfully imported ${importedCount} messages`;
+    let warnings = [];
+    
+    if (totalFetched === 0) {
+      warnings.push('No messages were available to fetch from WhatsApp Web. This chat may not be loaded in WhatsApp Web interface.');
+    } else if (filteredMessages.length === 0 && totalFetched > 0) {
+      warnings.push(`Found ${totalFetched} messages but none were in the selected date range (${startDate} to ${endDate}).`);
+    } else if (importedCount === 0 && filteredMessages.length > 0) {
+      warnings.push('Messages were found but failed to import to chat history.');
+    }
+    
+    // Add general WhatsApp Web.js limitation info if no messages were imported
+    if (importedCount === 0) {
+      warnings.push('WhatsApp Web.js can only access messages currently loaded in WhatsApp Web. To import more messages: 1) Open WhatsApp Web in browser, 2) Navigate to the chat, 3) Scroll up to load older messages, 4) Try importing again.');
+    }
+    
     res.json({
       success: true,
       imported: importedCount,
       total: filteredMessages.length,
-      message: `Successfully imported ${importedCount} messages`
+      fetched: totalFetched,
+      message: responseMessage,
+      warnings: warnings.length > 0 ? warnings : undefined
     });
     
   } catch (error) {
