@@ -30,6 +30,8 @@
     "hnswlib-node": "^3.0.0",
     "http-proxy-middleware": "^2.0.6",
     "instagram-private-api": "^1.46.1",
+    "@langchain/community": "^0.3.54",
+    "@langchain/core": "^0.3.54",
     "langchain": "^0.0.167",
     "mammoth": "^1.6.0",
     "mqtt": "^5.13.1",
