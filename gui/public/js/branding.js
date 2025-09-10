@@ -72,58 +72,83 @@ class BrandingManager {
   }
 
   updateBranding() {
-    // Update logo visibility
-    const logos = document.querySelectorAll('img[src*="whatsxeno"], img[alt*="WhatsXENO"]');
-    logos.forEach(logo => {
-      logo.style.display = this.brandingEnabled ? '' : 'none';
+    // Update all branding elements
+    const brandingElements = document.querySelectorAll('.branding-element, img[src*="whatsxeno"], img[alt*="WhatsXENO"]');
+    
+    brandingElements.forEach(element => {
+      if (element.tagName === 'IMG') {
+        // Handle logo images
+        element.style.display = this.brandingEnabled ? '' : 'none';
+      } else {
+        // Handle text elements
+        if (this.brandingEnabled) {
+          // Restore original text if saved
+          const originalText = element.getAttribute('data-original-text');
+          if (originalText) {
+            element.textContent = originalText;
+          }
+        } else {
+          // Save original text and replace WhatsXENO with WA-BOT
+          if (!element.hasAttribute('data-original-text')) {
+            element.setAttribute('data-original-text', element.textContent);
+          }
+          element.textContent = element.textContent.replace(/WhatsXENO/gi, 'WA-BOT').trim();
+        }
+      }
     });
 
     // Update favicon
-    const favicon = document.querySelector('link[rel*="icon"]');
-    if (favicon) {
+    const favicons = document.querySelectorAll('link[rel*="icon"]');
+    favicons.forEach(favicon => {
       if (this.brandingEnabled) {
         // Restore original favicon
-        favicon.href = favicon.getAttribute('data-original-href') || favicon.href;
+        const originalHref = favicon.getAttribute('data-original-href');
+        if (originalHref) {
+          favicon.href = originalHref;
+        }
       } else {
         // Save original favicon href if not already saved
         if (!favicon.hasAttribute('data-original-href')) {
           favicon.setAttribute('data-original-href', favicon.href);
         }
         // Set blank favicon
-        favicon.href = '/favicon/blank.ico';
-      }
-    }
-
-    // Update page title and branding text
-    const brandingTexts = document.querySelectorAll('h1, h2, h3, .branding-text');
-    brandingTexts.forEach(element => {
-      if (element.textContent.includes('WhatsXENO')) {
-        if (this.brandingEnabled) {
-          // Restore original text if it was saved
-          const originalText = element.getAttribute('data-original-text');
-          if (originalText) {
-            element.textContent = originalText;
-          }
-        } else {
-          // Save original text and remove branding
-          if (!element.hasAttribute('data-original-text')) {
-            element.setAttribute('data-original-text', element.textContent);
-          }
-          element.textContent = element.textContent
-            .replace(/WhatsXENO/gi, '')
-            .replace(/\s{2,}/g, ' ')
-            .trim();
-        }
+        favicon.href = 'data:image/x-icon;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==';
       }
     });
 
-    // Update toggle label
+    // Update page title
+    const pageTitle = document.querySelector('title');
+    if (pageTitle) {
+      if (this.brandingEnabled) {
+        const originalTitle = pageTitle.getAttribute('data-original-title');
+        if (originalTitle) {
+          pageTitle.textContent = originalTitle;
+        }
+      } else {
+        if (!pageTitle.hasAttribute('data-original-title')) {
+          pageTitle.setAttribute('data-original-title', pageTitle.textContent);
+        }
+        pageTitle.textContent = pageTitle.textContent.replace(/WhatsXENO/gi, 'WA-BOT').trim();
+      }
+    }
+
+    // Update branding toggle label text
     const toggleLabel = document.querySelector('label[for="toggle-branding"]');
     if (toggleLabel) {
-      toggleLabel.textContent = this.brandingEnabled 
-        ? 'Show Branding (Logo & Text)' 
-        : 'Branding is hidden';
+      if (this.brandingEnabled) {
+        const originalText = toggleLabel.getAttribute('data-original-text');
+        if (originalText) {
+          toggleLabel.textContent = originalText;
+        }
+      } else {
+        if (!toggleLabel.hasAttribute('data-original-text')) {
+          toggleLabel.setAttribute('data-original-text', toggleLabel.textContent);
+        }
+        toggleLabel.textContent = toggleLabel.textContent.replace(/WhatsXENO/gi, 'WA-BOT').trim();
+      }
     }
+
+    console.log(`Branding ${this.brandingEnabled ? 'enabled' : 'disabled'}`);
   }
 }
 
