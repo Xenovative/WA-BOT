@@ -2988,12 +2988,16 @@ app.post('/api/platforms/:platform/connect', async (req, res) => {
           
           // Reinitialize Telegram bot
           if (global.telegramBot) {
-            global.telegramBot.stopPolling();
+            try {
+              await global.telegramBot.stop();
+            } catch (stopError) {
+              console.error('Error stopping existing Telegram bot:', stopError);
+            }
           }
           
-          const TelegramBot = require('./services/telegramBot');
-          global.telegramBot = new TelegramBot();
-          await global.telegramBot.initialize();
+          const TelegramBotService = require('./services/telegramBot');
+          global.telegramBot = new TelegramBotService(config.token);
+          await global.telegramBot.start();
           
           success = true;
           message = 'Telegram bot connected successfully';
@@ -3189,7 +3193,11 @@ app.post('/api/platforms/:platform/disconnect', async (req, res) => {
     switch (platform) {
       case 'telegram':
         if (global.telegramBot) {
-          global.telegramBot.stopPolling();
+          try {
+            await global.telegramBot.stop();
+          } catch (stopError) {
+            console.error('Error stopping Telegram bot:', stopError);
+          }
           global.telegramBot = null;
           success = true;
           message = 'Telegram bot disconnected successfully';
