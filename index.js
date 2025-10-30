@@ -20,6 +20,7 @@ const ragProcessor = require('./kb/ragProcessor');
 const fileWatcher = require('./kb/fileWatcher');
 const voiceHandler = require('./utils/voiceHandler');
 const { handleTimeDateQuery } = require('./utils/timeUtils');
+const alertNotifier = require('./utils/alertNotifier');
 
 // Import bots
 const TelegramBotService = require('./services/telegramBot');
@@ -354,7 +355,8 @@ const whatsappConnectionState = {
   pushname: null,
   clientInfo: null,
   loadingStartTime: null,
-  authStartTime: null
+  authStartTime: null,
+  lastAlertSentAt: 0
 };
 
 // Make state globally available
@@ -369,6 +371,46 @@ const RECONNECT_INTERVAL = 10000; // 10 seconds
 let reconnectAttempts = 0;
 const MAX_RECONNECT_ATTEMPTS = 5;
 let reconnectTimeout;
+let readyStateAlertLogged = false;
+const initialAlertCooldown = alertNotifier.getCooldown();
+
+if (alertNotifier.isConfigured()) {
+  const recipients = alertNotifier.getRecipients();
+  console.log(`[Alerts] SMS alerts enabled. Recipients: ${recipients.join(', ')} | Cooldown: ${initialAlertCooldown / 1000}s`);
+} else {
+  console.log('[Alerts] SMS alerts disabled. Configure ALERT_PHONE_NUMBER and Twilio credentials to enable.');
+}
+
+async function maybeSendAlert(status, reason) {
+  if (!alertNotifier.isConfigured()) {
+    if (!readyStateAlertLogged) {
+      console.log('[Alerts] SMS alert system not fully configured. Skipping alerts.');
+      readyStateAlertLogged = true;
+    }
+    return;
+  }
+
+  const cooldown = alertNotifier.getCooldown();
+  const now = Date.now();
+  if (now - whatsappConnectionState.lastAlertSentAt < cooldown) {
+    console.log('[Alerts] Cooldown active, skipping SMS alert.');
+    return;
+  }
+
+  whatsappConnectionState.lastAlertSentAt = now;
+  const message = `[WA-BOT] WhatsApp connection alert: ${status.toUpperCase()} - ${reason || 'No reason provided'}`;
+
+  try {
+    const result = await alertNotifier.sendConnectionAlert(message);
+    if (result.success) {
+      console.log('[Alerts] SMS alert sent successfully.');
+    } else {
+      console.warn('[Alerts] SMS alert failed to send.', result);
+    }
+  } catch (error) {
+    console.error('[Alerts] Error sending SMS alert:', error.message);
+  }
+}
 
 /**
  * Handle graceful shutdown of the application
@@ -736,6 +778,7 @@ client.on('qr', (qr) => {
       
       // QR should regenerate automatically, but if not, we track this state
       console.log('ℹ️ A new QR code should be generated automatically');
+      maybeSendAlert('timeout', 'QR code expired without being scanned');
     }
   }, QR_CODE_TIMEOUT);
   
@@ -797,6 +840,8 @@ client.on('auth_failure', (msg) => {
   // Clear QR code data
   delete global.qrCodeData;
   
+  maybeSendAlert('error', `Authentication failure: ${msg}`);
+
   if (!isShuttingDown) {
     console.log('Will attempt to reconnect...');
     scheduleReconnect();
@@ -815,7 +860,9 @@ client.on('disconnected', (reason) => {
   whatsappConnectionState.phoneNumber = null;
   whatsappConnectionState.pushname = null;
   whatsappConnectionState.clientInfo = null;
-  
+
+  maybeSendAlert('disconnected', reason);
+
   if (!isShuttingDown) {
     console.log('Attempting to reconnect...');
     scheduleReconnect();
@@ -834,12 +881,15 @@ client.on('change_state', (state) => {
   } else if (state === 'TIMEOUT') {
     whatsappConnectionState.status = 'timeout';
     whatsappConnectionState.lastError = 'Connection timeout';
+    maybeSendAlert('timeout', 'Connection timeout');
   } else if (state === 'CONFLICT') {
     whatsappConnectionState.status = 'error';
     whatsappConnectionState.lastError = 'Session conflict detected';
+    maybeSendAlert('conflict', 'Session conflict detected');
   } else if (state === 'UNPAIRED') {
     whatsappConnectionState.status = 'disconnected';
     whatsappConnectionState.lastError = 'Device unpaired';
+    maybeSendAlert('unpaired', 'Device unpaired');
   }
   
   whatsappConnectionState.lastStateChange = Date.now();
@@ -868,6 +918,7 @@ client.on('ready', async () => {
   whatsappConnectionState.reconnectAttempts = 0;
   whatsappConnectionState.loadingStartTime = null;
   whatsappConnectionState.authStartTime = null;
+  whatsappConnectionState.lastAlertSentAt = 0;
   
   // Calculate connection time if we have timestamps
   if (whatsappConnectionState.qrCodeGenerated) {
@@ -1767,6 +1818,7 @@ function scheduleReconnect() {
     whatsappConnectionState.status = 'error';
     whatsappConnectionState.lastError = `Max reconnection attempts (${MAX_RECONNECT_ATTEMPTS}) reached`;
     whatsappConnectionState.lastStateChange = Date.now();
+    maybeSendAlert('error', `Max reconnection attempts (${MAX_RECONNECT_ATTEMPTS}) reached`);
     return;
   }
 

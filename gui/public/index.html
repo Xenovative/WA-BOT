@@ -449,25 +449,81 @@
                                         <div class="mb-3" id="openai-key-group">
                                             <label for="openai-api-key" class="form-label">OpenAI API Key</label>
                                             <div class="input-group">
-                                                <input type="password" class="form-control api-key-input" id="openai-api-key" placeholder="sk-..."> 
+                                                <input type="password" class="form-control api-key-input" id="openai-api-key" placeholder="sk-...">
                                                 <button class="btn btn-outline-secondary toggle-visibility" type="button">
                                                     <i class="bi bi-eye"></i>
                                                 </button>
                                             </div>
                                         </div>
-                                        
+
                                         <div class="mb-3" id="openrouter-key-group">
                                             <label for="openrouter-api-key" class="form-label">OpenRouter API Key</label>
                                             <div class="input-group">
-                                                <input type="password" class="form-control api-key-input" id="openrouter-api-key" placeholder="sk-..."> 
+                                                <input type="password" class="form-control api-key-input" id="openrouter-api-key" placeholder="sk-...">
                                                 <button class="btn btn-outline-secondary toggle-visibility" type="button">
                                                     <i class="bi bi-eye"></i>
                                                 </button>
                                             </div>
                                         </div>
-                                        
+
                                         <div class="form-text text-muted">
                                             <i class="bi bi-shield-lock"></i> API keys are stored securely in environment variables on the server.
+                                        </div>
+                                    </div>
+
+                                    <div class="card border mt-4">
+                                        <div class="card-body">
+                                            <h5 class="card-title mb-3"><i class="bi bi-bell me-2"></i>Alerting &amp; Health Checks</h5>
+                                            <p class="text-muted small mb-4">Configure SMS alerts that fire when WhatsApp connectivity drops.</p>
+
+                                            <div class="row g-3 mb-3">
+                                                <div class="col-md-4">
+                                                    <label for="alert-provider" class="form-label">SMS Provider</label>
+                                                    <select id="alert-provider" class="form-select">
+                                                        <option value="twilio">Twilio</option>
+                                                    </select>
+                                                </div>
+                                                <div class="col-md-4">
+                                                    <label for="alert-phone-number" class="form-label">Admin Phone</label>
+                                                    <input type="text" id="alert-phone-number" class="form-control" placeholder="+1234567890">
+                                                    <div class="form-text">Primary recipient for health alerts.</div>
+                                                </div>
+                                                <div class="col-md-4">
+                                                    <label for="alert-cooldown" class="form-label">Cooldown (seconds)</label>
+                                                    <input type="number" min="30" step="30" id="alert-cooldown" class="form-control" value="300">
+                                                    <div class="form-text">Minimum delay between alert bursts.</div>
+                                                </div>
+                                            </div>
+
+                                            <div class="mb-3">
+                                                <label for="alert-phone-numbers" class="form-label">Additional Recipients</label>
+                                                <textarea id="alert-phone-numbers" class="form-control" rows="2" placeholder="+1234567891, +1987654321"></textarea>
+                                                <div class="form-text">Comma or space separated list of extra phone numbers.</div>
+                                            </div>
+
+                                            <div class="border rounded p-3 bg-light">
+                                                <h6 class="mb-3">Twilio Credentials</h6>
+                                                <div class="row g-3">
+                                                    <div class="col-md-6">
+                                                        <label for="twilio-account-sid" class="form-label">Account SID</label>
+                                                        <input type="text" id="twilio-account-sid" class="form-control" placeholder="ACxxxxxxxx">
+                                                    </div>
+                                                    <div class="col-md-6">
+                                                        <label for="twilio-from-number" class="form-label">From Number</label>
+                                                        <input type="text" id="twilio-from-number" class="form-control" placeholder="+1234567890">
+                                                    </div>
+                                                    <div class="col-12">
+                                                        <label for="twilio-auth-token" class="form-label">Auth Token</label>
+                                                        <div class="input-group">
+                                                            <input type="password" id="twilio-auth-token" class="form-control api-key-input" placeholder="••••••">
+                                                            <button class="btn btn-outline-secondary toggle-visibility" type="button">
+                                                                <i class="bi bi-eye"></i>
+                                                            </button>
+                                                        </div>
+                                                        <div class="form-text">Stored securely after you hit save.</div>
+                                                    </div>
+                                                </div>
+                                            </div>
                                         </div>
                                     </div>
                                 </div>

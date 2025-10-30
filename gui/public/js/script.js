@@ -279,6 +279,13 @@ const openaiApiKeyInput = document.getElementById('openai-api-key');
 const openrouterApiKeyInput = document.getElementById('openrouter-api-key');
 const toggleVisibilityButtons = document.querySelectorAll('.toggle-visibility');
 const configSection = document.getElementById('config-section');
+const alertProviderSelect = document.getElementById('alert-provider');
+const alertPhoneNumberInput = document.getElementById('alert-phone-number');
+const alertAdditionalPhonesInput = document.getElementById('alert-phone-numbers');
+const alertCooldownInput = document.getElementById('alert-cooldown');
+const twilioAccountSidInput = document.getElementById('twilio-account-sid');
+const twilioAuthTokenInput = document.getElementById('twilio-auth-token');
+const twilioFromNumberInput = document.getElementById('twilio-from-number');
 
 // Upload state
 let isUploading = false;
@@ -848,6 +855,36 @@ async function loadSettings() {
       }
     }
     
+    // Alert & health check settings
+    if (settings.alerts) {
+      if (alertProviderSelect) {
+        alertProviderSelect.value = settings.alerts.provider || 'twilio';
+      }
+      if (alertPhoneNumberInput) {
+        alertPhoneNumberInput.value = settings.alerts.primaryPhone || '';
+      }
+      if (alertAdditionalPhonesInput) {
+        alertAdditionalPhonesInput.value = settings.alerts.additionalPhones || '';
+      }
+      if (alertCooldownInput) {
+        alertCooldownInput.value = settings.alerts.cooldownSeconds != null ? settings.alerts.cooldownSeconds : 300;
+      }
+
+      if (settings.alerts.twilio) {
+        if (twilioAccountSidInput) {
+          twilioAccountSidInput.value = settings.alerts.twilio.accountSid || '';
+        }
+        if (twilioFromNumberInput) {
+          twilioFromNumberInput.value = settings.alerts.twilio.fromNumber || '';
+        }
+        if (twilioAuthTokenInput) {
+          const masked = settings.alerts.twilio.authToken === '********';
+          twilioAuthTokenInput.value = masked ? '' : (settings.alerts.twilio.authToken || '');
+          twilioAuthTokenInput.dataset.masked = masked ? 'true' : 'false';
+        }
+      }
+    }
+
     // Update which API key fields are visible
     updateApiKeyVisibility(settings.provider);
     
@@ -884,7 +921,28 @@ async function saveSettings() {
       systemPrompt: systemPromptTextarea.value,
       apiKeys: {}
     };
-    
+
+    // Alerts payload
+    if (alertProviderSelect) {
+      const cooldownSeconds = parseInt(alertCooldownInput?.value, 10);
+      settings.alerts = {
+        provider: alertProviderSelect.value,
+        primaryPhone: alertPhoneNumberInput?.value || '',
+        additionalPhones: alertAdditionalPhonesInput?.value || '',
+        cooldownSeconds: Number.isFinite(cooldownSeconds) ? cooldownSeconds : 300,
+        twilio: {
+          accountSid: twilioAccountSidInput?.value || '',
+          fromNumber: twilioFromNumberInput?.value || ''
+        }
+      };
+
+      if (twilioAuthTokenInput && twilioAuthTokenInput.value) {
+        if (twilioAuthTokenInput.dataset.masked !== 'true' || twilioAuthTokenInput.value !== '') {
+          settings.alerts.twilio.authToken = twilioAuthTokenInput.value;
+        }
+      }
+    }
+
     // Only send API keys if they've been changed (not masked)
     if (openaiApiKeyInput.value && openaiApiKeyInput.dataset.masked !== 'true') {
       settings.apiKeys.openai = openaiApiKeyInput.value;

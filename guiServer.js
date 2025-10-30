@@ -9,6 +9,7 @@ const fs = require('fs');
 const multer = require('multer');
 const WebSocket = require('ws');
 const { createProxyMiddleware } = require('http-proxy-middleware');
+const alertNotifier = require('./utils/alertNotifier');
 
 const app = express();
 const server = http.createServer(app);
@@ -18,6 +19,10 @@ const port = process.env.GUI_PORT || 3000;
 // Make app available globally for services
 global.app = app;
 const adminUtils = require('./utils/adminUtils');
+const adminApiRoutes = require('./routes/adminApi');
+app.use('/api/admin', adminApiRoutes);
+const alertRoutes = require('./routes/alerts');
+app.use('/api/alerts', alertRoutes);
 
 // Function to save environment variables to .env file
 function saveEnvVariable(key, value) {
@@ -51,6 +56,57 @@ function saveEnvVariable(key, value) {
     console.log(`Environment variable ${key} saved to .env file`);
   } catch (error) {
     console.error(`Error saving environment variable ${key}:`, error);
+  }
+}
+
+function normalizePhoneList(value) {
+  if (!value) return '';
+  if (Array.isArray(value)) {
+    return value.map(v => v.trim()).filter(Boolean).join(',');
+  }
+  return value
+    .split(/[\s,]+/)
+    .map(part => part.trim())
+    .filter(Boolean)
+    .join(',');
+}
+
+function persistAlertSettings(alerts = {}) {
+  const provider = (alerts.provider || process.env.ALERT_SMS_PROVIDER || 'twilio').trim() || 'twilio';
+  process.env.ALERT_SMS_PROVIDER = provider;
+  saveEnvVariable('ALERT_SMS_PROVIDER', provider);
+
+  if (Object.prototype.hasOwnProperty.call(alerts, 'primaryPhone')) {
+    const primary = (alerts.primaryPhone || '').trim();
+    process.env.ALERT_PHONE_NUMBER = primary;
+    saveEnvVariable('ALERT_PHONE_NUMBER', primary);
+  }
+
+  if (Object.prototype.hasOwnProperty.call(alerts, 'additionalPhones')) {
+    const additional = normalizePhoneList(alerts.additionalPhones || '');
+    process.env.ALERT_PHONE_NUMBERS = additional;
+    saveEnvVariable('ALERT_PHONE_NUMBERS', additional);
+  }
+
+  if (Object.prototype.hasOwnProperty.call(alerts, 'cooldownSeconds')) {
+    const seconds = Number(alerts.cooldownSeconds);
+    const cooldownMs = Number.isFinite(seconds) ? Math.max(30000, Math.round(seconds) * 1000) : alertNotifier.getCooldown();
+    process.env.ALERT_SMS_COOLDOWN_MS = String(cooldownMs);
+    saveEnvVariable('ALERT_SMS_COOLDOWN_MS', String(cooldownMs));
+  }
+
+  const twilio = alerts.twilio || {};
+  if (Object.prototype.hasOwnProperty.call(twilio, 'accountSid')) {
+    process.env.TWILIO_ACCOUNT_SID = twilio.accountSid || '';
+    saveEnvVariable('TWILIO_ACCOUNT_SID', twilio.accountSid || '');
+  }
+  if (Object.prototype.hasOwnProperty.call(twilio, 'fromNumber')) {
+    process.env.TWILIO_FROM_NUMBER = twilio.fromNumber || '';
+    saveEnvVariable('TWILIO_FROM_NUMBER', twilio.fromNumber || '');
+  }
+  if (Object.prototype.hasOwnProperty.call(twilio, 'authToken')) {
+    process.env.TWILIO_AUTH_TOKEN = twilio.authToken || '';
+    saveEnvVariable('TWILIO_AUTH_TOKEN', twilio.authToken || '');
   }
 }
 
@@ -990,7 +1046,21 @@ app.get('/api/settings', (req, res) => {
     
     // Add showConfig flag from environment variables
     settings.showConfig = process.env.SHOW_CONFIG !== 'false'; // Default to true if not set
-    
+
+    const alertCooldownSeconds = Math.max(30, Math.round(alertNotifier.getCooldown() / 1000));
+    settings.alerts = {
+      provider: process.env.ALERT_SMS_PROVIDER || 'twilio',
+      primaryPhone: process.env.ALERT_PHONE_NUMBER || '',
+      additionalPhones: process.env.ALERT_PHONE_NUMBERS || '',
+      cooldownSeconds: alertCooldownSeconds,
+      configured: alertNotifier.isConfigured(),
+      twilio: {
+        accountSid: process.env.TWILIO_ACCOUNT_SID || '',
+        fromNumber: process.env.TWILIO_FROM_NUMBER || '',
+        authToken: process.env.TWILIO_AUTH_TOKEN ? '********' : ''
+      }
+    };
+
     // Mask API keys for security
     if (settings.apiKeys && settings.apiKeys.openai) {
       settings.apiKeys.openai = '********';
@@ -1006,27 +1076,6 @@ app.get('/api/settings', (req, res) => {
   }
 });
 
-app.post('/api/settings', async (req, res) => {
-  try {
-    const commandHandler = require('./handlers/commandHandler');
-    const newSettings = req.body;
-    
-    // Update settings and wait for completion
-    const result = await commandHandler.updateSettings(newSettings);
-    
-    if (result && result.error) {
-      console.error('Error updating settings:', result.error);
-      return res.status(400).json({ success: false, error: result.error });
-    }
-    
-    res.json({ success: true });
-  } catch (error) {
-    console.error('Error updating settings:', error);
-    res.status(500).json({ success: false, error: error.message });
-  }
-});
-
-// API endpoint for deleting profiles
 app.post('/api/profile/delete', (req, res) => {
   try {
     const commandHandler = require('./handlers/commandHandler');
