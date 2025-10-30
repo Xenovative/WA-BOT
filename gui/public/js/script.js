@@ -960,7 +960,18 @@ async function saveSettings() {
       body: JSON.stringify(settings)
     });
     
-    const result = await response.json();
+    const rawText = await response.text();
+    let result;
+    try {
+      result = rawText ? JSON.parse(rawText) : {};
+    } catch (parseError) {
+      console.error('[Settings] Non-JSON response from /api/settings:', {
+        status: response.status,
+        statusText: response.statusText,
+        bodyPreview: rawText.slice(0, 200)
+      });
+      throw new Error(response.status >= 400 ? `Server responded with status ${response.status}` : 'Unexpected server response format');
+    }
     
     if (result.success) {
       showToast(window.i18n ? window.i18n.t('toast.settings_saved') : 'Settings saved successfully!');
