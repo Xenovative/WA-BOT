@@ -329,6 +329,16 @@ class PlatformManager {
             const response = await Api.fetch('/api/platforms/status');
             if (response.ok) {
                 this.platformStatus = await response.json();
+                
+                // Debug logging for WhatsApp status
+                if (this.platformStatus.whatsapp) {
+                    console.log('[Platforms] WhatsApp status:', {
+                        status: this.platformStatus.whatsapp.status,
+                        connectionState: this.platformStatus.whatsapp.connectionState,
+                        enabled: this.platformStatus.whatsapp.enabled
+                    });
+                }
+                
                 this.updatePlatformUI();
                 this.updateStatusTable();
             } else {
@@ -372,6 +382,11 @@ class PlatformManager {
                     connectBtn.style.display = 'block';
                     disconnectBtn.style.display = 'none';
                 }
+            }
+            
+            // Show detailed state info for WhatsApp
+            if (platform === 'whatsapp' && status.connectionState) {
+                this.updateWhatsAppStateInfo(status.connectionState);
             }
 
             // Update method selector if available
@@ -425,6 +440,74 @@ class PlatformManager {
             default:
                 badge.classList.add('bg-secondary');
                 badge.textContent = window.i18n?.t('platforms.status.unknown') || 'Unknown';
+        }
+    }
+
+    updateWhatsAppStateInfo(connectionState) {
+        const stateInfoDiv = document.getElementById('whatsapp-state-info');
+        const stateTextDiv = document.getElementById('whatsapp-state-text');
+        
+        if (!stateInfoDiv || !stateTextDiv) return;
+        
+        // Show detailed info for non-connected states or if there are errors
+        if (connectionState.status !== 'authenticated' || connectionState.lastError) {
+            let stateMessage = '';
+            
+            // Build state message based on status
+            switch (connectionState.status) {
+                case 'qr_pending':
+                    stateMessage = '<strong>Waiting for QR code scan</strong><br>Please scan the QR code with your WhatsApp mobile app.';
+                    break;
+                case 'loading':
+                    stateMessage = '<strong>Loading WhatsApp session...</strong><br>Please wait while the connection is established.';
+                    break;
+                case 'authenticating':
+                    stateMessage = '<strong>Authenticating...</strong><br>Verifying your WhatsApp session.';
+                    break;
+                case 'reconnecting':
+                    stateMessage = `<strong>Reconnecting...</strong><br>Attempt ${connectionState.reconnectAttempts || 1} of 5`;
+                    break;
+                case 'timeout':
+                    stateMessage = '<strong>Connection timeout</strong><br>The QR code may have expired. A new one should be generated automatically.';
+                    break;
+                case 'error':
+                    stateMessage = `<strong>Connection error</strong><br>${connectionState.lastError || 'Unknown error occurred'}`;
+                    break;
+                case 'disconnected':
+                    stateMessage = `<strong>Disconnected</strong><br>${connectionState.lastError || 'WhatsApp client is not connected'}`;
+                    break;
+                default:
+                    if (connectionState.lastError) {
+                        stateMessage = `<strong>Status: ${connectionState.status}</strong><br>${connectionState.lastError}`;
+                    }
+            }
+            
+            if (stateMessage) {
+                stateTextDiv.innerHTML = stateMessage;
+                stateInfoDiv.style.display = 'block';
+                
+                // Change alert color based on status
+                stateInfoDiv.classList.remove('alert-info', 'alert-warning', 'alert-danger', 'alert-success');
+                if (connectionState.status === 'error' || connectionState.status === 'disconnected') {
+                    stateInfoDiv.classList.add('alert-danger');
+                } else if (connectionState.status === 'timeout' || connectionState.status === 'reconnecting') {
+                    stateInfoDiv.classList.add('alert-warning');
+                } else {
+                    stateInfoDiv.classList.add('alert-info');
+                }
+            } else {
+                stateInfoDiv.style.display = 'none';
+            }
+        } else {
+            // Connected successfully - show phone number if available
+            if (connectionState.phoneNumber) {
+                stateTextDiv.innerHTML = `<strong>Connected</strong><br>Phone: +${connectionState.phoneNumber}`;
+                stateInfoDiv.classList.remove('alert-info', 'alert-warning', 'alert-danger');
+                stateInfoDiv.classList.add('alert-success');
+                stateInfoDiv.style.display = 'block';
+            } else {
+                stateInfoDiv.style.display = 'none';
+            }
         }
     }
 

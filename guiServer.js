@@ -310,38 +310,126 @@ app.post('/api/workflows/save', async (req, res) => {
   }
 });
 
-// Check WhatsApp authentication status
+// Check WhatsApp authentication status with comprehensive health information
 app.get('/api/whatsapp/status', (req, res) => {
     try {
         const client = global.client;
+        const connectionState = global.whatsappConnectionState;
+        
         if (!client) {
             return res.json({ 
                 authenticated: false, 
                 status: 'disconnected',
-                message: 'WhatsApp client not initialized' 
+                message: 'WhatsApp client not initialized',
+                health: {
+                    status: 'unavailable',
+                    isHealthy: false,
+                    lastCheck: Date.now()
+                }
             });
         }
         
-        // Check client state
-        const state = client.info ? 'authenticated' : 'disconnected';
+        // Get comprehensive connection state
+        const now = Date.now();
+        const state = connectionState || {
+            status: client.info ? 'authenticated' : 'disconnected',
+            isReady: !!client.info,
+            lastStateChange: now
+        };
+        
+        // Calculate time since last state change
+        const timeSinceStateChange = now - (state.lastStateChange || now);
+        
+        // Check if QR code is still valid
+        const qrCodeValid = state.qrCodeExpiry && now < state.qrCodeExpiry;
+        const qrCodeTimeRemaining = state.qrCodeExpiry ? Math.max(0, state.qrCodeExpiry - now) : 0;
+        
+        // Determine overall health status
+        const isHealthy = state.isReady && state.status === 'authenticated';
+        const hasWarnings = state.reconnectAttempts > 0 || state.status === 'timeout';
+        const hasErrors = state.status === 'error' || state.status === 'disconnected';
+        
+        // Health assessment
+        let healthStatus = 'healthy';
+        if (hasErrors) {
+            healthStatus = 'error';
+        } else if (hasWarnings) {
+            healthStatus = 'warning';
+        } else if (state.status === 'qr_pending') {
+            healthStatus = 'pending';
+        } else if (state.status === 'loading' || state.status === 'authenticating') {
+            healthStatus = 'connecting';
+        }
         
         // If authenticated, clear any stored QR code
-        if (state === 'authenticated' && global.qrCodeData) {
+        if (state.isReady && global.qrCodeData) {
             delete global.qrCodeData;
         }
         
+        // Comprehensive response
         res.json({ 
-            authenticated: !!client.info,
-            status: state,
-            phoneNumber: client.info?.wid.user,
-            pushname: client.info?.pushname
+            authenticated: state.isReady,
+            status: state.status,
+            phoneNumber: state.phoneNumber || client.info?.wid?.user,
+            pushname: state.pushname || client.info?.pushname,
+            
+            // Connection state details
+            connectionState: {
+                status: state.status,
+                isReady: state.isReady,
+                lastStateChange: state.lastStateChange,
+                timeSinceStateChange: timeSinceStateChange,
+                reconnectAttempts: state.reconnectAttempts || 0,
+                lastError: state.lastError
+            },
+            
+            // QR code information
+            qrCode: {
+                available: !!global.qrCodeData,
+                valid: qrCodeValid,
+                generated: state.qrCodeGenerated,
+                expiresAt: state.qrCodeExpiry,
+                timeRemaining: qrCodeTimeRemaining,
+                expired: state.qrCodeGenerated && !qrCodeValid && state.status !== 'authenticated'
+            },
+            
+            // Health assessment
+            health: {
+                status: healthStatus,
+                isHealthy: isHealthy,
+                hasWarnings: hasWarnings,
+                hasErrors: hasErrors,
+                lastCheck: now,
+                message: state.lastError || (isHealthy ? 'Connection healthy' : 'Connection issues detected')
+            },
+            
+            // Client information
+            clientInfo: state.clientInfo || {
+                platform: client.info?.platform,
+                phone: client.info?.phone
+            },
+            
+            // Diagnostics (for troubleshooting)
+            diagnostics: {
+                clientInitialized: !!client,
+                clientInfoAvailable: !!client.info,
+                stateTrackingActive: !!connectionState,
+                loadingTime: state.loadingStartTime ? (now - state.loadingStartTime) : null,
+                authTime: state.authStartTime ? (now - state.authStartTime) : null
+            }
         });
     } catch (error) {
         console.error('Error checking auth status:', error);
         res.status(500).json({ 
             error: 'Failed to check auth status',
             details: error.message,
-            status: 'error'
+            status: 'error',
+            health: {
+                status: 'error',
+                isHealthy: false,
+                lastCheck: Date.now(),
+                message: error.message
+            }
         });
     }
 });
@@ -2749,15 +2837,42 @@ global.broadcastUpdate = broadcastUpdate;
 // Get platform status
 app.get('/api/platforms/status', (req, res) => {
   try {
+    // Get WhatsApp connection state from the comprehensive tracking system
+    const waState = global.whatsappConnectionState;
+    const waClient = global.whatsappClient;
+    
+    // Determine WhatsApp status based on connection state
+    let whatsappStatus = 'not_connected';
+    if (waState) {
+      if (waState.isReady && waState.status === 'authenticated') {
+        whatsappStatus = 'connected';
+      } else if (waState.status === 'qr_pending' || waState.status === 'loading' || waState.status === 'authenticating') {
+        whatsappStatus = 'connecting';
+      } else if (waState.status === 'error' || waState.status === 'timeout') {
+        whatsappStatus = 'error';
+      }
+    } else if (waClient && waClient.client && waClient.client.info) {
+      // Fallback to old method if state tracking not available
+      whatsappStatus = 'connected';
+    }
+    
     const status = {
       whatsapp: {
-        status: (global.whatsappClient && global.whatsappClient.client) ? 'connected' : 'not_connected',
+        status: whatsappStatus,
         method: 'web',
-        lastActivity: global.whatsappClient?.lastActivity || null,
+        lastActivity: waClient?.lastActivity || null,
         enabled: process.env.WHATSAPP_ENABLED !== 'false',
         credentials: {
           // WhatsApp uses QR code, no stored credentials
-        }
+        },
+        // Include additional state information for debugging
+        connectionState: waState ? {
+          status: waState.status,
+          isReady: waState.isReady,
+          phoneNumber: waState.phoneNumber,
+          lastError: waState.lastError,
+          reconnectAttempts: waState.reconnectAttempts
+        } : null
       },
       telegram: {
         status: (global.telegramBot && (global.telegramBot.polling || global.telegramBot.bot)) ? 'connected' : 'not_connected',

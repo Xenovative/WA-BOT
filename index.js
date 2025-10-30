@@ -679,9 +679,36 @@ client.sendMessage = async function(chatId, content, options = {}) {
 
 // QR code handling - store for web interface
 client.on('qr', (qr) => {
+  const now = Date.now();
   console.log('QR Code generated for web interface');
+  
+  // Update connection state
+  whatsappConnectionState.status = 'qr_pending';
+  whatsappConnectionState.qrCodeGenerated = now;
+  whatsappConnectionState.qrCodeExpiry = now + QR_CODE_TIMEOUT;
+  whatsappConnectionState.lastStateChange = now;
+  whatsappConnectionState.lastError = null;
+  
   // Store the QR code data for the web interface
   global.qrCodeData = qr;
+  
+  // Clear any existing QR expiry timeout
+  if (qrExpiryTimeout) {
+    clearTimeout(qrExpiryTimeout);
+  }
+  
+  // Set timeout to detect QR code expiry
+  qrExpiryTimeout = setTimeout(() => {
+    if (whatsappConnectionState.status === 'qr_pending') {
+      console.warn('⚠️ QR Code expired without being scanned');
+      whatsappConnectionState.status = 'timeout';
+      whatsappConnectionState.lastError = 'QR code expired without being scanned';
+      whatsappConnectionState.lastStateChange = Date.now();
+      
+      // QR should regenerate automatically, but if not, we track this state
+      console.log('ℹ️ A new QR code should be generated automatically');
+    }
+  }, QR_CODE_TIMEOUT);
   
   // If there's a pending QR code request, respond to it
   if (global.pendingQrResolve) {
@@ -690,16 +717,57 @@ client.on('qr', (qr) => {
   }
 });
 
+// Loading state detection
+client.on('loading_screen', (percent, message) => {
+  console.log(`Loading: ${percent}% - ${message}`);
+  
+  if (!whatsappConnectionState.loadingStartTime) {
+    whatsappConnectionState.loadingStartTime = Date.now();
+  }
+  
+  whatsappConnectionState.status = 'loading';
+  whatsappConnectionState.lastStateChange = Date.now();
+});
+
 // Authentication handling
 client.on('authenticated', () => {
-  console.log('Client is authenticated!');
+  console.log('✅ Client is authenticated!');
+  
+  // Clear QR expiry timeout
+  if (qrExpiryTimeout) {
+    clearTimeout(qrExpiryTimeout);
+    qrExpiryTimeout = null;
+  }
+  
+  // Update connection state
+  whatsappConnectionState.status = 'authenticating';
+  whatsappConnectionState.authStartTime = Date.now();
+  whatsappConnectionState.lastStateChange = Date.now();
+  whatsappConnectionState.lastError = null;
+  whatsappConnectionState.qrCodeGenerated = null;
+  whatsappConnectionState.qrCodeExpiry = null;
+  
+  // Clear QR code data
+  delete global.qrCodeData;
+  
   // Reset reconnect attempts on successful authentication
   reconnectAttempts = 0;
+  whatsappConnectionState.reconnectAttempts = 0;
   clearTimeout(reconnectTimeout);
 });
 
 client.on('auth_failure', (msg) => {
-  console.error('Authentication failure:', msg);
+  console.error('❌ Authentication failure:', msg);
+  
+  // Update connection state
+  whatsappConnectionState.status = 'error';
+  whatsappConnectionState.lastError = `Authentication failure: ${msg}`;
+  whatsappConnectionState.lastStateChange = Date.now();
+  whatsappConnectionState.isReady = false;
+  
+  // Clear QR code data
+  delete global.qrCodeData;
+  
   if (!isShuttingDown) {
     console.log('Will attempt to reconnect...');
     scheduleReconnect();
@@ -708,7 +776,17 @@ client.on('auth_failure', (msg) => {
 
 // Handle disconnection events
 client.on('disconnected', (reason) => {
-  console.log('Client was disconnected:', reason);
+  console.log('⚠️ Client was disconnected:', reason);
+  
+  // Update connection state
+  whatsappConnectionState.status = 'disconnected';
+  whatsappConnectionState.lastError = `Disconnected: ${reason}`;
+  whatsappConnectionState.lastStateChange = Date.now();
+  whatsappConnectionState.isReady = false;
+  whatsappConnectionState.phoneNumber = null;
+  whatsappConnectionState.pushname = null;
+  whatsappConnectionState.clientInfo = null;
+  
   if (!isShuttingDown) {
     console.log('Attempting to reconnect...');
     scheduleReconnect();
@@ -717,17 +795,62 @@ client.on('disconnected', (reason) => {
 
 // Handle connection state changes
 client.on('change_state', (state) => {
-  console.log('Client state changed:', state);
+  console.log('🔄 Client state changed:', state);
+  
+  // Map whatsapp-web.js states to our state tracking
+  if (state === 'CONNECTED') {
+    whatsappConnectionState.status = 'authenticating';
+  } else if (state === 'OPENING') {
+    whatsappConnectionState.status = 'loading';
+  } else if (state === 'TIMEOUT') {
+    whatsappConnectionState.status = 'timeout';
+    whatsappConnectionState.lastError = 'Connection timeout';
+  } else if (state === 'CONFLICT') {
+    whatsappConnectionState.status = 'error';
+    whatsappConnectionState.lastError = 'Session conflict detected';
+  } else if (state === 'UNPAIRED') {
+    whatsappConnectionState.status = 'disconnected';
+    whatsappConnectionState.lastError = 'Device unpaired';
+  }
+  
+  whatsappConnectionState.lastStateChange = Date.now();
   
   if (state === 'TIMEOUT' || state === 'CONFLICT' || state === 'UNPAIRED') {
-    console.log('Connection issue detected, attempting to reconnect...');
+    console.log('⚠️ Connection issue detected, attempting to reconnect...');
     scheduleReconnect();
   }
 });
 
 // Ready event
 client.on('ready', async () => {
-  console.log('WhatsApp client is ready!');
+  console.log('✅ WhatsApp client is ready!');
+  
+  // Update connection state with full details
+  whatsappConnectionState.status = 'authenticated';
+  whatsappConnectionState.isReady = true;
+  whatsappConnectionState.lastStateChange = Date.now();
+  whatsappConnectionState.lastError = null;
+  whatsappConnectionState.phoneNumber = client.info?.wid?.user;
+  whatsappConnectionState.pushname = client.info?.pushname;
+  whatsappConnectionState.clientInfo = {
+    platform: client.info?.platform,
+    phone: client.info?.phone
+  };
+  whatsappConnectionState.reconnectAttempts = 0;
+  whatsappConnectionState.loadingStartTime = null;
+  whatsappConnectionState.authStartTime = null;
+  
+  // Calculate connection time if we have timestamps
+  if (whatsappConnectionState.qrCodeGenerated) {
+    const connectionTime = Date.now() - whatsappConnectionState.qrCodeGenerated;
+    console.log(`⏱️ Connection established in ${(connectionTime/1000).toFixed(1)} seconds`);
+  }
+  
+  // Clear QR code data
+  delete global.qrCodeData;
+  whatsappConnectionState.qrCodeGenerated = null;
+  whatsappConnectionState.qrCodeExpiry = null;
+  
   updateLLMClient();
   
   // Make WhatsApp client globally available
@@ -1587,6 +1710,29 @@ client.on('message', async (message) => {
   }
 });
 
+// WhatsApp connection state tracking
+const whatsappConnectionState = {
+  status: 'initializing', // initializing, loading, qr_pending, authenticating, authenticated, disconnected, error, timeout
+  lastStateChange: Date.now(),
+  qrCodeGenerated: null,
+  qrCodeExpiry: null,
+  reconnectAttempts: 0,
+  lastError: null,
+  isReady: false,
+  phoneNumber: null,
+  pushname: null,
+  clientInfo: null,
+  loadingStartTime: null,
+  authStartTime: null
+};
+
+// Make state globally available
+global.whatsappConnectionState = whatsappConnectionState;
+
+// QR code expiry timeout (WhatsApp QR codes expire after ~60 seconds)
+const QR_CODE_TIMEOUT = 60000; // 60 seconds
+let qrExpiryTimeout = null;
+
 // Auto-reconnect configuration
 const RECONNECT_INTERVAL = 10000; // 10 seconds
 let reconnectAttempts = 0;
@@ -1614,14 +1760,21 @@ function scheduleReconnect() {
   }
 
   reconnectAttempts++;
+  whatsappConnectionState.reconnectAttempts = reconnectAttempts;
   
   if (reconnectAttempts > MAX_RECONNECT_ATTEMPTS) {
-    console.error('Max reconnection attempts reached. Please check your internet connection and restart the bot.');
+    console.error(' Max reconnection attempts reached. Please check your internet connection and restart the bot.');
+    whatsappConnectionState.status = 'error';
+    whatsappConnectionState.lastError = `Max reconnection attempts (${MAX_RECONNECT_ATTEMPTS}) reached`;
+    whatsappConnectionState.lastStateChange = Date.now();
     return;
   }
 
   const delay = Math.min(RECONNECT_INTERVAL * Math.pow(2, reconnectAttempts - 1), 300000); // Max 5 minutes
-  console.log(`Attempting to reconnect in ${delay/1000} seconds... (Attempt ${reconnectAttempts}/${MAX_RECONNECT_ATTEMPTS})`);
+  console.log(` Attempting to reconnect in ${delay/1000} seconds... (Attempt ${reconnectAttempts}/${MAX_RECONNECT_ATTEMPTS})`);
+  
+  whatsappConnectionState.status = 'reconnecting';
+  whatsappConnectionState.lastStateChange = Date.now();
   
   clearTimeout(reconnectTimeout);
   reconnectTimeout = setTimeout(() => {
