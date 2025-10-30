@@ -341,6 +341,35 @@ global.instagramWebService = instagramWebService;
 // Flag to track if shutdown is in progress
 let isShuttingDown = false;
 
+// WhatsApp connection state tracking - MUST be declared before client initialization
+const whatsappConnectionState = {
+  status: 'initializing', // initializing, loading, qr_pending, authenticating, authenticated, disconnected, error, timeout
+  lastStateChange: Date.now(),
+  qrCodeGenerated: null,
+  qrCodeExpiry: null,
+  reconnectAttempts: 0,
+  lastError: null,
+  isReady: false,
+  phoneNumber: null,
+  pushname: null,
+  clientInfo: null,
+  loadingStartTime: null,
+  authStartTime: null
+};
+
+// Make state globally available
+global.whatsappConnectionState = whatsappConnectionState;
+
+// QR code expiry timeout (WhatsApp QR codes expire after ~60 seconds)
+const QR_CODE_TIMEOUT = 60000; // 60 seconds
+let qrExpiryTimeout = null;
+
+// Auto-reconnect configuration
+const RECONNECT_INTERVAL = 10000; // 10 seconds
+let reconnectAttempts = 0;
+const MAX_RECONNECT_ATTEMPTS = 5;
+let reconnectTimeout;
+
 /**
  * Handle graceful shutdown of the application
  */
@@ -1709,35 +1738,6 @@ client.on('message', async (message) => {
     });
   }
 });
-
-// WhatsApp connection state tracking
-const whatsappConnectionState = {
-  status: 'initializing', // initializing, loading, qr_pending, authenticating, authenticated, disconnected, error, timeout
-  lastStateChange: Date.now(),
-  qrCodeGenerated: null,
-  qrCodeExpiry: null,
-  reconnectAttempts: 0,
-  lastError: null,
-  isReady: false,
-  phoneNumber: null,
-  pushname: null,
-  clientInfo: null,
-  loadingStartTime: null,
-  authStartTime: null
-};
-
-// Make state globally available
-global.whatsappConnectionState = whatsappConnectionState;
-
-// QR code expiry timeout (WhatsApp QR codes expire after ~60 seconds)
-const QR_CODE_TIMEOUT = 60000; // 60 seconds
-let qrExpiryTimeout = null;
-
-// Auto-reconnect configuration
-const RECONNECT_INTERVAL = 10000; // 10 seconds
-let reconnectAttempts = 0;
-const MAX_RECONNECT_ATTEMPTS = 5;
-let reconnectTimeout;
 
 /**
  * Initialize WhatsApp client with auto-reconnect
