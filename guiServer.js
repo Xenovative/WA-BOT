@@ -19,8 +19,6 @@ const port = process.env.GUI_PORT || 3000;
 // Make app available globally for services
 global.app = app;
 const adminUtils = require('./utils/adminUtils');
-const adminApiRoutes = require('./routes/adminApi');
-app.use('/api/admin', adminApiRoutes);
 const alertRoutes = require('./routes/alerts');
 app.use('/api/alerts', alertRoutes);
 
