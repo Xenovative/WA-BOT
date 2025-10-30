@@ -21,6 +21,8 @@ global.app = app;
 const adminUtils = require('./utils/adminUtils');
 const alertRoutes = require('./routes/alerts');
 app.use('/api/alerts', alertRoutes);
+const settingsRouter = express.Router();
+app.use('/api/settings', settingsRouter);
 
 // Function to save environment variables to .env file
 function saveEnvVariable(key, value) {
@@ -1037,7 +1039,7 @@ app.get('/api/status', (req, res) => {
   }
 });
 
-app.get('/api/settings', (req, res) => {
+settingsRouter.get('/', (req, res) => {
   try {
     const commandHandler = require('./handlers/commandHandler');
     const settings = commandHandler.getCurrentSettings();
@@ -1074,7 +1076,7 @@ app.get('/api/settings', (req, res) => {
   }
 });
 
-app.post('/api/settings', express.json(), async (req, res) => {
+settingsRouter.post('/', async (req, res) => {
   try {
     const commandHandler = require('./handlers/commandHandler');
     const newSettings = req.body || {};
