@@ -2776,63 +2776,7 @@ app.get('/api/chats/export/csv', (req, res) => {
   }
 });
 
-// For any non-API routes, serve the index.html file
-app.get('*', (req, res, next) => {
-  // Skip workflow paths - let Node-RED handle them
-  if (req.path.startsWith('/workflow') || req.path.startsWith('/api/workflow')) {
-    return next();
-  }
-  
-  // Don't intercept API requests
-  if (req.path.startsWith('/api/')) {
-    return res.status(404).json({ success: false, error: 'API endpoint not found' });
-  }
-  
-  // Serve the main app for all other routes
-  res.sendFile(path.join(__dirname, 'gui/public/index.html'));
-});
-
-// WebSocket connection handling
-wss.on('connection', (ws) => {
-  console.log('[WebSocket] Client connected');
-  
-  // Send a test message to confirm connection
-  setTimeout(() => {
-    ws.send(JSON.stringify({
-      type: 'connection_test',
-      data: { message: 'WebSocket connection established' },
-      timestamp: new Date().toISOString()
-    }));
-  }, 1000);
-  
-  ws.on('close', () => {
-    console.log('[WebSocket] Client disconnected');
-  });
-  
-  ws.on('error', (error) => {
-    console.error('[WebSocket] Error:', error);
-  });
-});
-
-// Function to broadcast updates to all connected clients
-function broadcastUpdate(type, data) {
-  const message = JSON.stringify({ type, data, timestamp: new Date().toISOString() });
-  
-  wss.clients.forEach((client) => {
-    if (client.readyState === WebSocket.OPEN) {
-      try {
-        client.send(message);
-      } catch (error) {
-        console.error('[WebSocket] Error sending message:', error);
-      }
-    }
-  });
-}
-
-// Make broadcast function globally available
-global.broadcastUpdate = broadcastUpdate;
-
-// Platform Management API Endpoints
+// Platform Management API Endpoints - MUST be before catch-all route
 
 // Get platform status
 app.get('/api/platforms/status', (req, res) => {
@@ -2925,6 +2869,62 @@ app.get('/api/platforms/status', (req, res) => {
     res.status(500).json({ error: 'Failed to get platform status' });
   }
 });
+
+// For any non-API routes, serve the index.html file
+app.get('*', (req, res, next) => {
+  // Skip workflow paths - let Node-RED handle them
+  if (req.path.startsWith('/workflow') || req.path.startsWith('/api/workflow')) {
+    return next();
+  }
+  
+  // Don't intercept API requests
+  if (req.path.startsWith('/api/')) {
+    return res.status(404).json({ success: false, error: 'API endpoint not found' });
+  }
+  
+  // Serve the main app for all other routes
+  res.sendFile(path.join(__dirname, 'gui/public/index.html'));
+});
+
+// WebSocket connection handling
+wss.on('connection', (ws) => {
+  console.log('[WebSocket] Client connected');
+  
+  // Send a test message to confirm connection
+  setTimeout(() => {
+    ws.send(JSON.stringify({
+      type: 'connection_test',
+      data: { message: 'WebSocket connection established' },
+      timestamp: new Date().toISOString()
+    }));
+  }, 1000);
+  
+  ws.on('close', () => {
+    console.log('[WebSocket] Client disconnected');
+  });
+  
+  ws.on('error', (error) => {
+    console.error('[WebSocket] Error:', error);
+  });
+});
+
+// Function to broadcast updates to all connected clients
+function broadcastUpdate(type, data) {
+  const message = JSON.stringify({ type, data, timestamp: new Date().toISOString() });
+  
+  wss.clients.forEach((client) => {
+    if (client.readyState === WebSocket.OPEN) {
+      try {
+        client.send(message);
+      } catch (error) {
+        console.error('[WebSocket] Error sending message:', error);
+      }
+    }
+  });
+}
+
+// Make broadcast function globally available
+global.broadcastUpdate = broadcastUpdate;
 
 // Set platform enabled/disabled state
 app.post('/api/platforms/:platform/enabled', (req, res) => {
