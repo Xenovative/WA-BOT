@@ -1074,6 +1074,29 @@ app.get('/api/settings', (req, res) => {
   }
 });
 
+app.post('/api/settings', express.json(), async (req, res) => {
+  try {
+    const commandHandler = require('./handlers/commandHandler');
+    const newSettings = req.body || {};
+
+    const result = await commandHandler.updateSettings(newSettings);
+    if (result && result.success === false) {
+      const message = result.error || 'Failed to update settings';
+      console.error('Error updating settings:', message);
+      return res.status(400).json({ success: false, error: message });
+    }
+
+    if (newSettings.alerts) {
+      persistAlertSettings(newSettings.alerts);
+    }
+
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Error updating settings:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
 app.post('/api/profile/delete', (req, res) => {
   try {
     const commandHandler = require('./handlers/commandHandler');
