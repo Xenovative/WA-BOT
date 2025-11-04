@@ -308,24 +308,27 @@ app.get('/api/whatsapp/qr', (req, res) => {
             return res.status(503).json({ error: 'WhatsApp client not initialized' });
         }
 
-        // If client is already authenticated, no need for QR code
-        //const connectionState = global.whatsappConnectionState;
-       //const isAuthenticated = connectionState?.isReady || (client.info && client.info.wid);
+        // Get connection state
+        const connectionState = global.whatsappConnectionState || {};
+        
+        // Robust authentication check - only consider authenticated if isReady is explicitly true
+        const isAuthenticated = connectionState.isReady === true;
         
         console.log('[QR-API] Authentication check:', {
             hasClientInfo: !!client.info,
             hasWid: !!(client.info && client.info.wid),
-            isReady: connectionState?.isReady,
-            status: connectionState?.status,
+            isReady: connectionState.isReady,
+            status: connectionState.status,
             isAuthenticated: isAuthenticated
         });
         
+        // Only return authenticated if truly ready
         if (isAuthenticated) {
             console.log('[QR-API] Client already authenticated');
             return res.status(200).json({ authenticated: true });
         }
 
-        // If we already have a QR code, return it
+        // If we already have a QR code, return it immediately
         if (global.qrCodeData) {
             console.log('[QR-API] Returning existing QR code data (length:', global.qrCodeData.length, ')');
             return res.json({ qr: global.qrCodeData });
