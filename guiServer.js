@@ -309,8 +309,8 @@ app.get('/api/whatsapp/qr', (req, res) => {
         }
 
         // If client is already authenticated, no need for QR code
-        const connectionState = global.whatsappConnectionState;
-        const isAuthenticated = connectionState?.isReady || (client.info && client.info.wid);
+        //const connectionState = global.whatsappConnectionState;
+       //const isAuthenticated = connectionState?.isReady || (client.info && client.info.wid);
         
         console.log('[QR-API] Authentication check:', {
             hasClientInfo: !!client.info,
