@@ -1513,7 +1513,7 @@ async function startQRCodeGeneration() {
         
         console.log('[QR] Fetching QR code from server...');
         // Get QR code data from server
-        const response = await Api.fetch('/api/whatsapp/qr');
+        const response = await fetch('/api/whatsapp/qr');
         console.log('[QR] Response status:', response.status, response.ok);
         
         let data;
