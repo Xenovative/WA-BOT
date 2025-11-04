@@ -9,7 +9,7 @@ class VisionHandler {
     this.enabled = process.env.ENABLE_VISION === 'true';
     this.maxImageSize = parseInt(process.env.MAX_IMAGE_SIZE_MB || '10') * 1024 * 1024; // Convert MB to bytes
     this.tempDir = path.join(__dirname, '..', 'temp');
-    this.visionPrompt = process.env.VISION_PROMPT || 'Describe this image in detail. Be concise but informative.';
+    this.visionPrompt = process.env.VISION_PROMPT || 'Analyze this image in detail. Describe what you see including: people (who they are, their appearance, expressions, actions), objects, text, setting, context, and any notable details. Be specific and thorough.';
     
     // Create temp directory if it doesn't exist
     if (!fs.existsSync(this.tempDir)) {
@@ -19,7 +19,7 @@ class VisionHandler {
     console.log('[Vision] Vision handler initialized:', {
       enabled: this.enabled,
       maxImageSize: `${this.maxImageSize / 1024 / 1024}MB`,
-      visionPrompt: this.visionPrompt
+      visionPrompt: this.visionPrompt.substring(0, 100) + '...'
     });
   }
 
@@ -136,9 +136,11 @@ class VisionHandler {
       }
     }
     
-    // If message has text, use it as custom prompt
+    // If message has text, use it as custom prompt with enhanced context
     if (messageText.trim().length > 0) {
-      return messageText.trim();
+      const userPrompt = messageText.trim();
+      // Enhance the prompt with more specific instructions for better results
+      return `${userPrompt}\n\nPlease analyze this image in detail and answer the question. If the question asks about people, describe who they are, what they're doing, their appearance, expressions, and any visible text or context in the image. Be specific and thorough.`;
     }
     
     return null;
