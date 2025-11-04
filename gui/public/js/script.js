@@ -1507,10 +1507,25 @@ async function startQRCodeGeneration() {
         // Get QR code data from server
         const response = await Api.fetch('/api/whatsapp/qr');
         if (!response.ok) {
-            throw new Error('Failed to get QR code');
+            const errorText = await response.text();
+            console.error('[QR] Server returned error:', response.status, errorText);
+            throw new Error(`Failed to get QR code: ${response.status} - ${errorText}`);
         }
         
         const data = await response.json();
+        console.log('[QR] Received data from server:', { 
+            authenticated: data.authenticated, 
+            hasQr: !!data.qr,
+            error: data.error 
+        });
+        
+        // Check if server returned an error
+        if (data.error) {
+            console.error('[QR] Server error:', data.error);
+            qrContainer.innerHTML = `<div class="alert alert-warning"><i class="bi bi-exclamation-triangle"></i> ${data.error}</div>`;
+            qrStatus.textContent = 'Error';
+            return;
+        }
         
         // Check if already authenticated
         if (data.authenticated) {

@@ -299,41 +299,50 @@ try {
 // Get WhatsApp QR code for authentication
 app.get('/api/whatsapp/qr', (req, res) => {
     try {
+        console.log('[QR-API] QR code request received');
+        
         // Get the WhatsApp client instance
         const client = global.client;
         if (!client) {
+            console.log('[QR-API] Client not initialized');
             return res.status(503).json({ error: 'WhatsApp client not initialized' });
         }
 
         // If client is already authenticated, no need for QR code
         if (client.info) {
+            console.log('[QR-API] Client already authenticated');
             return res.status(200).json({ authenticated: true });
         }
 
         // If we already have a QR code, return it
         if (global.qrCodeData) {
+            console.log('[QR-API] Returning existing QR code data (length:', global.qrCodeData.length, ')');
             return res.json({ qr: global.qrCodeData });
         }
 
+        console.log('[QR-API] No QR code available yet, waiting for next QR code event...');
+        
         // Set up a promise to wait for the next QR code
         return new Promise((resolve) => {
             // Set a timeout to prevent hanging
             const timeout = setTimeout(() => {
                 if (global.pendingQrResolve) {
+                    console.log('[QR-API] QR code generation timeout after 10 seconds');
                     global.pendingQrResolve = null;
-                    resolve(res.status(408).json({ error: 'QR code generation timeout' }));
+                    resolve(res.status(408).json({ error: 'QR code generation timeout. Please try again or restart the server.' }));
                 }
             }, 10000); // 10 second timeout
 
             // Store the resolve function to be called when we get a QR code
             global.pendingQrResolve = (data) => {
+                console.log('[QR-API] QR code received from event, sending to client');
                 clearTimeout(timeout);
                 global.pendingQrResolve = null;
                 resolve(res.json(data));
             };
         });
     } catch (error) {
-        console.error('Error generating QR code:', error);
+        console.error('[QR-API] Error generating QR code:', error);
         res.status(500).json({ error: 'Failed to generate QR code: ' + error.message });
     }
 });
