@@ -754,13 +754,14 @@ client.on('qr', (qr) => {
   // Ignore QR code events if already authenticated or ready
   if (whatsappConnectionState.isReady || 
       whatsappConnectionState.status === 'authenticated' || 
-      whatsappConnectionState.status === 'authenticating') {
-    console.log('[QR] Ignoring QR code event - already authenticated');
+      whatsappConnectionState.status === 'authenticating' ||
+      whatsappConnectionState.status === 'loading') {
+    console.log(`[QR] Ignoring QR code event - current status: ${whatsappConnectionState.status}, isReady: ${whatsappConnectionState.isReady}`);
     return;
   }
   
   const now = Date.now();
-  console.log('QR Code generated for web interface');
+  console.log(`[QR] QR Code generated for web interface (status: ${whatsappConnectionState.status})`);
   
   // Update connection state
   whatsappConnectionState.status = 'qr_pending';
