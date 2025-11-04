@@ -751,6 +751,14 @@ client.sendMessage = async function(chatId, content, options = {}) {
 
 // QR code handling - store for web interface
 client.on('qr', (qr) => {
+  // Ignore QR code events if already authenticated or ready
+  if (whatsappConnectionState.isReady || 
+      whatsappConnectionState.status === 'authenticated' || 
+      whatsappConnectionState.status === 'authenticating') {
+    console.log('[QR] Ignoring QR code event - already authenticated');
+    return;
+  }
+  
   const now = Date.now();
   console.log('QR Code generated for web interface');
   
