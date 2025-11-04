@@ -366,6 +366,8 @@ global.whatsappConnectionState = whatsappConnectionState;
 // QR code expiry timeout (WhatsApp QR codes expire after ~60 seconds)
 const QR_CODE_TIMEOUT = 60000; // 60 seconds
 let qrExpiryTimeout = null;
+let lastQrCodeTime = 0;
+const QR_CODE_DEBOUNCE = 5000; // Don't log QR codes more than once per 5 seconds
 
 // Auto-reconnect configuration
 const RECONNECT_INTERVAL = 10000; // 10 seconds
@@ -761,7 +763,16 @@ client.on('qr', (qr) => {
   }
   
   const now = Date.now();
-  console.log(`[QR] QR Code generated for web interface (status: ${whatsappConnectionState.status})`);
+  
+  // Debounce QR code logging to prevent spam during initialization
+  const timeSinceLastQr = now - lastQrCodeTime;
+  if (timeSinceLastQr < QR_CODE_DEBOUNCE && lastQrCodeTime > 0) {
+    console.log(`[QR] QR code regenerated (${(timeSinceLastQr/1000).toFixed(1)}s since last) - updating silently`);
+  } else {
+    console.log(`[QR] QR Code generated for web interface (status: ${whatsappConnectionState.status})`);
+  }
+  
+  lastQrCodeTime = now;
   
   // Update connection state
   whatsappConnectionState.status = 'qr_pending';
@@ -812,8 +823,9 @@ client.on('loading_screen', (percent, message) => {
 });
 
 // Authentication handling
-client.on('authenticated', () => {
+client.on('authenticated', (session) => {
   console.log('✅ Client is authenticated!');
+  console.log(`[Auth] Session loaded from: ${path.resolve(process.cwd(), '.wwebjs_auth/wa-bot-client')}`);
   
   // Clear QR expiry timeout
   if (qrExpiryTimeout) {
