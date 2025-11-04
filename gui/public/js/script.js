@@ -1425,6 +1425,13 @@ function generateQRCode(qrData, container) {
     // Clear previous QR code if any
     container.innerHTML = '';
     
+    // Check if QRCode library is loaded
+    if (typeof QRCode === 'undefined') {
+        console.error('QRCode library not loaded!');
+        container.innerHTML = '<div class="alert alert-danger"><i class="bi bi-exclamation-triangle"></i> QR Code library failed to load. Please refresh the page.</div>';
+        return Promise.resolve();
+    }
+    
     // Create a canvas element for the QR code
     const canvas = document.createElement('canvas');
     container.appendChild(canvas);
@@ -1571,6 +1578,7 @@ async function startQRCodeGeneration() {
         }
         
         if (data.qr) {
+            console.log('[QR] QR data received, length:', data.qr.length);
             // Generate QR code
             qrContainer.innerHTML = '';
             await generateQRCode(data.qr, qrContainer);
@@ -1590,8 +1598,9 @@ async function startQRCodeGeneration() {
                 }
             }, 3000);
         } else {
-            qrContainer.innerHTML = '<p class="text-danger">Failed to generate QR code</p>';
-            qrStatus.textContent = 'Please try again';
+            console.error('[QR] No QR data in response:', data);
+            qrContainer.innerHTML = '<div class="alert alert-warning"><i class="bi bi-exclamation-triangle"></i> No QR code available. The WhatsApp client may not be ready. Please restart the server.</div>';
+            qrStatus.textContent = 'Please try again or restart server';
         }
     } catch (error) {
         console.error('Error generating QR code:', error);
