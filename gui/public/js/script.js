@@ -612,14 +612,16 @@ document.addEventListener('DOMContentLoaded', () => {
   }
   
   // Event listeners
-  refreshBtn.addEventListener('click', () => {
-    loadStatus();
-    loadSettings();
-    loadChats();
-    loadKbDocuments();
-    loadCommandHistory();
-    loadSystemStats();
-  });
+  if (refreshBtn) {
+    refreshBtn.addEventListener('click', () => {
+      loadStatus();
+      loadSettings();
+      loadChats();
+      loadKbDocuments();
+      loadCommandHistory();
+      loadSystemStats();
+    });
+  }
   
   if (refreshDashboardBtn) {
     refreshDashboardBtn.addEventListener('click', () => {
