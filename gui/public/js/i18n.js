@@ -78,6 +78,7 @@ class I18n {
             'qr.loading': 'Loading QR code...',
             'qr.generating': 'Generating QR code...',
             'qr.scan_instruction': 'Scan the QR code with your WhatsApp mobile app',
+            'qr.already_connected': 'Already connected',
             
             // Dashboard
             'dashboard.title': 'WhatsXENO Management Console',
@@ -769,6 +770,7 @@ class I18n {
             'qr.loading': '載入 QR 碼中...',
             'qr.generating': '生成 QR 碼中...',
             'qr.scan_instruction': '使用您的 WhatsApp 手機應用程式掃描 QR 碼',
+            'qr.already_connected': '已連接',
             
             // Common (additional)
             'common.add': '新增',
@@ -1149,6 +1151,7 @@ class I18n {
             'qr.loading': '加载 QR 码中...',
             'qr.generating': '生成 QR 码中...',
             'qr.scan_instruction': '使用您的 WhatsApp 手机应用程序扫描 QR 码',
+            'qr.already_connected': '已连接',
             
             // Common (additional)
             'common.add': '添加',

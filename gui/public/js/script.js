@@ -1512,6 +1512,25 @@ async function startQRCodeGeneration() {
         
         const data = await response.json();
         
+        // Check if already authenticated
+        if (data.authenticated) {
+            qrContainer.innerHTML = '<div class="alert alert-success"><i class="bi bi-check-circle"></i> WhatsApp is already connected!</div>';
+            qrStatus.textContent = window.i18n ? window.i18n.t('qr.already_connected') : 'Already connected';
+            
+            // Close the modal after a short delay
+            setTimeout(() => {
+                const modal = bootstrap.Modal.getInstance(document.getElementById('qrScannerModal'));
+                if (modal) {
+                    modal.hide();
+                }
+                // Refresh chats
+                if (window.currentApp === 'whatsapp') {
+                    loadRecentChats();
+                }
+            }, 2000);
+            return;
+        }
+        
         if (data.qr) {
             // Generate QR code
             qrContainer.innerHTML = '';
