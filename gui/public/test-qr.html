@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>QR Code Test</title>
+    <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.1/build/qrcode.min.js"></script>
+</head>
+<body>
+    <h1>Direct QR Code Test</h1>
+    <div id="status"></div>
+    <div id="qr-container"></div>
+    
+    <script>
+        async function testQR() {
+            const statusDiv = document.getElementById('status');
+            const qrDiv = document.getElementById('qr-container');
+            
+            try {
+                statusDiv.innerHTML = 'Fetching QR code...';
+                console.log('Fetching from /api/whatsapp/qr');
+                
+                const response = await fetch('/api/whatsapp/qr');
+                console.log('Response status:', response.status);
+                
+                const data = await response.json();
+                console.log('Response data:', data);
+                
+                if (data.authenticated) {
+                    statusDiv.innerHTML = '<p style="color: green;">Already authenticated!</p>';
+                } else if (data.error) {
+                    statusDiv.innerHTML = '<p style="color: red;">Error: ' + data.error + '</p>';
+                } else if (data.qr) {
+                    statusDiv.innerHTML = '<p style="color: blue;">QR Code received! Length: ' + data.qr.length + '</p>';
+                    
+                    // Generate QR code
+                    const canvas = document.createElement('canvas');
+                    qrDiv.appendChild(canvas);
+                    
+                    QRCode.toCanvas(canvas, data.qr, {
+                        width: 300,
+                        margin: 2
+                    }, function (error) {
+                        if (error) {
+                            console.error('QR generation error:', error);
+                            statusDiv.innerHTML += '<p style="color: red;">Failed to generate QR: ' + error + '</p>';
+                        } else {
+                            console.log('QR code generated successfully!');
+                            statusDiv.innerHTML += '<p style="color: green;">QR code displayed!</p>';
+                        }
+                    });
+                } else {
+                    statusDiv.innerHTML = '<p style="color: orange;">No QR code available</p>';
+                    console.log('Full response:', JSON.stringify(data, null, 2));
+                }
+            } catch (error) {
+                console.error('Error:', error);
+                statusDiv.innerHTML = '<p style="color: red;">Error: ' + error.message + '</p>';
+            }
+        }
+        
+        // Run on page load
+        testQR();
+    </script>
+</body>
+</html>
