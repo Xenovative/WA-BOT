@@ -334,7 +334,7 @@ app.get('/api/whatsapp/qr', (req, res) => {
             return res.json({ qr: global.qrCodeData });
         }
 
-        console.log('[QR-API] No QR code available yet, waiting for next QR code event...');
+        console.log('[QR-API] No QR code available yet, client status:', connectionState.status, '- waiting for next QR code event...');
         
         // Set up a promise to wait for the next QR code
         return new Promise((resolve) => {
