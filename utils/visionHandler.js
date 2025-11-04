@@ -30,24 +30,34 @@ class VisionHandler {
    * @returns {Promise<{text: string, error: string|null}>}
    */
   async processImageMessage(message, customPrompt = null) {
+    console.log('[VisionHandler] processImageMessage called', {
+      enabled: this.enabled,
+      hasCustomPrompt: !!customPrompt,
+      customPromptLength: customPrompt ? customPrompt.length : 0
+    });
+    
     if (!this.enabled) {
-      console.log('[Vision] Vision processing is disabled');
-      return { text: null, error: 'Vision processing is disabled' };
+      console.log('[VisionHandler] Vision processing is DISABLED (ENABLE_VISION not set to true)');
+      return { text: null, error: 'Vision processing is disabled. Please set ENABLE_VISION=true in your .env file and restart the server.' };
     }
 
     try {
-      console.log(`[Vision] Processing image message from ${message.from}`);
+      console.log(`[VisionHandler] Vision is enabled, processing image from ${message.from}`);
       
       // Check if downloadMedia method exists
       if (typeof message.downloadMedia !== 'function') {
+        console.error('[VisionHandler] downloadMedia method not found on message object');
         throw new Error('message.downloadMedia is not a function');
       }
       
+      console.log('[VisionHandler] Downloading image media...');
       // Download the image
       const media = await message.downloadMedia();
       if (!media) {
+        console.error('[VisionHandler] Failed to download media - media is null/undefined');
         throw new Error('Failed to download image');
       }
+      console.log('[VisionHandler] Media downloaded successfully');
 
       // Check file size
       const imageBuffer = Buffer.from(media.data, 'base64');

@@ -1160,6 +1160,14 @@ client.on('message', async (message) => {
   
   // Handle image messages with vision
   if (message.hasMedia && visionHandler.isImageMessage(message)) {
+    console.log('[Vision] Image message detected!', {
+      hasMedia: message.hasMedia,
+      type: message.type,
+      mimetype: message._data?.mimetype,
+      body: message.body,
+      from: message.from
+    });
+    
     // Skip if this is a pseudo-message (already processed image message)
     if (message._data?.isImageMessage) {
       console.log('[Vision] Skipping already processed image message');
@@ -1186,22 +1194,35 @@ client.on('message', async (message) => {
       }
       
       console.log(`[Vision] Processing image message from ${message.from}`);
+      console.log(`[Vision] Message caption: "${message.body || '(no caption)'}"`);
       
       // Extract custom prompt from message caption
       const customPrompt = visionHandler.extractCustomPrompt(message.body);
+      console.log(`[Vision] Custom prompt extracted: ${customPrompt ? `"${customPrompt.substring(0, 50)}..."` : 'none'}`);
       
       const result = await visionHandler.processImageMessage(message, customPrompt);
+      console.log(`[Vision] Processing result:`, { hasText: !!result.text, error: result.error });
       
       if (result.error) {
         console.error(`[Vision] Error: ${result.error}`);
-        await message.reply(`❌ ${result.error}`);
+        try {
+          await message.reply(`❌ ${result.error}`);
+          console.log('[Vision] Error message sent to user');
+        } catch (replyError) {
+          console.error('[Vision] Failed to send error reply:', replyError);
+        }
         return;
       }
       
       if (result.text) {
         // Send the image description to the user
         console.log(`[Vision] Image analyzed: ${result.text.substring(0, 100)}...`);
-        await message.reply(`🖼️ *Image Analysis:*\n\n${result.text}`);
+        try {
+          await message.reply(`🖼️ *Image Analysis:*\n\n${result.text}`);
+          console.log('[Vision] Analysis sent to user successfully');
+        } catch (replyError) {
+          console.error('[Vision] Failed to send analysis reply:', replyError);
+        }
         
         // Create a pseudo-message with the image description for further AI processing
         const pseudoMsg = {
@@ -1238,11 +1259,19 @@ client.on('message', async (message) => {
           console.log('[Vision] Custom prompt detected, processing with AI...');
           client.emit('message', pseudoMsg);
         }
+      } else {
+        console.warn('[Vision] No text in result and no error - this should not happen');
       }
       return;
     } catch (error) {
       console.error('[Vision] Error handling image message:', error);
-      await message.reply(`❌ Error processing image: ${error.message}`);
+      console.error('[Vision] Error stack:', error.stack);
+      try {
+        await message.reply(`❌ Error processing image: ${error.message}`);
+        console.log('[Vision] Error message sent to user');
+      } catch (replyError) {
+        console.error('[Vision] Failed to send error reply:', replyError);
+      }
       return;
     }
   }
