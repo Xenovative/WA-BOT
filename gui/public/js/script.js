@@ -1489,12 +1489,19 @@ async function checkWhatsAppAuth() {
  * Start QR code generation and checking
  */
 async function startQRCodeGeneration() {
+    console.log('[QR] startQRCodeGeneration called!');
     const qrContainer = document.getElementById('qr-code-container');
     const qrStatus = document.getElementById('qr-status');
     
-    if (!qrContainer || !qrStatus) return;
+    console.log('[QR] Elements found:', { qrContainer: !!qrContainer, qrStatus: !!qrStatus });
+    
+    if (!qrContainer || !qrStatus) {
+        console.error('[QR] Required elements not found!');
+        return;
+    }
     
     try {
+        console.log('[QR] Starting QR code generation...');
         // Clear any existing interval
         if (window.qrCodeInterval) {
             clearInterval(window.qrCodeInterval);
@@ -1504,6 +1511,7 @@ async function startQRCodeGeneration() {
         qrContainer.innerHTML = '<div class="spinner-border text-primary" role="status"><span class="visually-hidden">Loading...</span></div>';
         qrStatus.textContent = window.i18n ? window.i18n.t('qr.generating') : 'Generating QR code...';
         
+        console.log('[QR] Fetching QR code from server...');
         // Get QR code data from server
         const response = await Api.fetch('/api/whatsapp/qr');
         console.log('[QR] Response status:', response.status, response.ok);
