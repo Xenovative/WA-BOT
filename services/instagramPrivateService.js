@@ -3,6 +3,7 @@ const LLMFactory = require('../llm/llmFactory');
 const commandHandler = require('../handlers/commandHandler');
 const ragProcessor = require('../kb/ragProcessor');
 const voiceHandler = require('../utils/voiceHandler');
+const visionHandler = require('../utils/visionHandler');
 const fetch = require('node-fetch');
 
 class InstagramPrivateService {
@@ -341,7 +342,84 @@ class InstagramPrivateService {
             if (message.item_type === 'text') {
                 messageText = message.text;
             } else if (message.item_type === 'media') {
-                messageText = '[MEDIA]';
+                // Check if it's an image that should be processed with vision
+                if (message.media && message.media.media_type === 1) { // media_type 1 is photo
+                    console.log('📸 Processing Instagram image message...');
+                    
+                    try {
+                        // Create a mock message object for visionHandler compatibility
+                        const mockMessage = {
+                            from: senderId,
+                            hasMedia: true,
+                            type: 'image',
+                            body: message.text || '',
+                            downloadMedia: async () => {
+                                console.log('🔽 Attempting to download Instagram image...');
+                                
+                                // Get image URL from Instagram media
+                                const imageUrl = message.media.image_versions2?.candidates?.[0]?.url;
+                                console.log('🔗 Image URL:', imageUrl ? 'Found' : 'Not found');
+                                
+                                if (imageUrl) {
+                                    console.log('📥 Downloading image from Instagram...');
+                                    const response = await fetch(imageUrl);
+                                    
+                                    if (!response.ok) {
+                                        throw new Error(`Failed to download image: ${response.status} ${response.statusText}`);
+                                    }
+                                    
+                                    const buffer = await response.buffer();
+                                    console.log(`✅ Downloaded ${buffer.length} bytes of image data`);
+                                    
+                                    return {
+                                        data: buffer.toString('base64'),
+                                        mimetype: 'image/jpeg'
+                                    };
+                                }
+                                throw new Error('Image URL not accessible in message structure');
+                            },
+                            _data: {
+                                mimetype: 'image/jpeg'
+                            }
+                        };
+                        
+                        // Extract custom prompt from message text
+                        const customPrompt = visionHandler.extractCustomPrompt(message.text);
+                        
+                        // Process image with visionHandler
+                        console.log('🖼️ Processing image with visionHandler...');
+                        const result = await visionHandler.processImageMessage(mockMessage, customPrompt);
+                        
+                        console.log('📋 VisionHandler result:', result);
+                        
+                        if (result.text) {
+                            messageText = result.text;
+                            console.log(`🖼️ Instagram image analyzed: ${result.text.substring(0, 100)}...`);
+                            
+                            // Send image analysis to user
+                            await this.sendDirectMessage(threadId, `🖼️ *Image Analysis:*\n\n${result.text}`);
+                            
+                            // Wait a bit before sending AI response
+                            await new Promise(resolve => setTimeout(resolve, 2000));
+                            
+                            // If there was a custom prompt, continue processing with AI
+                            if (!customPrompt) {
+                                // No custom prompt, just send the analysis
+                                return;
+                            }
+                        } else if (result.error) {
+                            console.error(`🖼️ Instagram vision error: ${result.error}`);
+                            await this.sendDirectMessage(threadId, `❌ ${result.error}`);
+                            return;
+                        }
+                    } catch (error) {
+                        console.error('Error processing Instagram image:', error);
+                        await this.sendDirectMessage(threadId, `❌ Error processing image: ${error.message}`);
+                        return;
+                    }
+                } else {
+                    messageText = '[MEDIA]';
+                }
             } else if (message.item_type === 'media_share') {
                 messageText = '[SHARED_MEDIA]';
             } else if (message.item_type === 'voice_media') {

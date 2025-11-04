@@ -19,6 +19,7 @@ const fileHandler = require('./kb/fileHandler');
 const ragProcessor = require('./kb/ragProcessor');
 const fileWatcher = require('./kb/fileWatcher');
 const voiceHandler = require('./utils/voiceHandler');
+const visionHandler = require('./utils/visionHandler');
 const { handleTimeDateQuery } = require('./utils/timeUtils');
 const alertNotifier = require('./utils/alertNotifier');
 
@@ -1135,6 +1136,95 @@ client.on('message', async (message) => {
   
   // Skip media uploads handled by other handler
   if (message.hasMedia && message.body && message.body.startsWith('kb:')) return;
+  
+  // Handle image messages with vision
+  if (message.hasMedia && visionHandler.isImageMessage(message)) {
+    // Skip if this is a pseudo-message (already processed image message)
+    if (message._data?.isImageMessage) {
+      console.log('[Vision] Skipping already processed image message');
+      return;
+    }
+    
+    // Check if this is a group message
+    if (message.from.endsWith('@g.us')) {
+      console.log('[Vision] Image message in group - will be handled by group message logic');
+      // Don't process image messages in groups here
+      // They will be handled by the group message handler only if the bot is mentioned
+      return;
+    }
+    
+    try {
+      // Set typing state
+      if (typeof message.getChat === 'function') {
+        try {
+          const chat = await message.getChat();
+          await chat.sendStateTyping();
+        } catch (chatError) {
+          console.log(`[Vision] Could not set typing state: ${chatError.message}`);
+        }
+      }
+      
+      console.log(`[Vision] Processing image message from ${message.from}`);
+      
+      // Extract custom prompt from message caption
+      const customPrompt = visionHandler.extractCustomPrompt(message.body);
+      
+      const result = await visionHandler.processImageMessage(message, customPrompt);
+      
+      if (result.error) {
+        console.error(`[Vision] Error: ${result.error}`);
+        await message.reply(`❌ ${result.error}`);
+        return;
+      }
+      
+      if (result.text) {
+        // Send the image description to the user
+        console.log(`[Vision] Image analyzed: ${result.text.substring(0, 100)}...`);
+        await message.reply(`🖼️ *Image Analysis:*\n\n${result.text}`);
+        
+        // Create a pseudo-message with the image description for further AI processing
+        const pseudoMsg = {
+          from: message.from,
+          to: message.to,
+          body: `[Image: ${result.text}]`,
+          fromMe: message.fromMe,
+          author: message.author,
+          hasMedia: false,
+          type: 'chat',
+          hasQuotedMsg: false,
+          isForwarded: false,
+          _data: {
+            notifyName: message._data?.notifyName,
+            body: `[Image: ${result.text}]`,
+            isImageMessage: true,
+            from: message.from,
+            to: message.to,
+            self: message._data?.self
+          },
+          reply: async (text) => {
+            return typeof message.reply === 'function' ? 
+              message.reply(text) :
+              client.sendMessage(message.from, text);
+          },
+          getChat: () => { throw new Error('getChat not available on pseudo-message'); },
+          downloadMedia: () => { throw new Error('downloadMedia not available on pseudo-message'); },
+          delete: () => { throw new Error('delete not available on pseudo-message'); },
+          timestamp: message.timestamp || Date.now()/1000
+        };
+        
+        // If there was a custom prompt, process it with AI
+        if (customPrompt) {
+          console.log('[Vision] Custom prompt detected, processing with AI...');
+          client.emit('message', pseudoMsg);
+        }
+      }
+      return;
+    } catch (error) {
+      console.error('[Vision] Error handling image message:', error);
+      await message.reply(`❌ Error processing image: ${error.message}`);
+      return;
+    }
+  }
   
   // Check if sender is blocked (only check for manual blocks)
   const senderNumber = message.from.split('@')[0]; // Remove @c.us suffix if present

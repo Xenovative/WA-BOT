@@ -59,6 +59,59 @@ class OpenAIClient extends BaseLLMClient {
       throw new Error(`OpenAI API error: ${error.message}`);
     }
   }
+
+  /**
+   * Analyze an image using OpenAI Vision API
+   * @param {Buffer} imageBuffer - Image data as buffer
+   * @param {string} mimetype - Image mimetype (e.g., 'image/jpeg')
+   * @param {string} prompt - Question or instruction about the image
+   * @returns {Promise<string>} - The analysis result
+   */
+  async analyzeImage(imageBuffer, mimetype, prompt = 'What is in this image?') {
+    try {
+      // Convert buffer to base64
+      const base64Image = imageBuffer.toString('base64');
+      
+      // Determine the image format from mimetype
+      const imageFormat = mimetype.split('/')[1] || 'jpeg';
+      
+      // Use GPT-4 Vision model
+      const visionModel = process.env.OPENAI_VISION_MODEL || 'gpt-4-vision-preview';
+      
+      console.log(`[OpenAI-Vision] Analyzing image with model: ${visionModel}`);
+      
+      const response = await this.client.chat.completions.create({
+        model: visionModel,
+        messages: [
+          {
+            role: 'user',
+            content: [
+              {
+                type: 'text',
+                text: prompt
+              },
+              {
+                type: 'image_url',
+                image_url: {
+                  url: `data:${mimetype};base64,${base64Image}`,
+                  detail: process.env.OPENAI_VISION_DETAIL || 'auto' // 'low', 'high', or 'auto'
+                }
+              }
+            ]
+          }
+        ],
+        max_tokens: parseInt(process.env.OPENAI_VISION_MAX_TOKENS || '300')
+      });
+
+      const analysisText = response.choices[0].message.content.trim();
+      console.log(`[OpenAI-Vision] Analysis complete: ${analysisText.substring(0, 100)}...`);
+      
+      return analysisText;
+    } catch (error) {
+      console.error('[OpenAI-Vision] Error analyzing image:', error);
+      throw new Error(`OpenAI Vision API error: ${error.message}`);
+    }
+  }
 }
 
 module.exports = OpenAIClient;

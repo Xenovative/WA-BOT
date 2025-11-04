@@ -116,6 +116,58 @@ class OllamaClient extends BaseLLMClient {
   }
 
   // Using filterThinkingContent from BaseLLMClient
+
+  /**
+   * Analyze an image using Ollama vision models (e.g., llava, bakllava)
+   * @param {Buffer} imageBuffer - Image data as buffer
+   * @param {string} mimetype - Image mimetype (e.g., 'image/jpeg')
+   * @param {string} prompt - Question or instruction about the image
+   * @returns {Promise<string>} - The analysis result
+   */
+  async analyzeImage(imageBuffer, mimetype, prompt = 'What is in this image?') {
+    try {
+      // Convert buffer to base64
+      const base64Image = imageBuffer.toString('base64');
+      
+      // Use vision model (llava by default)
+      const visionModel = process.env.OLLAMA_VISION_MODEL || 'llava';
+      
+      console.log(`[Ollama-Vision] Analyzing image with model: ${visionModel}`);
+      
+      const apiUrl = `${this.baseUrl}/api/generate`;
+      
+      const requestBody = {
+        model: visionModel,
+        prompt: prompt,
+        images: [base64Image],
+        stream: false,
+        keep_alive: this.keepAlive
+      };
+      
+      const response = await fetch(apiUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(requestBody)
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`Ollama Vision API error: ${response.status} ${errorText}`);
+      }
+
+      const data = await response.json();
+      const analysisText = data.response.trim();
+      
+      console.log(`[Ollama-Vision] Analysis complete: ${analysisText.substring(0, 100)}...`);
+      
+      return analysisText;
+    } catch (error) {
+      console.error('[Ollama-Vision] Error analyzing image:', error);
+      throw new Error(`Ollama Vision API error: ${error.message}`);
+    }
+  }
 }
 
 module.exports = OllamaClient;

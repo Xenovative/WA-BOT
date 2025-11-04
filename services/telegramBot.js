@@ -7,6 +7,7 @@ const ragProcessor = require('../kb/ragProcessor');
 const blocklist = require('../utils/blocklist');
 const rateLimiter = require('../utils/rateLimiter');
 const voiceHandler = require('../utils/voiceHandler');
+const visionHandler = require('../utils/visionHandler');
 
 // Note: workflowManager will be accessed via global.workflowManager at runtime
 
@@ -149,6 +150,115 @@ class TelegramBotService {
         await this.processMessage(msg.chat.id, msg.text, msg.from);
       } catch (error) {
         console.error('Error processing Telegram message:', error);
+      }
+    });
+
+    // Handle photo messages
+    this.bot.on('photo', async (msg) => {
+      try {
+        const chatId = msg.chat.id;
+        const senderId = msg.from.id;
+        
+        console.log(`[Telegram] Photo message from ${senderId} (${msg.from.username || 'no username'})`);
+        
+        // Check if user is blocked
+        if (blocklist.isBlocked(senderId, 'telegram')) {
+          console.log(`[Telegram] Ignoring photo message from blocked user: ${senderId}`);
+          return;
+        }
+        
+        // Check rate limiting
+        const userId = `telegram:${senderId}`;
+        const rateLimit = rateLimiter.checkLimit(userId);
+        if (!rateLimit.allowed) {
+          console.log(`[Telegram] Rate limit exceeded for user: ${userId}`);
+          return;
+        }
+        
+        // Send "typing" action to show bot is processing
+        await this.bot.sendChatAction(chatId, 'typing');
+        
+        // Get the largest photo (best quality)
+        const photo = msg.photo[msg.photo.length - 1];
+        
+        // Create a pseudo-message object compatible with visionHandler
+        const pseudoMessage = {
+          from: `telegram:${senderId}`,
+          hasMedia: true,
+          type: 'image',
+          body: msg.caption || '',
+          downloadMedia: async () => {
+            try {
+              // Get file info from Telegram
+              const fileInfo = await this.bot.getFile(photo.file_id);
+              const fileUrl = `https://api.telegram.org/file/bot${this.token}/${fileInfo.file_path}`;
+              
+              console.log(`[Telegram] Downloading photo from: ${fileUrl}`);
+              
+              // Download the file
+              const response = await fetch(fileUrl);
+              if (!response.ok) {
+                throw new Error(`Failed to download photo: ${response.statusText}`);
+              }
+              
+              // Get array buffer and convert to buffer
+              const arrayBuffer = await response.arrayBuffer();
+              const buffer = Buffer.from(arrayBuffer);
+              
+              console.log(`[Telegram] Photo downloaded, size: ${buffer.length} bytes`);
+              
+              // Determine mimetype from file extension
+              const ext = fileInfo.file_path.split('.').pop().toLowerCase();
+              const mimetypeMap = {
+                'jpg': 'image/jpeg',
+                'jpeg': 'image/jpeg',
+                'png': 'image/png',
+                'gif': 'image/gif',
+                'webp': 'image/webp'
+              };
+              
+              return {
+                data: buffer.toString('base64'),
+                mimetype: mimetypeMap[ext] || 'image/jpeg'
+              };
+            } catch (error) {
+              console.error('[Telegram] Error downloading photo:', error);
+              throw error;
+            }
+          },
+          _data: {
+            mimetype: 'image/jpeg' // Default, will be updated in downloadMedia
+          }
+        };
+        
+        // Extract custom prompt from caption
+        const customPrompt = visionHandler.extractCustomPrompt(msg.caption);
+        
+        // Process image message
+        const result = await visionHandler.processImageMessage(pseudoMessage, customPrompt);
+        
+        if (result.error) {
+          console.error(`[Telegram] Vision processing error: ${result.error}`);
+          await this.sendMessage(chatId, `❌ ${result.error}`);
+          return;
+        }
+        
+        if (result.text) {
+          console.log(`[Telegram] Image analyzed: ${result.text.substring(0, 100)}...`);
+          
+          // Send image analysis
+          await this.sendMessage(chatId, `🖼️ *Image Analysis:*\n\n${result.text}`, { parse_mode: 'Markdown' });
+          
+          // If there was a custom prompt, process it with AI
+          if (customPrompt) {
+            console.log('[Telegram] Custom prompt detected, processing with AI...');
+            await this.processMessage(chatId, `[Image: ${result.text}]`, msg.from);
+          }
+        }
+        
+      } catch (error) {
+        console.error('Error processing Telegram photo message:', error);
+        await this.sendMessage(msg.chat.id, '❌ Sorry, I encountered an error processing your photo.');
       }
     });
 
