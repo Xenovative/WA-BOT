@@ -1215,51 +1215,44 @@ client.on('message', async (message) => {
       }
       
       if (result.text) {
-        // Send the image description to the user
         console.log(`[Vision] Image analyzed: ${result.text.substring(0, 100)}...`);
-        try {
-          await message.reply(`🖼️ *Image Analysis:*\n\n${result.text}`);
-          console.log('[Vision] Analysis sent to user successfully');
-        } catch (replyError) {
-          console.error('[Vision] Failed to send analysis reply:', replyError);
-        }
         
-        // If there was a custom prompt, create a pseudo-message for AI processing
-        if (customPrompt) {
-          console.log('[Vision] Custom prompt detected, processing with AI...');
-          
-          // Create a pseudo-message with the image description for further AI processing
-          const pseudoMsg = {
+        // Create a pseudo-message with the image description for AI processing
+        // Use custom prompt if provided, otherwise use a generic prompt
+        const userPrompt = customPrompt || (message.body || 'What do you see in this image?');
+        
+        console.log('[Vision] Creating AI message with image context...');
+        const pseudoMsg = {
+          from: message.from,
+          to: message.to,
+          body: `[User sent an image${message.body ? ` with caption: "${message.body}"` : ''}]\n\n[What I see in the image: ${result.text}]\n\n${userPrompt}`,
+          fromMe: message.fromMe,
+          author: message.author,
+          hasMedia: false,
+          type: 'chat',
+          hasQuotedMsg: false,
+          isForwarded: false,
+          _data: {
+            notifyName: message._data?.notifyName,
+            body: `[User sent an image${message.body ? ` with caption: "${message.body}"` : ''}]\n\n[What I see in the image: ${result.text}]\n\n${userPrompt}`,
+            isImageMessage: true,
             from: message.from,
             to: message.to,
-            body: `${customPrompt}\n\n[Image context: ${result.text}]`,
-            fromMe: message.fromMe,
-            author: message.author,
-            hasMedia: false,
-            type: 'chat',
-            hasQuotedMsg: false,
-            isForwarded: false,
-            _data: {
-              notifyName: message._data?.notifyName,
-              body: `${customPrompt}\n\n[Image context: ${result.text}]`,
-              isImageMessage: true,
-              from: message.from,
-              to: message.to,
-              self: message._data?.self
-            },
-            reply: async (text) => {
-              return typeof message.reply === 'function' ? 
-                message.reply(text) :
-                client.sendMessage(message.from, text);
-            },
-            getChat: () => { throw new Error('getChat not available on pseudo-message'); },
-            downloadMedia: () => { throw new Error('downloadMedia not available on pseudo-message'); },
-            delete: () => { throw new Error('delete not available on pseudo-message'); },
-            timestamp: message.timestamp || Date.now()/1000
-          };
-          
-          client.emit('message', pseudoMsg);
-        }
+            self: message._data?.self
+          },
+          reply: async (text) => {
+            return typeof message.reply === 'function' ? 
+              message.reply(text) :
+              client.sendMessage(message.from, text);
+          },
+          getChat: () => { throw new Error('getChat not available on pseudo-message'); },
+          downloadMedia: () => { throw new Error('downloadMedia not available on pseudo-message'); },
+          delete: () => { throw new Error('delete not available on pseudo-message'); },
+          timestamp: message.timestamp || Date.now()/1000
+        };
+        
+        // Always process with AI to get a natural response
+        client.emit('message', pseudoMsg);
       } else {
         console.warn('[Vision] No text in result and no error - this should not happen');
       }
