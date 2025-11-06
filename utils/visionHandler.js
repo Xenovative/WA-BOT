@@ -79,7 +79,7 @@ class VisionHandler {
       console.log(`[Vision] Image downloaded: ${media.mimetype}, size: ${imageBuffer.length} bytes`);
 
       // Get LLM client
-      const llmClient = global.llmClient;
+      const llmClient = global.currentLLMClient;
       if (!llmClient) {
         throw new Error('LLM client not initialized');
       }
