@@ -50,12 +50,34 @@ class VisionHandler {
         throw new Error('message.downloadMedia is not a function');
       }
       
-      console.log('[VisionHandler] Downloading image media...');
-      // Download the image
-      const media = await message.downloadMedia();
+      console.log('[VisionHandler] Downloading media...', {
+        hasMedia: message.hasMedia,
+        type: message.type,
+        mimetype: message._data?.mimetype
+      });
+      
+      // Download the media with error handling
+      let media;
+      try {
+        media = await message.downloadMedia();
+      } catch (downloadError) {
+        console.error('[VisionHandler] Download error:', downloadError);
+        throw new Error(`Failed to download media: ${downloadError.message}`);
+      }
+      
       if (!media) {
         console.error('[VisionHandler] Failed to download media - media is null/undefined');
-        throw new Error('Failed to download image');
+        console.error('[VisionHandler] Message details:', {
+          from: message.from,
+          type: message.type,
+          hasMedia: message.hasMedia,
+          _data: message._data ? {
+            mimetype: message._data.mimetype,
+            size: message._data.size,
+            isViewOnce: message._data.isViewOnce
+          } : 'no _data'
+        });
+        throw new Error('Failed to download media - the media may have expired or is not accessible');
       }
       console.log('[VisionHandler] Media downloaded successfully');
 
@@ -68,15 +90,28 @@ class VisionHandler {
         };
       }
 
-      // Validate image mimetype
-      if (!media.mimetype || !media.mimetype.startsWith('image/')) {
+      // Validate image mimetype - stickers can be image/* or video/* (animated stickers)
+      console.log(`[Vision] Media mimetype: ${media.mimetype}`);
+      if (!media.mimetype) {
         return {
           text: null,
-          error: 'Invalid image format. Please send a valid image file.'
+          error: 'Invalid media format - no mimetype detected.'
+        };
+      }
+      
+      // Accept images and stickers (which can be webp, png, or even video for animated)
+      const isValidMedia = media.mimetype.startsWith('image/') || 
+                          media.mimetype === 'video/mp4' || // Animated stickers
+                          media.mimetype === 'application/octet-stream'; // Some stickers
+      
+      if (!isValidMedia) {
+        return {
+          text: null,
+          error: `Unsupported media format: ${media.mimetype}. Please send an image or sticker.`
         };
       }
 
-      console.log(`[Vision] Image downloaded: ${media.mimetype}, size: ${imageBuffer.length} bytes`);
+      console.log(`[Vision] Media downloaded: ${media.mimetype}, size: ${imageBuffer.length} bytes`);
 
       // Get LLM client
       const llmClient = global.currentLLMClient;
