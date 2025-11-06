@@ -59,14 +59,37 @@ class VisionHandler {
       // Download the media with error handling
       let media;
       try {
-        media = await message.downloadMedia();
+        // For stickers, try multiple download attempts with delays
+        if (message.type === 'sticker') {
+          console.log('[VisionHandler] Detected sticker, attempting download with retry...');
+          
+          // Try immediate download first
+          media = await message.downloadMedia();
+          
+          // If failed, wait and retry (stickers sometimes need time to load)
+          if (!media) {
+            console.log('[VisionHandler] First attempt failed, waiting 1s and retrying...');
+            await new Promise(resolve => setTimeout(resolve, 1000));
+            media = await message.downloadMedia();
+          }
+          
+          // If still failed, try one more time
+          if (!media) {
+            console.log('[VisionHandler] Second attempt failed, waiting 2s and retrying...');
+            await new Promise(resolve => setTimeout(resolve, 2000));
+            media = await message.downloadMedia();
+          }
+        } else {
+          // Regular images should download immediately
+          media = await message.downloadMedia();
+        }
       } catch (downloadError) {
         console.error('[VisionHandler] Download error:', downloadError);
         throw new Error(`Failed to download media: ${downloadError.message}`);
       }
       
       if (!media) {
-        console.error('[VisionHandler] Failed to download media - media is null/undefined');
+        console.error('[VisionHandler] Failed to download media - media is null/undefined after all attempts');
         console.error('[VisionHandler] Message details:', {
           from: message.from,
           type: message.type,
@@ -74,10 +97,11 @@ class VisionHandler {
           _data: message._data ? {
             mimetype: message._data.mimetype,
             size: message._data.size,
-            isViewOnce: message._data.isViewOnce
+            isViewOnce: message._data.isViewOnce,
+            id: message._data.id
           } : 'no _data'
         });
-        throw new Error('Failed to download media - the media may have expired or is not accessible');
+        throw new Error('Failed to download sticker/media. The media may have expired, is not accessible, or WhatsApp Web.js cannot download this sticker type.');
       }
       console.log('[VisionHandler] Media downloaded successfully');
 
