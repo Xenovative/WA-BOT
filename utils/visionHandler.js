@@ -113,8 +113,8 @@ class VisionHandler {
   isImageMessage(message) {
     if (!message.hasMedia) return false;
     
-    // Check message type
-    if (message.type === 'image') return true;
+    // Check message type - include both images and stickers
+    if (message.type === 'image' || message.type === 'sticker') return true;
     
     // Check mimetype if available
     if (message._data?.mimetype && message._data.mimetype.startsWith('image/')) return true;

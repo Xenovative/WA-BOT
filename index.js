@@ -1224,39 +1224,40 @@ client.on('message', async (message) => {
           console.error('[Vision] Failed to send analysis reply:', replyError);
         }
         
-        // Create a pseudo-message with the image description for further AI processing
-        const pseudoMsg = {
-          from: message.from,
-          to: message.to,
-          body: `[Image: ${result.text}]`,
-          fromMe: message.fromMe,
-          author: message.author,
-          hasMedia: false,
-          type: 'chat',
-          hasQuotedMsg: false,
-          isForwarded: false,
-          _data: {
-            notifyName: message._data?.notifyName,
-            body: `[Image: ${result.text}]`,
-            isImageMessage: true,
-            from: message.from,
-            to: message.to,
-            self: message._data?.self
-          },
-          reply: async (text) => {
-            return typeof message.reply === 'function' ? 
-              message.reply(text) :
-              client.sendMessage(message.from, text);
-          },
-          getChat: () => { throw new Error('getChat not available on pseudo-message'); },
-          downloadMedia: () => { throw new Error('downloadMedia not available on pseudo-message'); },
-          delete: () => { throw new Error('delete not available on pseudo-message'); },
-          timestamp: message.timestamp || Date.now()/1000
-        };
-        
-        // If there was a custom prompt, process it with AI
+        // If there was a custom prompt, create a pseudo-message for AI processing
         if (customPrompt) {
           console.log('[Vision] Custom prompt detected, processing with AI...');
+          
+          // Create a pseudo-message with the image description for further AI processing
+          const pseudoMsg = {
+            from: message.from,
+            to: message.to,
+            body: `${customPrompt}\n\n[Image context: ${result.text}]`,
+            fromMe: message.fromMe,
+            author: message.author,
+            hasMedia: false,
+            type: 'chat',
+            hasQuotedMsg: false,
+            isForwarded: false,
+            _data: {
+              notifyName: message._data?.notifyName,
+              body: `${customPrompt}\n\n[Image context: ${result.text}]`,
+              isImageMessage: true,
+              from: message.from,
+              to: message.to,
+              self: message._data?.self
+            },
+            reply: async (text) => {
+              return typeof message.reply === 'function' ? 
+                message.reply(text) :
+                client.sendMessage(message.from, text);
+            },
+            getChat: () => { throw new Error('getChat not available on pseudo-message'); },
+            downloadMedia: () => { throw new Error('downloadMedia not available on pseudo-message'); },
+            delete: () => { throw new Error('delete not available on pseudo-message'); },
+            timestamp: message.timestamp || Date.now()/1000
+          };
+          
           client.emit('message', pseudoMsg);
         }
       } else {
