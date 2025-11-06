@@ -89,12 +89,21 @@ class VisionHandler {
         throw new Error('Current LLM provider does not support vision. Please use OpenAI GPT-4 Vision or Ollama with a vision model (e.g., llava)');
       }
 
-      // Use custom prompt if provided, otherwise use default
-      const prompt = customPrompt || this.visionPrompt;
+      // Get system prompt for personality context
+      const commandHandler = require('../handlers/commandHandler');
+      const systemPrompt = commandHandler.systemPrompt || '';
+      
+      // Build the analysis prompt with system context
+      let analysisPrompt = customPrompt || this.visionPrompt;
+      
+      // Prepend system prompt context if available
+      if (systemPrompt && systemPrompt.length > 0) {
+        analysisPrompt = `${systemPrompt}\n\nNow, analyze this image: ${analysisPrompt}`;
+      }
 
       // Analyze the image
-      console.log(`[Vision] Analyzing image with prompt: ${prompt}`);
-      const description = await llmClient.analyzeImage(imageBuffer, media.mimetype, prompt);
+      console.log(`[Vision] Analyzing image with system context and prompt: ${analysisPrompt.substring(0, 150)}...`);
+      const description = await llmClient.analyzeImage(imageBuffer, media.mimetype, analysisPrompt);
 
       console.log(`[Vision] Image analysis complete: ${description.substring(0, 100)}...`);
       return { text: description, error: null };
