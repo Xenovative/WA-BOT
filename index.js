@@ -1218,14 +1218,24 @@ client.on('message', async (message) => {
         console.log(`[Vision] Image analyzed: ${result.text.substring(0, 100)}...`);
         
         // Create a pseudo-message with the image description for AI processing
-        // Use custom prompt if provided, otherwise use a generic prompt
-        const userPrompt = customPrompt || (message.body || 'What do you see in this image?');
+        // Format the message so AI understands it has already analyzed the image
+        let aiPrompt;
+        if (customPrompt) {
+          // User asked a specific question
+          aiPrompt = `I analyzed the image and saw: ${result.text}\n\nUser's question: ${customPrompt}`;
+        } else if (message.body) {
+          // User sent caption with image
+          aiPrompt = `I analyzed the image and saw: ${result.text}\n\nUser's message: ${message.body}`;
+        } else {
+          // No caption - just respond to the image
+          aiPrompt = `I analyzed this image and saw: ${result.text}\n\nPlease respond naturally to what I saw in the image.`;
+        }
         
         console.log('[Vision] Creating AI message with image context...');
         const pseudoMsg = {
           from: message.from,
           to: message.to,
-          body: `[User sent an image${message.body ? ` with caption: "${message.body}"` : ''}]\n\n[What I see in the image: ${result.text}]\n\n${userPrompt}`,
+          body: aiPrompt,
           fromMe: message.fromMe,
           author: message.author,
           hasMedia: false,
@@ -1234,7 +1244,7 @@ client.on('message', async (message) => {
           isForwarded: false,
           _data: {
             notifyName: message._data?.notifyName,
-            body: `[User sent an image${message.body ? ` with caption: "${message.body}"` : ''}]\n\n[What I see in the image: ${result.text}]\n\n${userPrompt}`,
+            body: aiPrompt,
             isImageMessage: true,
             from: message.from,
             to: message.to,
