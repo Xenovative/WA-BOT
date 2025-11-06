@@ -1218,17 +1218,17 @@ client.on('message', async (message) => {
         console.log(`[Vision] Image analyzed: ${result.text.substring(0, 100)}...`);
         
         // Create a pseudo-message with the image description for AI processing
-        // Format the message so AI understands it has already analyzed the image
+        // The AI will internalize the image content and respond naturally
         let aiPrompt;
         if (customPrompt) {
-          // User asked a specific question
-          aiPrompt = `I analyzed the image and saw: ${result.text}\n\nUser's question: ${customPrompt}`;
+          // User asked a specific question about the image
+          aiPrompt = `${customPrompt}\n\n[Context: The image shows ${result.text}]`;
         } else if (message.body) {
           // User sent caption with image
-          aiPrompt = `I analyzed the image and saw: ${result.text}\n\nUser's message: ${message.body}`;
+          aiPrompt = `${message.body}\n\n[Context: The image shows ${result.text}]`;
         } else {
-          // No caption - just respond to the image
-          aiPrompt = `I analyzed this image and saw: ${result.text}\n\nPlease respond naturally to what I saw in the image.`;
+          // No caption - respond to the image content
+          aiPrompt = `[The user sent an image showing: ${result.text}]`;
         }
         
         console.log('[Vision] Creating AI message with image context...');
