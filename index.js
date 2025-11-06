@@ -1033,7 +1033,9 @@ client.on('message', async (message) => {
     hasMedia: message.hasMedia,
     type: message.type,
     body: message.body?.substring(0, 100),
-    timestamp: new Date(message.timestamp * 1000).toISOString()
+    timestamp: new Date(message.timestamp * 1000).toISOString(),
+    mimetype: message._data?.mimetype,
+    mediaKey: message._data?.mediaKey ? 'present' : 'absent'
   });
 
   // Skip messages from self
@@ -1159,7 +1161,29 @@ client.on('message', async (message) => {
   if (message.hasMedia && message.body && message.body.startsWith('kb:')) return;
   
   // Handle image messages with vision
-  if (message.hasMedia && visionHandler.isImageMessage(message)) {
+  // Note: Sometimes hasMedia is false initially, so also check message type
+  const isImageByType = message.type === 'image' || message.type === 'sticker';
+  const isImageByMimetype = message._data?.mimetype && message._data.mimetype.startsWith('image/');
+  const hasImageMedia = message.hasMedia && visionHandler.isImageMessage(message);
+  
+  // Also check if message has mediaKey (indicates media is present even if hasMedia is false initially)
+  const hasMediaKey = message._data?.mediaKey !== undefined && message._data?.mediaKey !== null;
+  
+  // Log all image-related properties for debugging
+  if (message.hasMedia || isImageByType || isImageByMimetype || hasMediaKey) {
+    console.log('[Vision Debug] Potential image message:', {
+      hasMedia: message.hasMedia,
+      type: message.type,
+      mimetype: message._data?.mimetype,
+      hasMediaKey,
+      isImageByType,
+      isImageByMimetype,
+      hasImageMedia,
+      willProcess: hasImageMedia || isImageByType || isImageByMimetype || (hasMediaKey && (isImageByType || isImageByMimetype))
+    });
+  }
+  
+  if (hasImageMedia || isImageByType || isImageByMimetype || (hasMediaKey && (isImageByType || isImageByMimetype))) {
     console.log('[Vision] Image message detected!', {
       hasMedia: message.hasMedia,
       type: message.type,
@@ -1301,6 +1325,86 @@ client.on('message', async (message) => {
   
   const chatId = message.from;
   const messageText = (message.body || '').trim();
+  
+  // CRITICAL: Check if this is a media message that wasn't caught by vision handler
+  // This is a safety net to prevent media messages from being processed as text
+  if (message.hasMedia && !message._data?.isImageMessage && !message._data?.isVoiceMessage) {
+    console.log('[Media Safety Net] Unhandled media message detected:', {
+      type: message.type,
+      hasMedia: message.hasMedia,
+      mimetype: message._data?.mimetype,
+      body: message.body
+    });
+    
+    // If it's an image type that wasn't caught, try to process it now
+    if (message.type === 'image' || message.type === 'sticker' || 
+        (message._data?.mimetype && message._data.mimetype.startsWith('image/'))) {
+      console.log('[Media Safety Net] This appears to be an image - processing with vision handler');
+      
+      try {
+        const customPrompt = visionHandler.extractCustomPrompt(message.body);
+        const result = await visionHandler.processImageMessage(message, customPrompt);
+        
+        if (result.error) {
+          await message.reply(`❌ ${result.error}`);
+          return;
+        }
+        
+        if (result.text) {
+          // Create AI prompt with image context
+          let aiPrompt;
+          if (customPrompt) {
+            aiPrompt = `${customPrompt}\n\n[Context: The image shows ${result.text}]`;
+          } else if (message.body) {
+            aiPrompt = `${message.body}\n\n[Context: The image shows ${result.text}]`;
+          } else {
+            aiPrompt = `[The user sent an image showing: ${result.text}]`;
+          }
+          
+          // Create pseudo-message and re-emit
+          const pseudoMsg = {
+            from: message.from,
+            to: message.to,
+            body: aiPrompt,
+            fromMe: message.fromMe,
+            author: message.author,
+            hasMedia: false,
+            type: 'chat',
+            hasQuotedMsg: false,
+            isForwarded: false,
+            _data: {
+              notifyName: message._data?.notifyName,
+              body: aiPrompt,
+              isImageMessage: true,
+              from: message.from,
+              to: message.to,
+              self: message._data?.self
+            },
+            reply: async (text) => {
+              return typeof message.reply === 'function' ? 
+                message.reply(text) :
+                client.sendMessage(message.from, text);
+            },
+            getChat: () => { throw new Error('getChat not available on pseudo-message'); },
+            downloadMedia: () => { throw new Error('downloadMedia not available on pseudo-message'); },
+            delete: () => { throw new Error('delete not available on pseudo-message'); },
+            timestamp: message.timestamp || Date.now()/1000
+          };
+          
+          client.emit('message', pseudoMsg);
+        }
+        return;
+      } catch (error) {
+        console.error('[Media Safety Net] Error processing image:', error);
+        await message.reply(`❌ Error processing image: ${error.message}`);
+        return;
+      }
+    }
+    
+    // For other media types, just skip
+    console.log('[Media Safety Net] Non-image media type - skipping');
+    return;
+  }
   
   // Skip empty messages
   if (!messageText) return;
@@ -1574,6 +1678,142 @@ client.on('message', async (message) => {
     // Log that we're proceeding with this group message
     console.log(`[Group Chat] PROCESSING GROUP MESSAGE - Bot was called!`);
     
+    // Check if this is an image message in the group
+    if (message.hasMedia && visionHandler.isImageMessage(message)) {
+      console.log('[Group Vision] Image message detected in group!', {
+        hasMedia: message.hasMedia,
+        type: message.type,
+        mimetype: message._data?.mimetype,
+        body: message.body
+      });
+      
+      try {
+        // Set typing state
+        if (typeof message.getChat === 'function') {
+          try {
+            const chat = await message.getChat();
+            await chat.sendStateTyping();
+          } catch (chatError) {
+            console.log(`[Group Vision] Could not set typing state: ${chatError.message}`);
+          }
+        }
+        
+        console.log(`[Group Vision] Processing image message from ${message.author || message.from}`);
+        console.log(`[Group Vision] Message caption: "${message.body || '(no caption)'}"`);
+        
+        // Extract custom prompt from message caption
+        const customPrompt = visionHandler.extractCustomPrompt(message.body);
+        console.log(`[Group Vision] Custom prompt extracted: ${customPrompt ? `"${customPrompt.substring(0, 50)}..."` : 'none'}`);
+        
+        const result = await visionHandler.processImageMessage(message, customPrompt);
+        console.log(`[Group Vision] Processing result:`, { hasText: !!result.text, error: result.error });
+        
+        if (result.error) {
+          console.error(`[Group Vision] Error: ${result.error}`);
+          try {
+            await message.reply(`❌ ${result.error}`);
+            console.log('[Group Vision] Error message sent to group');
+          } catch (replyError) {
+            console.error('[Group Vision] Failed to send error reply:', replyError);
+          }
+          return;
+        }
+        
+        if (result.text) {
+          console.log(`[Group Vision] Image analyzed: ${result.text.substring(0, 100)}...`);
+          
+          // Create AI prompt with image context
+          let aiPrompt;
+          if (customPrompt) {
+            // User asked a specific question about the image
+            aiPrompt = `${customPrompt}\n\n[Context: The image shows ${result.text}]`;
+          } else if (message.body) {
+            // User sent caption with image
+            aiPrompt = `${message.body}\n\n[Context: The image shows ${result.text}]`;
+          } else {
+            // No caption - respond to the image content
+            aiPrompt = `[The user sent an image showing: ${result.text}]`;
+          }
+          
+          console.log('[Group Vision] Creating AI message with image context...');
+          
+          // Process with AI using the image context
+          const chatId = message.from;
+          const formattedChatId = `chat_whatsapp_${chatId.split('@')[0]}_g.us`;
+          
+          // Save user message (image description) to chat history
+          chatHandler.addMessage(chatId, 'user', aiPrompt, 'whatsapp');
+          
+          // Check if chat is blocked
+          const isChatBlocked = workflowManager.isChatBlocked(formattedChatId);
+          if (isChatBlocked) {
+            console.log(`[Group Vision] Skipping AI response for blocked chat: ${formattedChatId}`);
+            return;
+          }
+          
+          // Get conversation history and settings
+          const conversation = chatHandler.getConversation(chatId, 'whatsapp');
+          const settings = commandHandler.getCurrentSettings();
+          
+          // Convert conversation to format expected by LLM
+          let messages = [
+            { role: 'system', content: settings.systemPrompt },
+            ...conversation.map(msg => ({ role: msg.role, content: msg.content }))
+          ];
+          
+          // Apply RAG if enabled
+          let context = null;
+          if (settings.ragEnabled) {
+            const ragResult = await ragProcessor.processQuery(aiPrompt, messages);
+            messages = ragResult.messages;
+            context = ragResult.context;
+            
+            if (context) {
+              console.log('[Group Vision] RAG context applied to query');
+            }
+          }
+          
+          // Generate AI response
+          const response = await currentLLMClient.generateResponse(aiPrompt, messages, settings.parameters);
+          
+          // Add assistant response to chat history
+          chatHandler.addMessage(chatId, 'assistant', response, 'whatsapp');
+          
+          // Add citations if RAG was used and citations are enabled
+          let finalResponse = response;
+          const showCitations = process.env.KB_SHOW_CITATIONS === 'true';
+          if (context && showCitations) {
+            const sources = extractSourcesFromContext(context);
+            if (sources.length > 0) {
+              finalResponse += '\n\n*Sources:* ' + sources.join(', ');
+            }
+          }
+          
+          // Send response
+          await sendAutomatedMessage(message.from, finalResponse, {
+            isBotResponse: true,
+            isAutomated: true,
+            isResponseToUser: true,
+            chatId: formattedChatId
+          });
+          
+          console.log('[Group Vision] Response sent successfully');
+        }
+        
+        return; // Exit after processing image
+      } catch (error) {
+        console.error('[Group Vision] Error handling image message:', error);
+        console.error('[Group Vision] Error stack:', error.stack);
+        try {
+          await message.reply(`❌ Error processing image: ${error.message}`);
+          console.log('[Group Vision] Error message sent to group');
+        } catch (replyError) {
+          console.error('[Group Vision] Failed to send error reply:', replyError);
+        }
+        return;
+      }
+    }
+    
     // Process message based on whether it's a reply to the bot or not
     let timeDateResponse = null;
     let cleanMessageText = messageText.trim();
@@ -1841,6 +2081,13 @@ client.on('message', async (message) => {
     // Format the chat ID to match the expected format in workflowManager
     const cleanChatId = chatId.includes('@c.us') ? chatId.split('@')[0] : chatId;
     const formattedChatId = `chat_whatsapp_${cleanChatId}_c.us`;
+    
+    // CRITICAL: Check if this is actually an empty message that should have been caught as media
+    // This prevents contaminating conversation history with "I can't view images" responses
+    if (!messageText && !message._data?.isImageMessage && !message._data?.isVoiceMessage) {
+      console.log('[Direct] Empty message detected - likely media that failed detection. Skipping to prevent contamination.');
+      return;
+    }
     
     // Always save user message to chat history, even if AI is blocked
     chatHandler.addMessage(chatId, 'user', messageText, 'whatsapp');

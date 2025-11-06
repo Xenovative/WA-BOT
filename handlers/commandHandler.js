@@ -55,6 +55,7 @@ class CommandHandler {
     this.commands = {
       help: this.handleHelp,
       clear: this.handleClear,
+      reset: this.handleClear, // Alias for clear - resets conversation context
       provider: this.handleProvider,
       model: this.handleModel,
       prompt: this.handleSystemPrompt,
@@ -374,7 +375,8 @@ Command access restricted to authorized numbers: ${this.adminPhoneNumbers.length
       
     return `*Available Commands:*
 !help - Show this help message
-!clear - Clear conversation history
+!clear - Clear conversation history and reset context
+!reset - Same as !clear - resets conversation context
 !provider [name] - Get or set LLM provider (openai, openrouter, ollama, mcp)
 !model [name] - Get or set model for current provider
 !prompt [text] - Get or set system prompt
