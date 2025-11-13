@@ -475,7 +475,14 @@ const client = new Client({
       '--no-zygote',
       '--disable-gpu'
     ],
+    timeout: 60000, // Increase timeout to 60 seconds
   },
+  webVersionCache: {
+    type: 'remote',
+    remotePath: 'https://raw.githubusercontent.com/wppconnect-team/wa-version/main/html/2.2412.54.html',
+  },
+  authTimeoutMs: 60000, // Increase auth timeout
+  qrMaxRetries: 5, // Allow more QR retries
   restartOnAuthFail: process.env.WA_RESTART_ON_AUTH_FAILURE === 'true',
 });
 
@@ -1755,10 +1762,31 @@ client.on('message', async (message) => {
           const conversation = chatHandler.getConversation(chatId, 'whatsapp');
           const settings = commandHandler.getCurrentSettings();
           
+          // Filter out contaminated "can't view images" responses from history
+          const cleanConversation = conversation.filter(msg => {
+            if (msg.role === 'assistant') {
+              const content = msg.content.toLowerCase();
+              const isContaminated = 
+                content.includes('無法查看') || 
+                content.includes('无法查看') ||
+                content.includes('我無法查看或分析圖片內容') ||
+                content.includes('我无法查看或分析图片内容') ||
+                (content.includes("can't view") && content.includes('image')) ||
+                (content.includes("cannot view") && content.includes('image')) ||
+                (content.includes("can't see") && content.includes('image'));
+              
+              if (isContaminated) {
+                console.log('[Group Vision] Filtering out contaminated response from history:', msg.content.substring(0, 50));
+                return false;
+              }
+            }
+            return true;
+          });
+          
           // Convert conversation to format expected by LLM
           let messages = [
             { role: 'system', content: settings.systemPrompt },
-            ...conversation.map(msg => ({ role: msg.role, content: msg.content }))
+            ...cleanConversation.map(msg => ({ role: msg.role, content: msg.content }))
           ];
           
           // Apply RAG if enabled
@@ -1965,10 +1993,31 @@ client.on('message', async (message) => {
         // Get current settings
         const settings = commandHandler.getCurrentSettings();
         
+        // Filter out contaminated "can't view images" responses from history
+        const cleanConversation = conversation.filter(msg => {
+          if (msg.role === 'assistant') {
+            const content = msg.content.toLowerCase();
+            const isContaminated = 
+              content.includes('無法查看') || 
+              content.includes('无法查看') ||
+              content.includes('我無法查看或分析圖片內容') ||
+              content.includes('我无法查看或分析图片内容') ||
+              (content.includes("can't view") && content.includes('image')) ||
+              (content.includes("cannot view") && content.includes('image')) ||
+              (content.includes("can't see") && content.includes('image'));
+            
+            if (isContaminated) {
+              console.log('[Group Chat] Filtering out contaminated response from history:', msg.content.substring(0, 50));
+              return false;
+            }
+          }
+          return true;
+        });
+        
         // Convert conversation to format expected by LLM
         let messages = [
           { role: 'system', content: settings.systemPrompt },
-          ...conversation.map(msg => ({ role: msg.role, content: msg.content }))
+          ...cleanConversation.map(msg => ({ role: msg.role, content: msg.content }))
         ];
         
         // Apply RAG if enabled
@@ -2110,10 +2159,33 @@ client.on('message', async (message) => {
       // Get current settings
       const settings = commandHandler.getCurrentSettings();
       
+      // Filter out contaminated "can't view images" responses from history
+      // These are artifacts from previous failed image detection attempts
+      const cleanConversation = conversation.filter(msg => {
+        if (msg.role === 'assistant') {
+          const content = msg.content.toLowerCase();
+          // Filter out Chinese and English variations of "can't view images" responses
+          const isContaminated = 
+            content.includes('無法查看') || 
+            content.includes('无法查看') ||
+            content.includes('我無法查看或分析圖片內容') ||
+            content.includes('我无法查看或分析图片内容') ||
+            (content.includes("can't view") && content.includes('image')) ||
+            (content.includes("cannot view") && content.includes('image')) ||
+            (content.includes("can't see") && content.includes('image'));
+          
+          if (isContaminated) {
+            console.log('[Direct] Filtering out contaminated response from history:', msg.content.substring(0, 50));
+            return false;
+          }
+        }
+        return true;
+      });
+      
       // Convert conversation to format expected by LLM
       let messages = [
         { role: 'system', content: settings.systemPrompt },
-        ...conversation.map(msg => ({ role: msg.role, content: msg.content }))
+        ...cleanConversation.map(msg => ({ role: msg.role, content: msg.content }))
       ];
       
       // Apply RAG if enabled
