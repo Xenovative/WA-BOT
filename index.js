@@ -475,14 +475,16 @@ const client = new Client({
       '--no-zygote',
       '--disable-gpu'
     ],
-    timeout: 60000, // Increase timeout to 60 seconds
+    timeout: 0, // Disable timeout
   },
+  webVersion: '2.3000.0', // Force specific version to skip detection
   webVersionCache: {
-    type: 'remote',
-    remotePath: 'https://raw.githubusercontent.com/wppconnect-team/wa-version/main/html/2.2412.54.html',
+    type: 'none', // Disable version caching
   },
-  authTimeoutMs: 60000, // Increase auth timeout
-  qrMaxRetries: 5, // Allow more QR retries
+  authTimeoutMs: 0, // Disable auth timeout
+  qrMaxRetries: 5,
+  takeoverOnConflict: true, // Take over existing sessions
+  takeoverTimeoutMs: 0, // Disable takeover timeout
   restartOnAuthFail: process.env.WA_RESTART_ON_AUTH_FAILURE === 'true',
 });
 
@@ -2396,6 +2398,12 @@ process.on('uncaughtException', (err) => {
 });
 
 process.on('unhandledRejection', (reason, promise) => {
+  // Suppress known WhatsApp Web.js execution context errors during initialization
+  if (reason && reason.message && reason.message.includes('Execution context was destroyed')) {
+    console.log('[WhatsApp] Suppressing known initialization error: Execution context destroyed (non-fatal)');
+    return;
+  }
+  
   console.error('Unhandled Rejection at:', promise, 'reason:', reason);
   // Continue running but log the error
 });
