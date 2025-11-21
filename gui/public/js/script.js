@@ -4215,113 +4215,115 @@ function renderChatMessages(container, messages) {
   });
 }
 
+// Upload queue for handling multiple file uploads
+let uploadQueue = [];
+
+/**
+ * Handle multiple file uploads with queue
+ * @param {Event} event - The file input change event
+ */
 async function uploadDocument(event) {
   try {
-    const file = event.target.files[0];
-    if (!file) return;
+    const files = Array.from(event.target.files);
+    if (!files || files.length === 0) return;
     
-    const formData = new FormData();
-    formData.append('file', file);
+    console.log(`Uploading ${files.length} document(s)`);
     
-    // Show loading indicator
-    const kbContainer = document.getElementById('kb-documents');
-    if (kbContainer) {
-      kbContainer.innerHTML = '<div class="text-center"><div class="spinner-border" role="status"></div><p>Uploading document...</p></div>';
-    }
+    // Add files to upload queue
+    uploadQueue.push(...files);
     
-    const response = await fetch('/api/kb/documents', {
-      method: 'POST',
-      body: formData
-    });
+    // Reset the file input immediately
+    event.target.value = '';
     
-    if (!response.ok) {
-      const text = await response.text();
-      console.error('Upload response:', text);
-      throw new Error(`Upload failed: ${response.statusText}`);
-    }
-    
-    const result = await response.json();
-    if (result.success) {
-      showToast('success', `Document "${file.name}" uploaded successfully`);
-      // Reload the document list
-      await loadKbDocuments();
-    } else {
-      throw new Error(result.error || 'Upload failed');
+    // Start processing queue if not already uploading
+    if (!isUploading) {
+      await processUploadQueue();
     }
   } catch (error) {
-    console.error('Error uploading document:', error);
-    showToast('error', `Upload failed: ${error.message}`);
-  } finally {
-    // Reset the file input
-    const fileInput = document.getElementById('kb-file-input');
-    if (fileInput) fileInput.value = '';
+    console.error('Error initiating upload:', error);
+    showToast(`Upload error: ${error.message}`, 'error');
   }
 }
 
-async function uploadDocument(event) {
-  try {
-    const file = event.target.files[0];
-    if (!file) return;
+/**
+ * Process the upload queue one file at a time
+ */
+async function processUploadQueue() {
+  if (isUploading || uploadQueue.length === 0) return;
+  
+  isUploading = true;
+  const kbContainer = document.getElementById('kb-documents');
+  
+  while (uploadQueue.length > 0) {
+    const file = uploadQueue.shift();
+    const remainingFiles = uploadQueue.length;
     
-    console.log('Uploading document:', file.name);
-    
-    // Show upload in progress
-    const kbContainer = document.getElementById('kb-documents');
-    if (kbContainer) {
-      kbContainer.innerHTML = `
-        <div class="text-center">
-          <div class="spinner-border" role="status"></div>
-          <p>Uploading ${file.name}...</p>
-        </div>
-      `;
-    }
-    
-    // Create form data
-    const formData = new FormData();
-    formData.append('document', file);
-    
-    // Send the file to the server
-    const response = await fetch('/api/kb/upload', {
-      method: 'POST',
-      body: formData
-    });
-    
-    // Get response text first
-    const responseText = await response.text();
-    console.log('Raw response:', responseText);
-    
-    // Try to parse as JSON
-    let result;
     try {
-      result = JSON.parse(responseText);
-      console.log('Upload response:', result);
-    } catch (parseError) {
-      console.error('Failed to parse response as JSON:', parseError);
-      throw new Error(`Server returned invalid JSON response. Status: ${response.status} ${response.statusText}`);
+      console.log(`Uploading: ${file.name} (${remainingFiles} remaining)`);
+      
+      // Show upload progress
+      if (kbContainer) {
+        kbContainer.innerHTML = `
+          <div class="text-center">
+            <div class="spinner-border text-primary" role="status"></div>
+            <p class="mt-2"><strong>Uploading:</strong> ${escapeHtml(file.name)}</p>
+            ${remainingFiles > 0 ? `<p class="text-muted small">${remainingFiles} file(s) remaining in queue</p>` : ''}
+            <div class="progress mt-3" style="max-width: 400px; margin: 0 auto;">
+              <div class="progress-bar progress-bar-striped progress-bar-animated" 
+                   role="progressbar" 
+                   style="width: 100%"></div>
+            </div>
+          </div>
+        `;
+      }
+      
+      // Create form data
+      const formData = new FormData();
+      formData.append('document', file);
+      
+      // Upload the file
+      const response = await fetch('/api/kb/documents', {
+        method: 'POST',
+        body: formData
+      });
+      
+      const result = await response.json();
+      
+      if (!response.ok || !result.success) {
+        throw new Error(result.error || `Failed to upload: ${response.status} ${response.statusText}`);
+      }
+      
+      // Show success message
+      showToast(`✓ ${file.name} uploaded successfully`, 'success');
+      console.log(`Successfully uploaded: ${file.name}`);
+      
+    } catch (error) {
+      console.error(`Error uploading ${file.name}:`, error);
+      showToast(`✗ Failed to upload ${file.name}: ${error.message}`, 'error');
     }
     
-    if (!response.ok || !result.success) {
-      throw new Error(result.error || `Failed to upload document: ${response.status} ${response.statusText}`);
+    // Small delay between uploads to prevent overwhelming the server
+    if (uploadQueue.length > 0) {
+      await new Promise(resolve => setTimeout(resolve, 500));
     }
-    
-    // Reset the file input
-    event.target.value = '';
-    
-    // Show success message
-    showToast('Document uploaded successfully', 'success');
-    
-    // Reload the KB documents list
-    loadKbDocuments();
-  } catch (error) {
-    console.error('Error uploading document:', error);
-    showToast(`Upload failed: ${error.message}`, 'error');
-    
-    // Reset the file input
-    event.target.value = '';
-    
-    // Reload the KB documents list
-    loadKbDocuments();
   }
+  
+  isUploading = false;
+  
+  // Reload the KB documents list after all uploads complete
+  console.log('All uploads complete, reloading document list');
+  await loadKbDocuments();
+}
+
+/**
+ * Escape HTML to prevent XSS
+ * @param {string} text - Text to escape
+ * @returns {string} - Escaped text
+ */
+function escapeHtml(text) {
+  const div = document.createElement('div');
+  div.textContent = text;
+  return div.innerHTML;
 }
 
 async function loadKbDocuments() {

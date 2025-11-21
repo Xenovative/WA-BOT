@@ -260,16 +260,22 @@ exceptStatic = (req, res, next) => {
 
 app.use(exceptStatic);
 
-// Configure multer for file uploads
+// Configure multer for file uploads with proper UTF-8 encoding support
 const upload = multer({
   storage: multer.diskStorage({
     destination: (req, file, cb) => {
       cb(null, 'uploads/');
     },
     filename: (req, file, cb) => {
-      // Preserve original filename but make it safe
-      const safeName = file.originalname.replace(/[^a-zA-Z0-9.-]/g, '_');
-      cb(null, safeName);
+      // Use timestamp + original name to avoid conflicts while preserving UTF-8 characters
+      // Decode the buffer properly to handle Chinese characters
+      const timestamp = Date.now();
+      const originalName = Buffer.from(file.originalname, 'latin1').toString('utf8');
+      const ext = path.extname(originalName);
+      const nameWithoutExt = path.basename(originalName, ext);
+      // Create unique filename: timestamp_originalname.ext
+      const uniqueName = `${timestamp}_${originalName}`;
+      cb(null, uniqueName);
     }
   }),
   limits: { fileSize: 10 * 1024 * 1024 } // 10MB limit
@@ -1839,12 +1845,14 @@ app.post('/api/kb/upload', upload.single('document'), async (req, res) => {
       });
     }
     
-    console.log(`[API] File uploaded: ${req.file.originalname}, size: ${req.file.size} bytes`);
+    // Properly decode the filename to handle UTF-8 characters (Chinese, etc.)
+    const originalName = Buffer.from(req.file.originalname, 'latin1').toString('utf8');
+    console.log(`[API] File uploaded: ${originalName}, size: ${req.file.size} bytes`);
     
     const kbManager = require('./kb/kbManager');
     console.log('[API] Adding document to KB manager');
-    // Use the original filename for the document in the knowledge base
-    const result = await kbManager.addDocument(req.file.path, req.file.originalname);
+    // Use the properly decoded original filename for the document in the knowledge base
+    const result = await kbManager.addDocument(req.file.path, originalName);
     
     // Keep the file for rebuilding the vector store later
     console.log(`[API] Keeping uploaded file at ${req.file.path} for future vector rebuilds`);
@@ -1880,12 +1888,14 @@ app.post('/api/kb/documents', upload.single('document'), async (req, res) => {
       });
     }
     
-    console.log(`[API] File uploaded: ${req.file.originalname}, size: ${req.file.size} bytes`);
+    // Properly decode the filename to handle UTF-8 characters (Chinese, etc.)
+    const originalName = Buffer.from(req.file.originalname, 'latin1').toString('utf8');
+    console.log(`[API] File uploaded: ${originalName}, size: ${req.file.size} bytes`);
     
     const kbManager = require('./kb/kbManager');
     console.log('[API] Adding document to KB manager');
-    // Use the original filename for the document in the knowledge base
-    const result = await kbManager.addDocument(req.file.path, req.file.originalname);
+    // Use the properly decoded original filename for the document in the knowledge base
+    const result = await kbManager.addDocument(req.file.path, originalName);
     
     // Keep the file for rebuilding the vector store later
     console.log(`[API] Keeping uploaded file at ${req.file.path} for future vector rebuilds`);
@@ -1896,7 +1906,7 @@ app.post('/api/kb/documents', upload.single('document'), async (req, res) => {
       success: result.success,
       message: result.message,
       document: result.success ? {
-        name: req.file.originalname,
+        name: originalName,
         size: req.file.size,
         dateAdded: new Date().toISOString()
       } : null
