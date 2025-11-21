@@ -4,6 +4,7 @@ const { Document } = require('langchain/document');
 const { RecursiveCharacterTextSplitter } = require('langchain/text_splitter');
 const { HNSWLib } = require('@langchain/community/vectorstores/hnswlib');
 const { HuggingFaceTransformersEmbeddings } = require('@langchain/community/embeddings/hf_transformers');
+const { OpenAIEmbeddings } = require('@langchain/openai');
 const pdfParse = require('pdf-parse');
 const mammoth = require('mammoth');
 const cheerio = require('cheerio');
@@ -22,10 +23,23 @@ class KnowledgeBaseManager {
     this.chunkOverlap = parseInt(process.env.KB_CHUNK_OVERLAP || '50');
     this.topK = parseInt(process.env.KB_TOP_K || '3');
     
-    // Create embeddings instance
-    this.embeddings = new HuggingFaceTransformersEmbeddings({
-      modelName: this.embeddingModel,
-    });
+    // Determine which embedding provider to use
+    const useOpenAI = process.env.OPENAI_API_KEY && process.env.OPENAI_API_KEY.trim() !== '';
+    this.embeddingProvider = useOpenAI ? 'openai' : 'huggingface';
+    
+    // Create embeddings instance based on available API key
+    if (useOpenAI) {
+      console.log('[KB] Using OpenAI embeddings (text-embedding-3-small)');
+      this.embeddings = new OpenAIEmbeddings({
+        openAIApiKey: process.env.OPENAI_API_KEY,
+        modelName: process.env.KB_OPENAI_EMBEDDING_MODEL || 'text-embedding-3-small',
+      });
+    } else {
+      console.log(`[KB] Using HuggingFace embeddings (${this.embeddingModel})`);
+      this.embeddings = new HuggingFaceTransformersEmbeddings({
+        modelName: this.embeddingModel,
+      });
+    }
     
     // Initialize vector store
     this.vectorStore = null;
@@ -284,13 +298,21 @@ class KnowledgeBaseManager {
       
       // Initialize if not already initialized
       if (!this.vectorStore) {
-        console.log('[KB] Initializing vector store');
+        console.log('[KB] Vector store not initialized, initializing now...');
         try {
           await this.initialize();
+          console.log('[KB] Vector store initialization complete');
         } catch (initError) {
           console.error('[KB] Failed to initialize vector store:', initError);
+          console.error('[KB] Init error stack:', initError.stack);
           return { success: false, message: `Failed to initialize knowledge base: ${initError.message}` };
         }
+      }
+      
+      // Double-check vector store is ready
+      if (!this.vectorStore) {
+        console.error('[KB] Vector store is still null after initialization');
+        return { success: false, message: 'Vector store initialization failed - please check server logs' };
       }
       
       // Check if file exists
@@ -298,6 +320,8 @@ class KnowledgeBaseManager {
         console.error(`[KB] File not found: ${filePath}`);
         return { success: false, message: `File not found: ${fileName}` };
       }
+      
+      console.log(`[KB] File verified, proceeding with text extraction`);
       
       // Extract text from the document
       console.log(`[KB] Extracting text from ${fileName}`);
@@ -397,14 +421,19 @@ class KnowledgeBaseManager {
         fileType: fileExt ? fileExt.substring(1) : 'unknown',
         filePath: filePath // Store the original file path for rebuilding
       });
+      
+      console.log(`[KB] Document metadata set, saving to disk...`);
       await this.saveDocumentMap();
+      console.log(`[KB] ✓ Document "${fileName}" successfully persisted to knowledge base`);
+      console.log(`[KB] ✓ Total documents in KB: ${this.documents.size - 1}`); // -1 for init doc
       
       return { 
         success: true, 
         message: `Document "${fileName}" added successfully with ${docs.length} chunks` 
       };
     } catch (error) {
-      console.error('Error adding document:', error);
+      console.error('[KB] ❌ Error adding document:', error);
+      console.error('[KB] Error stack:', error.stack);
       return { success: false, message: `Error adding document: ${error.message}` };
     }
   }
