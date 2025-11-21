@@ -1785,6 +1785,22 @@ app.get('/api/commands', (req, res) => {
 });
 
 // Knowledge base endpoints
+// Get KB configuration
+app.get('/api/kb/config', (req, res) => {
+  res.json({
+    success: true,
+    config: {
+      enabled: process.env.KB_ENABLED === 'true',
+      maxFileSizeMB: maxFileSizeMB,
+      maxFileSizeBytes: maxFileSizeBytes,
+      embeddingProvider: process.env.OPENAI_API_KEY ? 'openai' : 'huggingface',
+      chunkSize: parseInt(process.env.KB_CHUNK_SIZE || '1000'),
+      chunkOverlap: parseInt(process.env.KB_CHUNK_OVERLAP || '200'),
+      topK: parseInt(process.env.KB_TOP_K || '5')
+    }
+  });
+});
+
 // List all documents in the knowledge base
 app.get('/api/kb/documents', async (req, res) => {
   console.log('[API] GET /api/kb/documents request received');

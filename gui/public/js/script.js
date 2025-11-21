@@ -4217,6 +4217,31 @@ function renderChatMessages(container, messages) {
 
 // Upload queue for handling multiple file uploads
 let uploadQueue = [];
+let kbConfig = null; // Store KB configuration including max file size
+
+/**
+ * Fetch KB configuration including max file size
+ */
+async function fetchKbConfig() {
+  try {
+    const response = await fetch('/api/kb/config');
+    const result = await response.json();
+    if (result.success) {
+      kbConfig = result.config;
+      console.log(`[KB] Max file size: ${kbConfig.maxFileSizeMB}MB`);
+      
+      // Update UI with max file size info
+      const infoDiv = document.getElementById('kb-upload-info');
+      const infoText = document.getElementById('kb-upload-info-text');
+      if (infoDiv && infoText) {
+        infoText.textContent = `Maximum file size: ${kbConfig.maxFileSizeMB}MB. You can upload multiple files at once. Supported formats: PDF, DOCX, TXT, HTML, JSON, XML, CSV.`;
+        infoDiv.style.display = 'block';
+      }
+    }
+  } catch (error) {
+    console.error('Error fetching KB config:', error);
+  }
+}
 
 /**
  * Handle multiple file uploads with queue
@@ -4227,16 +4252,44 @@ async function uploadDocument(event) {
     const files = Array.from(event.target.files);
     if (!files || files.length === 0) return;
     
+    // Fetch KB config if not already loaded
+    if (!kbConfig) {
+      await fetchKbConfig();
+    }
+    
     console.log(`Uploading ${files.length} document(s)`);
     
-    // Add files to upload queue
-    uploadQueue.push(...files);
+    // Validate file sizes before adding to queue
+    const maxSizeBytes = kbConfig ? kbConfig.maxFileSizeBytes : (100 * 1024 * 1024);
+    const maxSizeMB = kbConfig ? kbConfig.maxFileSizeMB : 100;
+    const oversizedFiles = [];
+    const validFiles = [];
+    
+    for (const file of files) {
+      if (file.size > maxSizeBytes) {
+        oversizedFiles.push(file);
+      } else {
+        validFiles.push(file);
+      }
+    }
+    
+    // Show error for oversized files
+    if (oversizedFiles.length > 0) {
+      const fileList = oversizedFiles.map(f => `${f.name} (${(f.size / 1024 / 1024).toFixed(2)}MB)`).join(', ');
+      showToast(`File(s) too large (max ${maxSizeMB}MB): ${fileList}`, 'error');
+      console.error(`Oversized files rejected:`, oversizedFiles);
+    }
+    
+    // Add valid files to upload queue
+    if (validFiles.length > 0) {
+      uploadQueue.push(...validFiles);
+    }
     
     // Reset the file input immediately
     event.target.value = '';
     
     // Start processing queue if not already uploading
-    if (!isUploading) {
+    if (!isUploading && validFiles.length > 0) {
       await processUploadQueue();
     }
   } catch (error) {
@@ -4329,6 +4382,11 @@ function escapeHtml(text) {
 async function loadKbDocuments() {
   const kbContainer = document.getElementById('kb-documents');
   if (!kbContainer) return;
+  
+  // Fetch KB config if not already loaded
+  if (!kbConfig) {
+    await fetchKbConfig();
+  }
   
   // Show loading state
   kbContainer.innerHTML = `
