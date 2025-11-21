@@ -261,6 +261,11 @@ exceptStatic = (req, res, next) => {
 app.use(exceptStatic);
 
 // Configure multer for file uploads with proper UTF-8 encoding support
+// File size limit is configurable via KB_MAX_FILE_SIZE (in MB), defaults to 100MB
+const maxFileSizeMB = parseInt(process.env.KB_MAX_FILE_SIZE || '100');
+const maxFileSizeBytes = maxFileSizeMB * 1024 * 1024;
+console.log(`[Upload] Maximum file size: ${maxFileSizeMB}MB`);
+
 const upload = multer({
   storage: multer.diskStorage({
     destination: (req, file, cb) => {
@@ -278,7 +283,7 @@ const upload = multer({
       cb(null, uniqueName);
     }
   }),
-  limits: { fileSize: 10 * 1024 * 1024 } // 10MB limit
+  limits: { fileSize: maxFileSizeBytes }
 });
 
 // Create uploads directory if it doesn't exist
@@ -3368,6 +3373,32 @@ if (global.facebookMessenger) {
 if (global.instagramService) {
   global.instagramService.setupWebhookRoutes(app);
 }
+
+// Global error handler for multer file upload errors
+app.use((error, req, res, next) => {
+  if (error instanceof multer.MulterError) {
+    console.error('[Upload] Multer error:', error.code, error.message);
+    
+    // Handle specific multer errors
+    if (error.code === 'LIMIT_FILE_SIZE') {
+      return res.status(413).json({
+        success: false,
+        error: `File too large. Maximum file size is ${maxFileSizeMB}MB`,
+        details: `Your file exceeds the ${maxFileSizeMB}MB limit. Please upload a smaller file or increase KB_MAX_FILE_SIZE in your .env file.`,
+        maxSizeMB: maxFileSizeMB
+      });
+    }
+    
+    return res.status(400).json({
+      success: false,
+      error: 'File upload error',
+      details: error.message
+    });
+  }
+  
+  // Pass other errors to default error handler
+  next(error);
+});
 
 // Start server
 server.listen(port, () => {

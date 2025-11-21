@@ -82,7 +82,34 @@ ls uploads/
 
 ---
 
-#### 6. **Vector Store Initialization Failure**
+#### 6. **File Size Limit Exceeded**
+**Symptom:** Upload fails with "File too large" error
+
+**Default Limit:** 100MB per file
+
+**Fix:**
+```bash
+# In .env file, increase the limit (in MB)
+KB_MAX_FILE_SIZE=500  # Allow files up to 500MB
+```
+
+**Restart the server** after changing the limit.
+
+**Error Message:**
+```
+File too large. Maximum file size is 100MB
+Your file exceeds the 100MB limit. Please upload a smaller file or increase KB_MAX_FILE_SIZE in your .env file.
+```
+
+**Recommendations:**
+- **For PDFs**: 100MB is usually sufficient for ~1000 pages
+- **For large documents**: Increase to 500MB or 1000MB
+- **For very large files**: Consider splitting into smaller documents
+- **Memory consideration**: Very large files may require more RAM for processing
+
+---
+
+#### 7. **Vector Store Initialization Failure**
 **Symptom:** Error messages in console about vector store
 
 **Check Server Logs:**
@@ -199,6 +226,9 @@ KB_ENABLED=true
 # Storage path (default is fine)
 KB_STORAGE_PATH=./kb_data
 
+# File upload limit in MB (default: 100MB)
+KB_MAX_FILE_SIZE=100
+
 # Embedding Configuration
 # If OPENAI_API_KEY is set, OpenAI embeddings will be used automatically (faster, more accurate)
 # Otherwise, falls back to local HuggingFace model (no API key required, but slower on first use)
@@ -228,7 +258,11 @@ KB_TOP_K=5
 
 3. **Try uploading a simple text file** first to rule out file format issues
 
-4. **Verify the file size** - files over 10MB will be rejected (configurable in guiServer.js)
+4. **Verify the file size** - default limit is 100MB (configurable via `KB_MAX_FILE_SIZE` in .env)
+   ```bash
+   # In .env file - increase to 500MB if needed
+   KB_MAX_FILE_SIZE=500
+   ```
 
 5. **Check Node.js version** - requires Node.js 14+ for proper Buffer handling
 
