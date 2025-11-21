@@ -1258,7 +1258,7 @@ async function exportCurrentChat() {
 
 // File upload handling
 if (kbFileInput) {
-  kbFileInput.addEventListener('change', handleFileUpload);
+  kbFileInput.addEventListener('change', uploadDocument);
 }
 
 if (refreshKbBtn) {
@@ -3589,87 +3589,7 @@ function escapeHtml(unsafe) {
         .replace(/'/g, "&#039;");
 }
 
-/**
- * Handle file upload for knowledge base documents
- * @param {Event} event - The file input change event
- */
-async function handleFileUpload(event) {
-  const fileInput = event.target;
-  const file = fileInput.files[0];
-  
-  if (!file) return;
-  
-  // Validate file type
-  const validTypes = [
-    'application/pdf',
-    'text/plain',
-    'text/markdown',
-    'application/msword',
-    'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-    'text/csv',
-    'text/html',
-    'application/json'
-  ];
-  
-  if (!validTypes.includes(file.type)) {
-    showToast('Error: Invalid file type. Please upload a PDF, TXT, MD, DOC, DOCX, CSV, JSON, or HTML file.', 'error');
-    fileInput.value = '';
-    return;
-  }
-  
-  // Validate file size (10MB limit)
-  const maxSize = 10 * 1024 * 1024; // 10MB
-  if (file.size > maxSize) {
-    showToast('Error: File is too large. Maximum size is 10MB.', 'error');
-    fileInput.value = '';
-    return;
-  }
-  
-  const formData = new FormData();
-  formData.append('document', file);
-  
-  // Show loading state
-  const uploadButton = document.getElementById('upload-button');
-  let originalHTML = '';
-  
-  if (uploadButton) {
-    originalHTML = uploadButton.innerHTML;
-    uploadButton.disabled = true;
-    uploadButton.innerHTML = '<span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span> Uploading...';
-  }
-  
-  try {
-    const response = await fetch('/api/kb/upload', {
-      method: 'POST',
-      body: formData
-    });
-    
-    const result = await response.json();
-    
-    if (!response.ok || !result.success) {
-      throw new Error(result.error || 'Failed to upload document');
-    }
-    
-    showToast('Document uploaded successfully', 'success');
-    
-    // Reload the documents list
-    await loadKnowledgeBase();
-    
-  } catch (error) {
-    console.error('Error uploading document:', error);
-    showToast(`Error: ${error.message}`, 'error');
-    
-  } finally {
-    // Reset the file input
-    fileInput.value = '';
-    
-    // Reset the button state if it exists
-    if (uploadButton) {
-      uploadButton.disabled = false;
-      uploadButton.innerHTML = originalHTML;
-    }
-  }
-}
+// Old handleFileUpload function removed - now using uploadDocument() with configurable limits
 
 /**
  * Load and display knowledge base documents
