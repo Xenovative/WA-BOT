@@ -1,0 +1,292 @@
+[
+  {
+    "id": "customer-llm-flow",
+    "type": "tab",
+    "label": "Customer LLM Messaging",
+    "disabled": false,
+    "info": "Send personalized LLM messages to customers with rate limiting. Features: customer list fetched from server, LLM generation, delays, pause/resume, status tracking."
+  },
+  {
+    "id": "init-trigger",
+    "type": "inject",
+    "z": "customer-llm-flow",
+    "name": "Start Workflow",
+    "props": [
+      {
+        "p": "payload"
+      },
+      {
+        "p": "topic",
+        "vt": "str"
+      }
+    ],
+    "repeat": "",
+    "crontab": "",
+    "once": false,
+    "onceDelay": 0.1,
+    "topic": "",
+    "payload": "",
+    "payloadType": "date",
+    "x": 150,
+    "y": 100,
+    "wires": [
+      [
+        "fetch-customers"
+      ]
+    ]
+  },
+  {
+    "id": "fetch-customers",
+    "type": "http request",
+    "z": "customer-llm-flow",
+    "name": "Fetch Customers",
+    "method": "GET",
+    "ret": "obj",
+    "paytoqs": "ignore",
+    "url": "http://localhost:3000/api/workflow/customers",
+    "tls": "",
+    "persist": false,
+    "proxy": "",
+    "authType": "",
+    "x": 350,
+    "y": 100,
+    "wires": [
+      [
+        "config-node"
+      ]
+    ]
+  },
+  {
+    "id": "test-trigger",
+    "type": "inject",
+    "z": "customer-llm-flow",
+    "name": "Test Message",
+    "props": [
+      {
+        "p": "payload"
+      },
+      {
+        "p": "topic",
+        "vt": "str"
+      }
+    ],
+    "repeat": "",
+    "crontab": "",
+    "once": false,
+    "onceDelay": 0.1,
+    "topic": "",
+    "payload": "",
+    "payloadType": "date",
+    "x": 150,
+    "y": 300,
+    "wires": [
+      [
+        "test-config"
+      ]
+    ]
+  },
+  {
+    "id": "test-config",
+    "type": "function",
+    "z": "customer-llm-flow",
+    "name": "Setup Test Customer",
+    "func": "// Setup a dummy customer for testing\n// CHANGE THIS NUMBER to your own test number\nmsg.currentCustomer = {\n    id: \"85290897701@c.us\", \n    name: \"Test User\",\n    context: \"Testing the system functionality\"\n};\n\n// Clear customers array so the loop stops after this message\nmsg.customers = null;\n\nreturn msg;",
+    "outputs": 1,
+    "noerr": 0,
+    "x": 350,
+    "y": 300,
+    "wires": [
+      [
+        "prepare-llm-node"
+      ]
+    ]
+  },
+  {
+    "id": "config-node",
+    "type": "function",
+    "z": "customer-llm-flow",
+    "name": "Config: Set Customers",
+    "func": "// Check if customers were fetched successfully\nif (!msg.payload || !msg.payload.success || !Array.isArray(msg.payload.customers)) {\n    node.error(\"Failed to fetch customer list\");\n    return null;\n}\n\nmsg.customers = msg.payload.customers;\n\nif (msg.customers.length === 0) {\n    node.warn(\"Customer list is empty. Please upload a customer Excel file first.\");\n}\n\n// Initialize index\nmsg.currentIndex = 0;\n\n// Reset status\nnode.status({fill:\"blue\", shape:\"dot\", text:\"Loaded \" + msg.customers.length + \" customers\"});\n\nreturn msg;",
+    "outputs": 1,
+    "noerr": 0,
+    "x": 550,
+    "y": 100,
+    "wires": [
+      [
+        "iterator-node"
+      ]
+    ]
+  },
+  {
+    "id": "iterator-node",
+    "type": "function",
+    "z": "customer-llm-flow",
+    "name": "Get Next Customer",
+    "func": "if (!msg.customers || msg.currentIndex >= msg.customers.length) {\n    msg.complete = true;\n    return [null, msg]; // Second output for 'done'\n}\n\n// Get current customer\nconst customer = msg.customers[msg.currentIndex];\nmsg.currentCustomer = customer;\nmsg.currentIndex++;\n\n// Update status\nnode.status({fill:\"yellow\", shape:\"ring\", text:\"Processing \" + msg.currentIndex + \"/\" + msg.customers.length});\n\nreturn [msg, null];",
+    "outputs": 2,
+    "noerr": 0,
+    "x": 150,
+    "y": 200,
+    "wires": [
+      [
+        "rate-limit-node"
+      ],
+      [
+        "done-node"
+      ]
+    ]
+  },
+  {
+    "id": "rate-limit-node",
+    "type": "delay",
+    "z": "customer-llm-flow",
+    "name": "Rate Limit (10s)",
+    "pauseType": "rate",
+    "timeout": "5",
+    "timeoutUnits": "seconds",
+    "rate": "1",
+    "nbRateUnits": "10",
+    "rateUnits": "second",
+    "randomFirst": "1",
+    "randomLast": "5",
+    "randomUnits": "seconds",
+    "drop": false,
+    "allowrate": false,
+    "outputs": 1,
+    "x": 360,
+    "y": 200,
+    "wires": [
+      [
+        "prepare-llm-node"
+      ]
+    ]
+  },
+  {
+    "id": "prepare-llm-node",
+    "type": "function",
+    "z": "customer-llm-flow",
+    "name": "Prepare LLM Request",
+    "func": "const customer = msg.currentCustomer;\n\n// Construct the prompt for the LLM\n// We ask the LLM to generate the message body.\nconst prompt = `Write a message for ${customer.name}. Context: ${customer.context}`;\n\nmsg.payload = {\n    prompt: prompt\n    // systemPrompt and temperature are omitted to use system defaults from WA-BOT configuration\n};\n\nreturn msg;",
+    "outputs": 1,
+    "noerr": 0,
+    "x": 600,
+    "y": 200,
+    "wires": [
+      [
+        "call-llm-node"
+      ]
+    ]
+  },
+  {
+    "id": "call-llm-node",
+    "type": "http request",
+    "z": "customer-llm-flow",
+    "name": "Generate Text (LLM)",
+    "method": "POST",
+    "ret": "obj",
+    "paytoqs": "ignore",
+    "url": "http://localhost:3000/api/workflow/generate-text",
+    "tls": "",
+    "persist": false,
+    "proxy": "",
+    "authType": "",
+    "x": 820,
+    "y": 200,
+    "wires": [
+      [
+        "prepare-send-node"
+      ]
+    ]
+  },
+  {
+    "id": "prepare-send-node",
+    "type": "function",
+    "z": "customer-llm-flow",
+    "name": "Prepare Send",
+    "func": "const text = msg.payload.text;\nconst customer = msg.currentCustomer;\n\nif (!text) {\n    node.error(\"No text generated for \" + customer.name);\n    return null;\n}\n\n// Format for /api/workflow/send-message\nmsg.payload = {\n    platform: 'whatsapp', // Default to WhatsApp\n    chatId: customer.id,\n    message: text\n};\n\nnode.status({fill:\"green\", shape:\"dot\", text:\"Sent to \" + customer.name});\n\nreturn msg;",
+    "outputs": 1,
+    "noerr": 0,
+    "x": 800,
+    "y": 300,
+    "wires": [
+      [
+        "send-msg-node"
+      ]
+    ]
+  },
+  {
+    "id": "send-msg-node",
+    "type": "http request",
+    "z": "customer-llm-flow",
+    "name": "Send Message",
+    "method": "POST",
+    "ret": "obj",
+    "paytoqs": "ignore",
+    "url": "http://localhost:3000/api/workflow/send-message",
+    "tls": "",
+    "persist": false,
+    "proxy": "",
+    "authType": "",
+    "x": 1000,
+    "y": 300,
+    "wires": [
+      [
+        "loop-back-node"
+      ]
+    ]
+  },
+  {
+    "id": "loop-back-node",
+    "type": "link out",
+    "z": "customer-llm-flow",
+    "name": "Loop Back",
+    "mode": "link",
+    "links": [
+      "loop-in-node"
+    ],
+    "x": 1150,
+    "y": 300,
+    "wires": []
+  },
+  {
+    "id": "loop-in-node",
+    "type": "link in",
+    "z": "customer-llm-flow",
+    "name": "Loop In",
+    "links": [
+      "loop-back-node"
+    ],
+    "x": 50,
+    "y": 200,
+    "wires": [
+      [
+        "iterator-node"
+      ]
+    ]
+  },
+  {
+    "id": "done-node",
+    "type": "debug",
+    "z": "customer-llm-flow",
+    "name": "Workflow Complete",
+    "active": true,
+    "tosidebar": true,
+    "console": false,
+    "tostatus": false,
+    "complete": "true",
+    "targetType": "full",
+    "x": 380,
+    "y": 300,
+    "wires": []
+  },
+  {
+    "id": "broker",
+    "type": "mqtt-broker",
+    "name": "Local MQTT",
+    "broker": "localhost",
+    "port": "1883",
+    "clientid": "",
+    "autoConnect": true,
+    "usetls": false
+  }
+]

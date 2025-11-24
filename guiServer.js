@@ -9,9 +9,12 @@ const fs = require('fs');
 const multer = require('multer');
 const WebSocket = require('ws');
 const { createProxyMiddleware } = require('http-proxy-middleware');
+const xlsx = require('xlsx');
 const alertNotifier = require('./utils/alertNotifier');
+const LLMFactory = require('./llm/llmFactory');
 
 const app = express();
+
 const server = http.createServer(app);
 const wss = new WebSocket.Server({ server });
 const port = process.env.GUI_PORT || 3000;
@@ -176,6 +179,44 @@ app.post('/api/workflow/forward-proof', express.json(), async (req, res) => {
   }
 });
 
+// API endpoint to generate text using the configured LLM
+app.post('/api/workflow/generate-text', express.json(), async (req, res) => {
+  try {
+    const { prompt, systemPrompt, temperature, maxTokens, topP, frequencyPenalty, presencePenalty } = req.body;
+    
+    if (!prompt) {
+      return res.status(400).json({ success: false, error: 'Prompt is required' });
+    }
+
+    const provider = process.env.LLM_PROVIDER || 'ollama';
+    const client = LLMFactory.createLLMClient(provider);
+    
+    // Use provided system prompt or fallback to environment default
+    const sysPrompt = systemPrompt !== undefined ? systemPrompt : process.env.DEFAULT_SYSTEM_PROMPT;
+
+    const messages = [];
+    if (sysPrompt) {
+      messages.push({ role: 'system', content: sysPrompt });
+    }
+    
+    // Construct parameters with defaults from environment
+    const params = {
+      temperature: temperature !== undefined ? Number(temperature) : (process.env.DEFAULT_TEMPERATURE ? Number(process.env.DEFAULT_TEMPERATURE) : 0.7),
+      max_tokens: maxTokens !== undefined ? Number(maxTokens) : (process.env.DEFAULT_MAX_TOKENS ? Number(process.env.DEFAULT_MAX_TOKENS) : undefined),
+      top_p: topP !== undefined ? Number(topP) : (process.env.DEFAULT_TOP_P ? Number(process.env.DEFAULT_TOP_P) : undefined),
+      frequency_penalty: frequencyPenalty !== undefined ? Number(frequencyPenalty) : (process.env.DEFAULT_FREQUENCY_PENALTY ? Number(process.env.DEFAULT_FREQUENCY_PENALTY) : undefined),
+      presence_penalty: presencePenalty !== undefined ? Number(presencePenalty) : (process.env.DEFAULT_PRESENCE_PENALTY ? Number(process.env.DEFAULT_PRESENCE_PENALTY) : undefined)
+    };
+    
+    const responseText = await client.generateResponse(prompt, messages, params);
+    
+    return res.json({ success: true, text: responseText });
+  } catch (error) {
+    console.error('Error in /api/workflow/generate-text:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
 // Proxy Node-RED editor requests to the workflow manager
 const workflowPort = process.env.WORKFLOW_PORT || 1880;
 app.use('/red', createProxyMiddleware({
@@ -288,6 +329,77 @@ const upload = multer({
 
 // Create uploads directory if it doesn't exist
 fs.mkdirSync('uploads', { recursive: true });
+
+// API endpoint to upload and parse customer Excel file
+app.post('/api/workflow/upload-customers', upload.single('file'), (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ success: false, error: 'No file uploaded' });
+    }
+
+    const workbook = xlsx.readFile(req.file.path);
+    const sheetName = workbook.SheetNames[0];
+    const sheet = workbook.Sheets[sheetName];
+    const data = xlsx.utils.sheet_to_json(sheet);
+
+    const customers = [];
+    for (const row of data) {
+      // Handle phone number
+      let phone = row['電話'];
+      if (phone) {
+        phone = String(phone).replace('.0', '').trim();
+        // Append suffix if missing (assuming mostly HK numbers based on 852 prefix)
+        const chatId = (phone.endsWith('@c.us') || phone.endsWith('@g.us')) ? phone : `${phone}@c.us`;
+        
+        // Handle name (prefer English, fallback to Chinese)
+        let name = row['客戶英文名'];
+        if (!name || String(name).toLowerCase() === 'nan') {
+          name = row['客戶中文名'] || 'Customer';
+        }
+        
+        // Handle context (Industry)
+        const industry = row['行業分類'];
+        const context = industry ? `Industry: ${industry}` : '';
+        
+        customers.push({
+          id: chatId,
+          name: String(name),
+          context: context
+        });
+      }
+    }
+
+    // Save to JSON file
+    const dataDir = path.join(__dirname, 'data');
+    if (!fs.existsSync(dataDir)) {
+      fs.mkdirSync(dataDir, { recursive: true });
+    }
+    fs.writeFileSync(path.join(dataDir, 'customers.json'), JSON.stringify(customers, null, 2), 'utf8');
+
+    // Clean up uploaded file
+    fs.unlinkSync(req.file.path);
+
+    return res.json({ success: true, count: customers.length, message: `Processed ${customers.length} customers` });
+  } catch (error) {
+    console.error('Error processing customer file:', error);
+    return res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// API endpoint to get the stored customer list
+app.get('/api/workflow/customers', (req, res) => {
+  try {
+    const customerPath = path.join(__dirname, 'data', 'customers.json');
+    if (fs.existsSync(customerPath)) {
+      const customers = JSON.parse(fs.readFileSync(customerPath, 'utf8'));
+      return res.json({ success: true, customers });
+    }
+    return res.json({ success: true, customers: [] });
+  } catch (error) {
+    console.error('Error reading customer list:', error);
+    return res.status(500).json({ success: false, error: error.message });
+  }
+});
 
 // Serve static files from the public directory
 app.use(express.static(path.join(__dirname, 'gui/public')));
