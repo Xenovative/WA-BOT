@@ -219,8 +219,13 @@ const systemPrompt = `🐼 熊貓企業顧問：舊客戶聯繫專用 System Pro
 「《伴你啟航計劃》是一個教導企業如何親自申請政府資助的課程，費用只需 $9,800／年，比傳統顧問節省至少 80% 成本，而且可以完全掌握自己的申請資料和進度～」
 引導聯繫範例：
 「如果您想了解詳細內容或優惠，我可以幫您安排顧問回電～方便留下您的姓名及電話嗎？」
+「想了解更多可以瀏覽我們的網站：https://panda-sme.com/landingpage/」
 若客戶暫時沒興趣：
 「沒問題～如果之後想了解政府資助的新消息或課程更新，也可以再找我😊 我們很樂意隨時協助您！」
+
+【重要資訊】
+公司網站：https://panda-sme.com/landingpage/
+在適當時候可以分享此連結給客戶了解更多詳情。
 
 【對話目標】
 主要目的：
@@ -232,16 +237,28 @@ const systemPrompt = `🐼 熊貓企業顧問：舊客戶聯繫專用 System Pro
 或主動要求顧問聯絡
 若無法立即取得資料，也確保對話留下良好印象，方便後續跟進。`;
 
-// Use completion-style: start the message with name and industry already included
-const prompt = `完成以下WhatsApp訊息給舊客戶：
+// Create explicit instruction with customer details
+const prompt = `請為以下客戶撰寫一則WhatsApp訊息：
 
-"${customer.name}您好呀～好久不見！之前有聯絡過我們關於政府資助的計劃，不知道最近您在${industry}`;
+客戶姓名：${customer.name}
+客戶行業：${industry}
+
+訊息要求：
+1. 第一句必須包含客戶姓名，例如："${customer.name}您好呀～" 或 "嗨 ${customer.name}～"
+2. 訊息中必須提及客戶的行業（${industry}）
+3. 參考系統提示中的開場白範例風格
+4. 介紹《伴你啟航計劃》的主要優勢
+5. 必須包含網站連結：https://panda-sme.com/landingpage/
+6. 保持親切自然，3-4句
+7. 只輸出訊息內容，不要有任何其他說明
+
+現在撰寫訊息：`;
 
 msg.payload = {
     prompt: prompt,
     systemPrompt: systemPrompt,
     temperature: 0.7,
-    maxTokens: 150
+    maxTokens: 300
 };
 
 return msg;""",
@@ -281,6 +298,9 @@ if (!text) {
     return null;
 }
 
+// Store original message for tracking
+msg.originalMessage = text;
+
 // Format for /api/workflow/send-message
 msg.payload = {
     platform: 'whatsapp', // Default to WhatsApp
@@ -311,6 +331,48 @@ return msg;""",
         "proxy": "",
         "authType": "",
         "x": 1000,
+        "y": 300,
+        "wires": [["track-message-node"]]
+    },
+    {
+        "id": "track-message-node",
+        "type": "function",
+        "z": "customer-llm-flow",
+        "name": "Track Sent Message",
+        "func": """const customer = msg.currentCustomer;
+const sentMessage = msg.originalMessage || '';
+
+// Prepare tracking data
+const trackingData = {
+    customerId: customer.id,
+    customerName: customer.name,
+    message: sentMessage,
+    status: msg.payload.success ? 'sent' : 'failed'
+};
+
+msg.payload = trackingData;
+
+return msg;""",
+        "outputs": 1,
+        "noerr": 0,
+        "x": 1200,
+        "y": 300,
+        "wires": [["track-api-node"]]
+    },
+    {
+        "id": "track-api-node",
+        "type": "http request",
+        "z": "customer-llm-flow",
+        "name": "Save to Tracking",
+        "method": "POST",
+        "ret": "obj",
+        "paytoqs": "ignore",
+        "url": "http://localhost:3000/api/workflow/track-message",
+        "tls": "",
+        "persist": False,
+        "proxy": "",
+        "authType": "",
+        "x": 1400,
         "y": 300,
         "wires": [["loop-back-node"]]
     },

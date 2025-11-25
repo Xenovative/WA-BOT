@@ -404,6 +404,59 @@ app.get('/api/workflow/customers', (req, res) => {
   }
 });
 
+// API endpoint to track sent messages
+app.post('/api/workflow/track-message', express.json(), (req, res) => {
+  try {
+    const { customerId, customerName, message, status } = req.body;
+    
+    if (!customerId) {
+      return res.status(400).json({ success: false, error: 'Customer ID is required' });
+    }
+
+    const dataDir = path.join(__dirname, 'data');
+    const trackingPath = path.join(dataDir, 'message_tracking.json');
+    
+    // Load existing tracking data
+    let tracking = [];
+    if (fs.existsSync(trackingPath)) {
+      tracking = JSON.parse(fs.readFileSync(trackingPath, 'utf8'));
+    }
+    
+    // Add new tracking entry
+    tracking.push({
+      customerId,
+      customerName: customerName || 'Unknown',
+      message: message || '',
+      status: status || 'sent',
+      timestamp: new Date().toISOString(),
+      date: new Date().toLocaleString('zh-TW', { timeZone: 'Asia/Hong_Kong' })
+    });
+    
+    // Save tracking data
+    fs.writeFileSync(trackingPath, JSON.stringify(tracking, null, 2), 'utf8');
+    
+    return res.json({ success: true, message: 'Message tracked successfully' });
+  } catch (error) {
+    console.error('Error tracking message:', error);
+    return res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// API endpoint to get message tracking history
+app.get('/api/workflow/message-tracking', (req, res) => {
+  try {
+    const trackingPath = path.join(__dirname, 'data', 'message_tracking.json');
+    if (fs.existsSync(trackingPath)) {
+      const tracking = JSON.parse(fs.readFileSync(trackingPath, 'utf8'));
+      return res.json({ success: true, tracking });
+    }
+    return res.json({ success: true, tracking: [] });
+  } catch (error) {
+    console.error('Error reading tracking data:', error);
+    return res.status(500).json({ success: false, error: error.message });
+  }
+});
+
 // Serve static files from the public directory
 app.use(express.static(path.join(__dirname, 'gui/public')));
 app.use(express.json());

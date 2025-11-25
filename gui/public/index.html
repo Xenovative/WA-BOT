@@ -195,6 +195,11 @@
                                 <i class="bi bi-braces-asterisk me-2"></i><span>Workflow Builder (Beta)</span>
                             </a>
                         </li>
+                        <li class="nav-item">
+                            <a class="nav-link" href="#customer-messaging" data-bs-toggle="tab">
+                                <i class="bi bi-send me-2"></i><span>🐼 Customer Messaging</span>
+                            </a>
+                        </li>
                     </ul>
                 </div>
             </nav>
@@ -1417,6 +1422,125 @@ Instructions:
 }
                                 </textarea>
                                 <small class="text-muted">Paste or edit JSON. You can provide either a top-level "flow" array or a simplified "nodes" array. A tab will be created automatically.</small>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Customer Messaging Tab -->
+                    <div class="tab-pane fade" id="customer-messaging">
+                        <div class="d-flex justify-content-between align-items-center mb-3">
+                            <h4 class="mb-0">🐼 Customer Messaging Workflow</h4>
+                        </div>
+                        
+                        <div class="alert alert-info">
+                            <i class="bi bi-info-circle me-2"></i>
+                            <strong>熊貓企業顧問 - 客戶聯繫系統</strong><br>
+                            使用 LLM 生成個性化訊息，批量聯繫舊客戶，介紹《伴你啟航計劃》。
+                        </div>
+
+                        <div class="row g-4">
+                            <!-- Upload Customers Card -->
+                            <div class="col-md-6">
+                                <div class="card h-100">
+                                    <div class="card-body">
+                                        <h5 class="card-title">
+                                            <i class="bi bi-upload me-2"></i>上傳客戶名單
+                                        </h5>
+                                        <p class="card-text text-muted">
+                                            上傳 Excel 檔案，包含客戶姓名、電話和行業資訊。系統會自動解析並準備發送訊息。
+                                        </p>
+                                        <ul class="list-unstyled small mb-3">
+                                            <li><i class="bi bi-check-circle text-success me-2"></i>支援 .xlsx 格式</li>
+                                            <li><i class="bi bi-check-circle text-success me-2"></i>自動提取客戶資料</li>
+                                            <li><i class="bi bi-check-circle text-success me-2"></i>即時驗證數據</li>
+                                        </ul>
+                                        <a href="/upload-customers.html" target="_blank" class="btn btn-primary w-100">
+                                            <i class="bi bi-upload me-2"></i>開始上傳
+                                        </a>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Message Tracking Card -->
+                            <div class="col-md-6">
+                                <div class="card h-100">
+                                    <div class="card-body">
+                                        <h5 class="card-title">
+                                            <i class="bi bi-list-check me-2"></i>訊息追蹤記錄
+                                        </h5>
+                                        <p class="card-text text-muted">
+                                            查看所有已發送的訊息記錄，包括客戶名稱、發送時間、訊息內容和發送狀態。
+                                        </p>
+                                        <ul class="list-unstyled small mb-3">
+                                            <li><i class="bi bi-check-circle text-success me-2"></i>實時追蹤狀態</li>
+                                            <li><i class="bi bi-check-circle text-success me-2"></i>搜尋和篩選</li>
+                                            <li><i class="bi bi-check-circle text-success me-2"></i>匯出 CSV 報表</li>
+                                        </ul>
+                                        <a href="/message-tracking.html" target="_blank" class="btn btn-success w-100">
+                                            <i class="bi bi-list-check me-2"></i>查看記錄
+                                        </a>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Workflow Control Card -->
+                            <div class="col-12">
+                                <div class="card">
+                                    <div class="card-body">
+                                        <h5 class="card-title">
+                                            <i class="bi bi-diagram-3 me-2"></i>工作流程控制
+                                        </h5>
+                                        <p class="card-text text-muted mb-3">
+                                            在 Node-RED 中管理客戶訊息工作流程。上傳客戶名單後，點擊 "Start Workflow" 開始批量發送。
+                                        </p>
+                                        
+                                        <div class="row g-3">
+                                            <div class="col-md-4">
+                                                <div class="border rounded p-3 text-center">
+                                                    <div class="display-6 mb-2">1️⃣</div>
+                                                    <h6>上傳客戶名單</h6>
+                                                    <small class="text-muted">使用上傳頁面</small>
+                                                </div>
+                                            </div>
+                                            <div class="col-md-4">
+                                                <div class="border rounded p-3 text-center">
+                                                    <div class="display-6 mb-2">2️⃣</div>
+                                                    <h6>啟動工作流程</h6>
+                                                    <small class="text-muted">在 Node-RED 中</small>
+                                                </div>
+                                            </div>
+                                            <div class="col-md-4">
+                                                <div class="border rounded p-3 text-center">
+                                                    <div class="display-6 mb-2">3️⃣</div>
+                                                    <h6>追蹤發送狀態</h6>
+                                                    <small class="text-muted">使用追蹤頁面</small>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        <div class="mt-3">
+                                            <a href="/red" target="_blank" class="btn btn-outline-primary">
+                                                <i class="bi bi-box-arrow-up-right me-2"></i>開啟 Node-RED 編輯器
+                                            </a>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- System Prompt Info Card -->
+                            <div class="col-12">
+                                <div class="card border-info">
+                                    <div class="card-header bg-info text-white">
+                                        <i class="bi bi-info-circle me-2"></i>系統提示詞設定
+                                    </div>
+                                    <div class="card-body">
+                                        <p class="mb-2"><strong>當前使用：</strong>熊貓企業顧問 - 舊客戶聯繫專用提示詞</p>
+                                        <p class="small text-muted mb-0">
+                                            訊息會自動包含客戶姓名和行業資訊，介紹《伴你啟航計劃》，並附上網站連結：
+                                            <a href="https://panda-sme.com/landingpage/" target="_blank">https://panda-sme.com/landingpage/</a>
+                                        </p>
+                                    </div>
+                                </div>
                             </div>
                         </div>
                     </div>
