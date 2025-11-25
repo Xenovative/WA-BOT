@@ -198,6 +198,8 @@ app.post('/api/workflow/generate-text', express.json(), async (req, res) => {
     if (sysPrompt) {
       messages.push({ role: 'system', content: sysPrompt });
     }
+    // Add the user prompt to messages array
+    messages.push({ role: 'user', content: prompt });
     
     // Construct parameters with defaults from environment
     const params = {
@@ -208,7 +210,8 @@ app.post('/api/workflow/generate-text', express.json(), async (req, res) => {
       presence_penalty: presencePenalty !== undefined ? Number(presencePenalty) : (process.env.DEFAULT_PRESENCE_PENALTY ? Number(process.env.DEFAULT_PRESENCE_PENALTY) : undefined)
     };
     
-    const responseText = await client.generateResponse(prompt, messages, params);
+    // Pass null as first param since prompt is now in messages array
+    const responseText = await client.generateResponse(null, messages, params);
     
     return res.json({ success: true, text: responseText });
   } catch (error) {
