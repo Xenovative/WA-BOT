@@ -178,13 +178,18 @@ class ChatHandler {
       const platformChatId = platform ? this.getPlatformChatId(platform, chatId) : chatId;
       const conversation = this.getConversation(chatId, platform);
       
+      console.log(`[ChatHandler] checkAndMarkAsLead called for ${platformChatId}`);
+      console.log(`[ChatHandler] Conversation length: ${conversation.length}`);
+      
       // Already tagged as LEAD, skip
       if (this.getTags(platformChatId).includes('LEAD')) {
+        console.log(`[ChatHandler] Already tagged as LEAD, skipping`);
         return false;
       }
       
       // Need at least 2 messages (bot message + user reply)
       if (conversation.length < 2) {
+        console.log(`[ChatHandler] Not enough messages (${conversation.length}), need at least 2`);
         return false;
       }
       
@@ -209,13 +214,21 @@ class ChatHandler {
       let userReplyCount = 0;
       let hasLeadKeyword = false;
       
+      // Debug: show all messages
+      console.log(`[ChatHandler] Messages in conversation:`);
+      conversation.forEach((m, idx) => {
+        console.log(`  [${idx}] ${m.role}: ${m.content?.substring(0, 50)}...`);
+      });
+      
       for (let i = 0; i < conversation.length; i++) {
         const msg = conversation[i];
         
         if (msg.role === 'assistant') {
           hasAssistantMessage = true;
+          console.log(`[ChatHandler] Found assistant message at index ${i}`);
         } else if (msg.role === 'user' && hasAssistantMessage) {
           userReplyCount++;
+          console.log(`[ChatHandler] User reply #${userReplyCount} at index ${i}: "${msg.content?.substring(0, 30)}"`);
           
           // Check for lead keywords in user message
           const content = msg.content.toLowerCase();
