@@ -346,31 +346,63 @@ app.post('/api/workflow/upload-customers', upload.single('file'), (req, res) => 
     const data = xlsx.utils.sheet_to_json(sheet);
 
     const customers = [];
+    
+    // Get column headers from first row to handle flexible column names
+    const headers = Object.keys(data[0] || {});
+    console.log('[Upload] Excel headers:', headers);
+    
+    // Find matching columns (case-insensitive, partial match)
+    const findColumn = (keywords) => {
+      for (const header of headers) {
+        const h = header.toLowerCase();
+        for (const kw of keywords) {
+          if (h.includes(kw.toLowerCase())) return header;
+        }
+      }
+      return null;
+    };
+    
+    const phoneCol = findColumn(['電話', 'phone', 'tel', '手機', 'mobile', 'whatsapp']);
+    const nameCol = findColumn(['客戶英文名', '英文名', 'english name', 'name', '名稱', '姓名']);
+    const chineseNameCol = findColumn(['客戶中文名', '中文名', 'chinese name']);
+    const industryCol = findColumn(['行業分類', '行業', 'industry', '類別', '分類']);
+    
+    console.log('[Upload] Matched columns:', { phoneCol, nameCol, chineseNameCol, industryCol });
+    
     for (const row of data) {
       // Handle phone number
-      let phone = row['電話'];
+      let phone = phoneCol ? row[phoneCol] : null;
       if (phone) {
-        phone = String(phone).replace('.0', '').trim();
+        phone = String(phone).replace(/\.0$/, '').replace(/\s/g, '').trim();
         // Append suffix if missing (assuming mostly HK numbers based on 852 prefix)
         const chatId = (phone.endsWith('@c.us') || phone.endsWith('@g.us')) ? phone : `${phone}@c.us`;
         
         // Handle name (prefer English, fallback to Chinese)
-        let name = row['客戶英文名'];
-        if (!name || String(name).toLowerCase() === 'nan') {
-          name = row['客戶中文名'] || 'Customer';
+        let name = nameCol ? row[nameCol] : null;
+        if (!name || String(name).toLowerCase() === 'nan' || String(name).trim() === '') {
+          name = chineseNameCol ? row[chineseNameCol] : null;
+        }
+        if (!name || String(name).toLowerCase() === 'nan' || String(name).trim() === '') {
+          name = 'Customer';
         }
         
-        // Handle context (Industry)
-        const industry = row['行業分類'];
-        const context = industry ? `Industry: ${industry}` : '';
+        // Handle industry
+        let industry = industryCol ? row[industryCol] : '';
+        if (industry && String(industry).toLowerCase() === 'nan') {
+          industry = '';
+        }
         
         customers.push({
           id: chatId,
-          name: String(name),
-          context: context
+          phone: phone,
+          name: String(name).trim(),
+          industry: String(industry || '').trim(),
+          context: industry ? `Industry: ${industry}` : ''
         });
       }
     }
+    
+    console.log('[Upload] Parsed customers:', customers.length);
 
     // Save to JSON file
     const dataDir = path.join(__dirname, 'data');
@@ -400,6 +432,21 @@ app.get('/api/workflow/customers', (req, res) => {
     return res.json({ success: true, customers: [] });
   } catch (error) {
     console.error('Error reading customer list:', error);
+    return res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// API endpoint to delete the customer list
+app.delete('/api/workflow/customers', (req, res) => {
+  try {
+    const customerPath = path.join(__dirname, 'data', 'customers.json');
+    if (fs.existsSync(customerPath)) {
+      fs.unlinkSync(customerPath);
+      console.log('[Workflow] Customer list deleted');
+    }
+    return res.json({ success: true, message: 'Customer list deleted' });
+  } catch (error) {
+    console.error('Error deleting customer list:', error);
     return res.status(500).json({ success: false, error: error.message });
   }
 });

@@ -5817,27 +5817,37 @@ async function loadCustomerList() {
     if (data.success && data.customers && data.customers.length > 0) {
       const customers = data.customers;
       
-      // Create summary stats
-      const industries = [...new Set(customers.map(c => c.industry || '未知'))];
+      // Create summary stats - handle both old format (context) and new format (industry)
+      const getIndustry = (c) => c.industry || (c.context ? c.context.replace('Industry: ', '') : '') || '未知';
+      const getPhone = (c) => c.phone || (c.id ? c.id.replace('@c.us', '').replace('@g.us', '') : '') || '--';
+      
+      const industries = [...new Set(customers.map(c => getIndustry(c)).filter(i => i && i !== '未知'))];
       
       container.innerHTML = `
         <div class="row mb-3">
-          <div class="col-md-4">
+          <div class="col-md-3">
             <div class="border rounded p-3 text-center">
               <h3 class="mb-0 text-primary">${customers.length}</h3>
               <small class="text-muted">總客戶數</small>
             </div>
           </div>
-          <div class="col-md-4">
+          <div class="col-md-3">
             <div class="border rounded p-3 text-center">
               <h3 class="mb-0 text-info">${industries.length}</h3>
               <small class="text-muted">行業類別</small>
             </div>
           </div>
-          <div class="col-md-4">
+          <div class="col-md-3">
             <div class="border rounded p-3 text-center">
-              <h3 class="mb-0 text-success">${customers.filter(c => c.phone).length}</h3>
+              <h3 class="mb-0 text-success">${customers.filter(c => getPhone(c) !== '--').length}</h3>
               <small class="text-muted">有效電話</small>
+            </div>
+          </div>
+          <div class="col-md-3">
+            <div class="border rounded p-3 text-center">
+              <button class="btn btn-danger btn-sm w-100" onclick="deleteCustomerList()">
+                <i class="bi bi-trash me-1"></i> 刪除名單
+              </button>
             </div>
           </div>
         </div>
@@ -5848,7 +5858,7 @@ async function loadCustomerList() {
               <tr>
                 <th>#</th>
                 <th>客戶名稱</th>
-                <th>電話</th>
+                <th>電話 / WhatsApp ID</th>
                 <th>行業</th>
               </tr>
             </thead>
@@ -5857,8 +5867,8 @@ async function loadCustomerList() {
                 <tr>
                   <td>${idx + 1}</td>
                   <td>${escapeHtml(c.name || '--')}</td>
-                  <td><code>${escapeHtml(c.phone || '--')}</code></td>
-                  <td><span class="badge bg-secondary">${escapeHtml(c.industry || '未知')}</span></td>
+                  <td><code>${escapeHtml(getPhone(c))}</code></td>
+                  <td><span class="badge bg-secondary">${escapeHtml(getIndustry(c))}</span></td>
                 </tr>
               `).join('')}
             </tbody>
@@ -5887,6 +5897,30 @@ async function loadCustomerList() {
         </button>
       </div>
     `;
+  }
+}
+
+// Delete customer list
+async function deleteCustomerList() {
+  if (!confirm('確定要刪除整個客戶名單嗎？此操作無法撤銷。')) {
+    return;
+  }
+  
+  try {
+    const response = await fetch('/api/workflow/customers', {
+      method: 'DELETE'
+    });
+    const data = await response.json();
+    
+    if (data.success) {
+      showToast('客戶名單已刪除', 'success');
+      loadCustomerList(); // Refresh the list
+    } else {
+      showToast('刪除失敗: ' + data.error, 'error');
+    }
+  } catch (error) {
+    console.error('Error deleting customer list:', error);
+    showToast('刪除失敗: ' + error.message, 'error');
   }
 }
 
