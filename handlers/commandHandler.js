@@ -905,7 +905,9 @@ Show Citations: ${this.showCitations ? 'Yes' : 'No'}`;
       this.currentModel = newSettings.model;
     }
     
-    if (newSettings.systemPrompt) {
+    // Use !== undefined to allow empty string
+    if (newSettings.systemPrompt !== undefined) {
+      console.log('[CommandHandler] Updating systemPrompt, length:', newSettings.systemPrompt?.length || 0);
       this.systemPrompt = newSettings.systemPrompt;
     }
     
@@ -926,6 +928,7 @@ Show Citations: ${this.showCitations ? 'Yes' : 'No'}`;
     }
     
     if (newSettings.profileName) {
+      console.log('[CommandHandler] Profile operation:', newSettings.profileName, 'saveAsProfile:', newSettings.saveAsProfile);
       if (this.configProfiles[newSettings.profileName]) {
         this.loadProfile(newSettings.profileName);
       } else if (newSettings.saveAsProfile) {
@@ -934,6 +937,8 @@ Show Citations: ${this.showCitations ? 'Yes' : 'No'}`;
     }
     
     // Save current settings as the active profile
+    console.log('[CommandHandler] Saving to current profile:', this.currentProfileName);
+    console.log('[CommandHandler] System prompt length:', this.systemPrompt?.length || 0);
     if (this.currentProfileName) {
       this.saveProfile(this.currentProfileName, false);
     }
@@ -1015,7 +1020,16 @@ Show Citations: ${this.showCitations ? 'Yes' : 'No'}`;
    */
   saveConfigProfiles() {
     try {
+      // Ensure data directory exists
+      const dir = path.dirname(this.configProfilesFile);
+      if (!fs.existsSync(dir)) {
+        fs.mkdirSync(dir, { recursive: true });
+        console.log('[CommandHandler] Created data directory:', dir);
+      }
+      
       fs.writeFileSync(this.configProfilesFile, JSON.stringify(this.configProfiles, null, 2));
+      console.log('[CommandHandler] Saved config profiles to:', this.configProfilesFile);
+      console.log('[CommandHandler] Profiles:', Object.keys(this.configProfiles));
     } catch (error) {
       console.error('Error saving configuration profiles:', error);
     }
@@ -1040,6 +1054,8 @@ Show Citations: ${this.showCitations ? 'Yes' : 'No'}`;
         ragEnabled: this.ragEnabled,
         showCitations: this.showCitations
       };
+      
+      console.log('[CommandHandler] saveProfile:', profileName, 'systemPrompt length:', this.systemPrompt?.length || 0);
       
       // Save to profiles
       this.configProfiles[profileName] = settings;
