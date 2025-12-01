@@ -520,8 +520,15 @@ app.get('/api/leads', (req, res) => {
     const leadChatIds = global.chatHandler?.getChatsByTag('LEAD') || [];
     const allChats = global.chatHandler?.getAllChats() || [];
     
-    // Filter chats that are leads
-    const leads = allChats.filter(chat => leadChatIds.includes(chat.id));
+    // Filter chats that are leads (tags now included in chat objects from getAllChats)
+    const leads = allChats.filter(chat => {
+      // Check if chat has LEAD tag directly
+      if (chat.tags && chat.tags.includes('LEAD')) {
+        return true;
+      }
+      // Also check leadChatIds for backward compatibility
+      return leadChatIds.includes(chat.id);
+    });
     
     return res.json({ success: true, leads, count: leads.length });
   } catch (error) {

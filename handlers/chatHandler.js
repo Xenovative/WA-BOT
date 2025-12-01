@@ -624,12 +624,22 @@ class ChatHandler {
               // Even if there are no messages, we still want to track the chat
               const lastMessage = messages.length > 0 ? messages[messages.length - 1] : { content: '', timestamp: new Date().toISOString() };
               
+              // Convert filename format to platform:chatId format for tag lookup
+              // e.g., whatsapp_85290897701_c.us -> whatsapp:85290897701@c.us
+              let tagKey = chatId;
+              if (chatId.startsWith('whatsapp_')) {
+                // whatsapp_85290897701_c.us -> whatsapp:85290897701@c.us
+                tagKey = chatId.replace('whatsapp_', 'whatsapp:').replace(/_c\.us$/, '@c.us').replace(/_g\.us$/, '@g.us');
+              } else if (chatId.startsWith('telegram_')) {
+                tagKey = chatId.replace('telegram_', 'telegram:');
+              }
+              
               chats.push({
                 id: chatId,
                 preview: lastMessage.content?.substring(0, 100) || '',
                 timestamp: lastMessage.timestamp || new Date().toISOString(),
                 messageCount: messages.length,
-                tags: this.tags[chatId] || []
+                tags: this.tags[tagKey] || this.tags[chatId] || []
               });
             }
           } catch (parseError) {
