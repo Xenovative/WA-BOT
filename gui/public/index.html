@@ -1464,6 +1464,26 @@ Instructions:
                             </div>
                         </div>
 
+                        <!-- Current Customer List -->
+                        <div class="card mb-4">
+                            <div class="card-header d-flex justify-content-between align-items-center">
+                                <h5 class="mb-0"><i class="bi bi-people me-2"></i>已上傳客戶名單</h5>
+                                <button class="btn btn-sm btn-outline-primary" onclick="loadCustomerList()">
+                                    <i class="bi bi-arrow-clockwise"></i> 刷新
+                                </button>
+                            </div>
+                            <div class="card-body">
+                                <div id="customer-list-container">
+                                    <div class="text-center py-4">
+                                        <div class="spinner-border text-primary" role="status">
+                                            <span class="visually-hidden">Loading...</span>
+                                        </div>
+                                        <p class="mt-2 text-muted">載入中...</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
                         <div class="row g-4">
                             <!-- Upload Customers Card -->
                             <div class="col-md-6">

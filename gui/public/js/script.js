@@ -5794,6 +5794,102 @@ function updateDynamicTranslations() {
   // Add more dynamic content updates here as needed
 }
 
+// ==================== CUSTOMER LIST MANAGEMENT ====================
+
+// Load and display customer list
+async function loadCustomerList() {
+  const container = document.getElementById('customer-list-container');
+  if (!container) return;
+  
+  try {
+    container.innerHTML = `
+      <div class="text-center py-4">
+        <div class="spinner-border text-primary" role="status">
+          <span class="visually-hidden">Loading...</span>
+        </div>
+        <p class="mt-2 text-muted">載入中...</p>
+      </div>
+    `;
+    
+    const response = await fetch('/api/workflow/customers');
+    const data = await response.json();
+    
+    if (data.success && data.customers && data.customers.length > 0) {
+      const customers = data.customers;
+      
+      // Create summary stats
+      const industries = [...new Set(customers.map(c => c.industry || '未知'))];
+      
+      container.innerHTML = `
+        <div class="row mb-3">
+          <div class="col-md-4">
+            <div class="border rounded p-3 text-center">
+              <h3 class="mb-0 text-primary">${customers.length}</h3>
+              <small class="text-muted">總客戶數</small>
+            </div>
+          </div>
+          <div class="col-md-4">
+            <div class="border rounded p-3 text-center">
+              <h3 class="mb-0 text-info">${industries.length}</h3>
+              <small class="text-muted">行業類別</small>
+            </div>
+          </div>
+          <div class="col-md-4">
+            <div class="border rounded p-3 text-center">
+              <h3 class="mb-0 text-success">${customers.filter(c => c.phone).length}</h3>
+              <small class="text-muted">有效電話</small>
+            </div>
+          </div>
+        </div>
+        
+        <div class="table-responsive" style="max-height: 400px; overflow-y: auto;">
+          <table class="table table-sm table-hover">
+            <thead class="table-light sticky-top">
+              <tr>
+                <th>#</th>
+                <th>客戶名稱</th>
+                <th>電話</th>
+                <th>行業</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${customers.map((c, idx) => `
+                <tr>
+                  <td>${idx + 1}</td>
+                  <td>${escapeHtml(c.name || '--')}</td>
+                  <td><code>${escapeHtml(c.phone || '--')}</code></td>
+                  <td><span class="badge bg-secondary">${escapeHtml(c.industry || '未知')}</span></td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
+        </div>
+      `;
+    } else {
+      container.innerHTML = `
+        <div class="text-center py-4">
+          <i class="bi bi-inbox fs-1 text-muted"></i>
+          <p class="mt-2 text-muted mb-3">尚未上傳客戶名單</p>
+          <a href="/upload-customers.html" target="_blank" class="btn btn-primary btn-sm">
+            <i class="bi bi-upload me-1"></i> 上傳客戶名單
+          </a>
+        </div>
+      `;
+    }
+  } catch (error) {
+    console.error('Error loading customer list:', error);
+    container.innerHTML = `
+      <div class="text-center py-4">
+        <i class="bi bi-exclamation-triangle fs-1 text-danger"></i>
+        <p class="mt-2 text-danger">載入失敗: ${error.message}</p>
+        <button class="btn btn-outline-primary btn-sm" onclick="loadCustomerList()">
+          <i class="bi bi-arrow-clockwise me-1"></i> 重試
+        </button>
+      </div>
+    `;
+  }
+}
+
 // ==================== LEADS MANAGEMENT ====================
 
 // Refresh leads count
@@ -5866,12 +5962,13 @@ async function removeChatTag(chatId, tag) {
   }
 }
 
-// Load leads count when Customer Messaging tab is shown
+// Load data when Customer Messaging tab is shown
 document.addEventListener('DOMContentLoaded', function() {
   const customerMessagingTab = document.querySelector('a[href="#customer-messaging"]');
   if (customerMessagingTab) {
     customerMessagingTab.addEventListener('shown.bs.tab', function() {
       refreshLeadsCount();
+      loadCustomerList();
     });
   }
   
@@ -5879,6 +5976,7 @@ document.addEventListener('DOMContentLoaded', function() {
   setTimeout(() => {
     if (document.getElementById('customer-messaging')?.classList.contains('active')) {
       refreshLeadsCount();
+      loadCustomerList();
     }
   }, 500);
 });
