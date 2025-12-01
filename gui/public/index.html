@@ -1430,12 +1430,38 @@ Instructions:
                     <div class="tab-pane fade" id="customer-messaging">
                         <div class="d-flex justify-content-between align-items-center mb-3">
                             <h4 class="mb-0">🐼 Customer Messaging Workflow</h4>
+                            <button class="btn btn-outline-primary btn-sm" onclick="refreshLeadsCount()">
+                                <i class="bi bi-arrow-clockwise"></i> Refresh
+                            </button>
                         </div>
                         
                         <div class="alert alert-info">
                             <i class="bi bi-info-circle me-2"></i>
                             <strong>熊貓企業顧問 - 客戶聯繫系統</strong><br>
                             使用 LLM 生成個性化訊息，批量聯繫舊客戶，介紹《伴你啟航計劃》。
+                        </div>
+
+                        <!-- Leads Stats Card -->
+                        <div class="card border-success mb-4">
+                            <div class="card-body">
+                                <div class="row align-items-center">
+                                    <div class="col-auto">
+                                        <div class="bg-success bg-opacity-10 rounded-circle p-3">
+                                            <i class="bi bi-star-fill text-success fs-3"></i>
+                                        </div>
+                                    </div>
+                                    <div class="col">
+                                        <h6 class="text-muted mb-1">Active Leads</h6>
+                                        <h2 class="mb-0" id="leads-count">--</h2>
+                                        <small class="text-muted">Customers who replied to outreach</small>
+                                    </div>
+                                    <div class="col-auto">
+                                        <a href="#chats" class="btn btn-success" data-bs-toggle="tab" onclick="filterChatsByLead()">
+                                            <i class="bi bi-eye me-1"></i> View Leads
+                                        </a>
+                                    </div>
+                                </div>
+                            </div>
                         </div>
 
                         <div class="row g-4">

@@ -369,6 +369,9 @@ class TelegramBotService {
       chatHandler.addMessage(chatId, 'user', cleanMessageText, 'telegram');
       console.log(`[Telegram] User message saved to chat history: ${chatId}`);
       
+      // Auto-tag as LEAD if user replies to bot message
+      chatHandler.checkAndMarkAsLead(chatId, 'telegram');
+      
       // Check if this chat is blocked from AI responses
       console.log(`[Telegram] Debug - workflowManager available: ${!!global.workflowManager}`);
       console.log(`[Telegram] Debug - formattedChatId: "${formattedChatId}"`);

@@ -457,6 +457,79 @@ app.get('/api/workflow/message-tracking', (req, res) => {
   }
 });
 
+// API endpoints for chat tags
+app.get('/api/chats/:chatId/tags', (req, res) => {
+  try {
+    const { chatId } = req.params;
+    const tags = global.chatHandler?.getTags(chatId) || [];
+    return res.json({ success: true, tags });
+  } catch (error) {
+    console.error('Error getting tags:', error);
+    return res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+app.post('/api/chats/:chatId/tags', express.json(), (req, res) => {
+  try {
+    const { chatId } = req.params;
+    const { tag } = req.body;
+    
+    if (!tag) {
+      return res.status(400).json({ success: false, error: 'Tag is required' });
+    }
+    
+    const result = global.chatHandler?.addTag(chatId, tag);
+    const tags = global.chatHandler?.getTags(chatId) || [];
+    
+    return res.json({ success: true, added: result, tags });
+  } catch (error) {
+    console.error('Error adding tag:', error);
+    return res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+app.delete('/api/chats/:chatId/tags/:tag', (req, res) => {
+  try {
+    const { chatId, tag } = req.params;
+    
+    const result = global.chatHandler?.removeTag(chatId, tag);
+    const tags = global.chatHandler?.getTags(chatId) || [];
+    
+    return res.json({ success: true, removed: result, tags });
+  } catch (error) {
+    console.error('Error removing tag:', error);
+    return res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Get all chats with a specific tag
+app.get('/api/tags/:tag/chats', (req, res) => {
+  try {
+    const { tag } = req.params;
+    const chatIds = global.chatHandler?.getChatsByTag(tag) || [];
+    return res.json({ success: true, chatIds });
+  } catch (error) {
+    console.error('Error getting chats by tag:', error);
+    return res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Get all leads
+app.get('/api/leads', (req, res) => {
+  try {
+    const leadChatIds = global.chatHandler?.getChatsByTag('LEAD') || [];
+    const allChats = global.chatHandler?.getAllChats() || [];
+    
+    // Filter chats that are leads
+    const leads = allChats.filter(chat => leadChatIds.includes(chat.id));
+    
+    return res.json({ success: true, leads, count: leads.length });
+  } catch (error) {
+    console.error('Error getting leads:', error);
+    return res.status(500).json({ success: false, error: error.message });
+  }
+});
+
 // Serve static files from the public directory
 app.use(express.static(path.join(__dirname, 'gui/public')));
 app.use(express.json());
@@ -789,8 +862,25 @@ app.post('/api/workflow/send-message', express.json(), async (req, res) => {
       // Add message to chat history before sending
       if (global.chatHandler) {
         const displayContent = messageContent || `[${mediaType.toUpperCase()}] ${caption || mediaUrl}`;
-        global.chatHandler.addMessage(chatId, 'assistant', displayContent);
-        console.log(`[Workflow: ${workflowName}] Added message to chat history for ${chatId}`);
+        
+        // Determine platform from chatId format or request body
+        let platform = req.body.platform || 'whatsapp';
+        if (chatId.includes('@c.us') || chatId.includes('@g.us')) {
+          platform = 'whatsapp';
+        } else if (chatId.startsWith('telegram:') || req.body.platform === 'telegram') {
+          platform = 'telegram';
+        }
+        
+        // Strip platform prefix from chatId if present to avoid double-prefixing
+        let cleanChatId = chatId;
+        if (chatId.startsWith('whatsapp:')) {
+          cleanChatId = chatId.replace('whatsapp:', '');
+        } else if (chatId.startsWith('telegram:')) {
+          cleanChatId = chatId.replace('telegram:', '');
+        }
+        
+        global.chatHandler.addMessage(cleanChatId, 'assistant', displayContent, platform);
+        console.log(`[Workflow: ${workflowName}] Added message to chat history for ${platform}:${cleanChatId}`);
       } else {
         console.warn('Chat handler not available, message not saved to history');
       }

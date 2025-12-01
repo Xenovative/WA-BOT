@@ -5310,11 +5310,23 @@ function displayChats(chats) {
     
     console.log(`[DEBUG] Chat ${rawChatId}: AI state =`, aiToggleStates.get(rawChatId), ', isAIEnabled =', isAIEnabled);
     
+    // Generate tags HTML
+    const tags = chat.tags || [];
+    const tagsHtml = tags.map(tag => {
+      if (tag === 'LEAD') {
+        return `<span class="badge bg-success me-1" title="Customer replied to outreach"><i class="bi bi-star-fill"></i> LEAD</span>`;
+      }
+      return `<span class="badge bg-secondary me-1">${escapeHtml(tag)}</span>`;
+    }).join('');
+    
     return `
       <tr class="chat-row" data-chat-id="${chatId}">
         <td>
           <div class="d-flex align-items-center">
-            <span class="chat-id-display" title="${chatId}">${chatId.length > 20 ? chatId.substring(0, 20) + '...' : chatId}</span>
+            <div>
+              <span class="chat-id-display" title="${chatId}">${chatId.length > 20 ? chatId.substring(0, 20) + '...' : chatId}</span>
+              ${tagsHtml ? `<div class="mt-1">${tagsHtml}</div>` : ''}
+            </div>
             <div class="ms-auto">
               <div class="form-check form-switch form-check-inline">
                 <input class="form-check-input ai-toggle" type="checkbox" 
@@ -5781,3 +5793,92 @@ function updateDynamicTranslations() {
   // Update any other dynamic content that needs translation
   // Add more dynamic content updates here as needed
 }
+
+// ==================== LEADS MANAGEMENT ====================
+
+// Refresh leads count
+async function refreshLeadsCount() {
+  try {
+    const response = await fetch('/api/leads');
+    const data = await response.json();
+    
+    if (data.success) {
+      const leadsCountEl = document.getElementById('leads-count');
+      if (leadsCountEl) {
+        leadsCountEl.textContent = data.count || 0;
+      }
+    }
+  } catch (error) {
+    console.error('Error fetching leads count:', error);
+  }
+}
+
+// Filter chats to show only leads
+function filterChatsByLead() {
+  // This will be called when clicking "View Leads" button
+  // For now, we'll just switch to chats tab and the leads will be highlighted
+  // In the future, we could add a filter dropdown
+  setTimeout(() => {
+    loadChats();
+    showToast('Leads are highlighted with a green star badge', 'info');
+  }, 100);
+}
+
+// Add tag to a chat
+async function addChatTag(chatId, tag) {
+  try {
+    const response = await fetch(`/api/chats/${encodeURIComponent(chatId)}/tags`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ tag })
+    });
+    
+    const data = await response.json();
+    if (data.success) {
+      showToast(`Tag "${tag}" added successfully`, 'success');
+      loadChats(); // Refresh to show new tag
+    } else {
+      showToast('Failed to add tag: ' + data.error, 'error');
+    }
+  } catch (error) {
+    console.error('Error adding tag:', error);
+    showToast('Error adding tag', 'error');
+  }
+}
+
+// Remove tag from a chat
+async function removeChatTag(chatId, tag) {
+  try {
+    const response = await fetch(`/api/chats/${encodeURIComponent(chatId)}/tags/${encodeURIComponent(tag)}`, {
+      method: 'DELETE'
+    });
+    
+    const data = await response.json();
+    if (data.success) {
+      showToast(`Tag "${tag}" removed`, 'success');
+      loadChats(); // Refresh to update tags
+    } else {
+      showToast('Failed to remove tag: ' + data.error, 'error');
+    }
+  } catch (error) {
+    console.error('Error removing tag:', error);
+    showToast('Error removing tag', 'error');
+  }
+}
+
+// Load leads count when Customer Messaging tab is shown
+document.addEventListener('DOMContentLoaded', function() {
+  const customerMessagingTab = document.querySelector('a[href="#customer-messaging"]');
+  if (customerMessagingTab) {
+    customerMessagingTab.addEventListener('shown.bs.tab', function() {
+      refreshLeadsCount();
+    });
+  }
+  
+  // Also load on initial page load if tab is active
+  setTimeout(() => {
+    if (document.getElementById('customer-messaging')?.classList.contains('active')) {
+      refreshLeadsCount();
+    }
+  }, 500);
+});

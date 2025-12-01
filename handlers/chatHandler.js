@@ -11,14 +11,241 @@ class ChatHandler {
     // Directory to store chat history
     this.chatHistoryDir = path.join(__dirname, '../chat_history');
     this.storageFile = path.join(this.chatHistoryDir, 'chats.json');
+    this.tagsFile = path.join(__dirname, '../data/chat_tags.json');
     
     // Ensure chat history directory exists
     if (!fs.existsSync(this.chatHistoryDir)) {
       fs.mkdirSync(this.chatHistoryDir, { recursive: true });
     }
     
+    // Ensure data directory exists for tags
+    const dataDir = path.join(__dirname, '../data');
+    if (!fs.existsSync(dataDir)) {
+      fs.mkdirSync(dataDir, { recursive: true });
+    }
+    
+    // Load tags from disk
+    this.tags = this.loadTags();
+    
     // Load conversations from disk
     this.loadConversations();
+  }
+  
+  /**
+   * Load tags from disk
+   * @returns {Object} Tags object mapping chatId to array of tags
+   */
+  loadTags() {
+    try {
+      if (fs.existsSync(this.tagsFile)) {
+        const content = fs.readFileSync(this.tagsFile, 'utf8');
+        return JSON.parse(content);
+      }
+    } catch (error) {
+      console.error('[ChatHandler] Error loading tags:', error);
+    }
+    return {};
+  }
+  
+  /**
+   * Save tags to disk
+   */
+  saveTags() {
+    try {
+      fs.writeFileSync(this.tagsFile, JSON.stringify(this.tags, null, 2), 'utf8');
+    } catch (error) {
+      console.error('[ChatHandler] Error saving tags:', error);
+    }
+  }
+  
+  /**
+   * Add a tag to a chat
+   * @param {string} chatId - Chat ID
+   * @param {string} tag - Tag to add
+   * @returns {boolean} Success status
+   */
+  addTag(chatId, tag) {
+    try {
+      if (!this.tags[chatId]) {
+        this.tags[chatId] = [];
+      }
+      
+      // Normalize tag
+      const normalizedTag = tag.toUpperCase().trim();
+      
+      // Don't add duplicate tags
+      if (!this.tags[chatId].includes(normalizedTag)) {
+        this.tags[chatId].push(normalizedTag);
+        this.saveTags();
+        console.log(`[ChatHandler] Added tag "${normalizedTag}" to chat ${chatId}`);
+        
+        // Broadcast tag update
+        if (global.broadcastUpdate) {
+          global.broadcastUpdate('chat_tag', {
+            chatId: chatId,
+            tags: this.tags[chatId],
+            action: 'add',
+            tag: normalizedTag
+          });
+        }
+        
+        return true;
+      }
+      return false;
+    } catch (error) {
+      console.error('[ChatHandler] Error adding tag:', error);
+      return false;
+    }
+  }
+  
+  /**
+   * Remove a tag from a chat
+   * @param {string} chatId - Chat ID
+   * @param {string} tag - Tag to remove
+   * @returns {boolean} Success status
+   */
+  removeTag(chatId, tag) {
+    try {
+      if (!this.tags[chatId]) {
+        return false;
+      }
+      
+      const normalizedTag = tag.toUpperCase().trim();
+      const index = this.tags[chatId].indexOf(normalizedTag);
+      
+      if (index > -1) {
+        this.tags[chatId].splice(index, 1);
+        this.saveTags();
+        console.log(`[ChatHandler] Removed tag "${normalizedTag}" from chat ${chatId}`);
+        
+        // Broadcast tag update
+        if (global.broadcastUpdate) {
+          global.broadcastUpdate('chat_tag', {
+            chatId: chatId,
+            tags: this.tags[chatId],
+            action: 'remove',
+            tag: normalizedTag
+          });
+        }
+        
+        return true;
+      }
+      return false;
+    } catch (error) {
+      console.error('[ChatHandler] Error removing tag:', error);
+      return false;
+    }
+  }
+  
+  /**
+   * Get all tags for a chat
+   * @param {string} chatId - Chat ID
+   * @returns {Array} Array of tags
+   */
+  getTags(chatId) {
+    return this.tags[chatId] || [];
+  }
+  
+  /**
+   * Get all chats with a specific tag
+   * @param {string} tag - Tag to filter by
+   * @returns {Array} Array of chat IDs
+   */
+  getChatsByTag(tag) {
+    const normalizedTag = tag.toUpperCase().trim();
+    const result = [];
+    
+    for (const [chatId, tags] of Object.entries(this.tags)) {
+      if (tags.includes(normalizedTag)) {
+        result.push(chatId);
+      }
+    }
+    
+    return result;
+  }
+  
+  /**
+   * Check if a chat should be marked as LEAD based on conversation pattern
+   * Lead identifiers:
+   * 1. User says keywords like "有興趣", "想知多D", "想了解", etc.
+   * 2. User has replied 2-3+ times in the conversation (engaged)
+   * @param {string} chatId - Chat ID
+   * @param {string} platform - Platform identifier
+   * @returns {boolean} Whether the chat was marked as LEAD
+   */
+  checkAndMarkAsLead(chatId, platform) {
+    try {
+      const platformChatId = platform ? this.getPlatformChatId(platform, chatId) : chatId;
+      const conversation = this.getConversation(chatId, platform);
+      
+      // Already tagged as LEAD, skip
+      if (this.getTags(platformChatId).includes('LEAD')) {
+        return false;
+      }
+      
+      // Need at least 2 messages (bot message + user reply)
+      if (conversation.length < 2) {
+        return false;
+      }
+      
+      // Lead detection keywords (case-insensitive)
+      const leadKeywords = [
+        '有興趣', '有兴趣',
+        '想知多', '想知多d', '想知多D',
+        '想了解', '想瞭解',
+        '有interest', 'interested',
+        '可以', '好呀', '好啊', '得呀', '得啊',
+        '幾點', '幾時', '邊個時間', '什麼時間', '甚麼時間',
+        '明天', '今日', '聽日', '下午', '上午',
+        '打電話', '打俾我', 'call我', 'call 我',
+        '想約', '約個時間', '預約',
+        '幫我', '幫到我',
+        '多少錢', '幾錢', '價錢', '收費',
+        'ok', 'OK', 'Ok', '好的', '無問題', '冇問題'
+      ];
+      
+      // Count user messages after first assistant message
+      let hasAssistantMessage = false;
+      let userReplyCount = 0;
+      let hasLeadKeyword = false;
+      
+      for (let i = 0; i < conversation.length; i++) {
+        const msg = conversation[i];
+        
+        if (msg.role === 'assistant') {
+          hasAssistantMessage = true;
+        } else if (msg.role === 'user' && hasAssistantMessage) {
+          userReplyCount++;
+          
+          // Check for lead keywords in user message
+          const content = msg.content.toLowerCase();
+          for (const keyword of leadKeywords) {
+            if (content.includes(keyword.toLowerCase())) {
+              hasLeadKeyword = true;
+              console.log(`[ChatHandler] Lead keyword detected: "${keyword}" in chat ${platformChatId}`);
+              break;
+            }
+          }
+        }
+      }
+      
+      // Mark as LEAD if:
+      // 1. User used a lead keyword, OR
+      // 2. User has replied 2+ times (engaged conversation)
+      const isLead = hasLeadKeyword || userReplyCount >= 2;
+      
+      if (isLead) {
+        this.addTag(platformChatId, 'LEAD');
+        const reason = hasLeadKeyword ? 'keyword detected' : `${userReplyCount} replies`;
+        console.log(`[ChatHandler] Auto-tagged chat ${platformChatId} as LEAD (${reason})`);
+        return true;
+      }
+      
+      return false;
+    } catch (error) {
+      console.error('[ChatHandler] Error in checkAndMarkAsLead:', error);
+      return false;
+    }
   }
 
   /**
@@ -388,7 +615,8 @@ class ChatHandler {
                 id: chatId,
                 preview: lastMessage.content?.substring(0, 100) || '',
                 timestamp: lastMessage.timestamp || new Date().toISOString(),
-                messageCount: messages.length
+                messageCount: messages.length,
+                tags: this.tags[chatId] || []
               });
             }
           } catch (parseError) {

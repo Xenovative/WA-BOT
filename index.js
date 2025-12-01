@@ -1977,6 +1977,9 @@ client.on('message', async (message) => {
       // Always save user message to chat history, even if AI is blocked
       chatHandler.addMessage(chatId, 'user', cleanMessageText, 'whatsapp');
       
+      // Auto-tag as LEAD if user replies to bot message
+      chatHandler.checkAndMarkAsLead(chatId, 'whatsapp');
+      
       // Check if this chat is blocked from AI responses
       const isChatBlocked = workflowManager.isChatBlocked(formattedChatId);
       console.log(`[Group Chat] Chat ${formattedChatId} blocked status: ${isChatBlocked}`);
@@ -2142,6 +2145,9 @@ client.on('message', async (message) => {
     
     // Always save user message to chat history, even if AI is blocked
     chatHandler.addMessage(chatId, 'user', messageText, 'whatsapp');
+    
+    // Auto-tag as LEAD if user replies to bot message
+    chatHandler.checkAndMarkAsLead(chatId, 'whatsapp');
     
     // Check if this chat is blocked from AI responses
     const isChatBlocked = workflowManager.isChatBlocked(formattedChatId);

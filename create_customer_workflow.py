@@ -139,21 +139,120 @@ return [msg, null];""",
         "noerr": 0,
         "x": 150,
         "y": 200,
-        "wires": [["rate-limit-node"], ["done-node"]]
+        "wires": [["business-hours-node"], ["done-node"]]
+    },
+    {
+        "id": "business-hours-node",
+        "type": "function",
+        "z": "customer-llm-flow",
+        "name": "Check Business Hours",
+        "func": """// Business hours configuration (HKT = UTC+8)
+const START_HOUR = 9;   // 9:00 AM
+const END_HOUR = 18;    // 6:00 PM
+const TIMEZONE_OFFSET = 8; // Hong Kong UTC+8
+
+// Get current time in HKT
+const now = new Date();
+const utcHour = now.getUTCHours();
+const hktHour = (utcHour + TIMEZONE_OFFSET) % 24;
+const hktMinutes = now.getUTCMinutes();
+
+// Check if within business hours
+const isBusinessHours = hktHour >= START_HOUR && hktHour < END_HOUR;
+
+// Also check if it's a weekday (optional - remove if you want weekends too)
+const dayOfWeek = now.getUTCDay(); // 0 = Sunday, 6 = Saturday
+const utcDay = now.getUTCDay();
+// Adjust for HKT (might be different day)
+const hktDay = (utcHour + TIMEZONE_OFFSET >= 24) ? (utcDay + 1) % 7 : utcDay;
+const isWeekday = hktDay >= 1 && hktDay <= 5; // Monday to Friday
+
+if (isBusinessHours && isWeekday) {
+    node.status({fill:"green", shape:"dot", text:"Business hours: " + hktHour + ":" + String(hktMinutes).padStart(2, '0') + " HKT"});
+    return [msg, null]; // Continue to send
+} else {
+    // Calculate wait time until next business hours
+    let waitMinutes;
+    
+    if (hktHour < START_HOUR) {
+        // Before business hours today
+        waitMinutes = (START_HOUR - hktHour) * 60 - hktMinutes;
+    } else if (hktHour >= END_HOUR) {
+        // After business hours, wait until tomorrow 9am
+        waitMinutes = (24 - hktHour + START_HOUR) * 60 - hktMinutes;
+    } else if (!isWeekday) {
+        // Weekend - calculate time until Monday 9am
+        const daysUntilMonday = hktDay === 0 ? 1 : (8 - hktDay);
+        waitMinutes = daysUntilMonday * 24 * 60 - hktHour * 60 - hktMinutes + START_HOUR * 60;
+    }
+    
+    // Store wait time for the delay node
+    msg.waitUntilBusinessHours = waitMinutes;
+    
+    const waitHours = Math.floor(waitMinutes / 60);
+    const waitMins = waitMinutes % 60;
+    node.status({fill:"yellow", shape:"ring", text:"Outside hours. Wait " + waitHours + "h " + waitMins + "m"});
+    
+    return [null, msg]; // Go to wait node
+}""",
+        "outputs": 2,
+        "noerr": 0,
+        "x": 350,
+        "y": 200,
+        "wires": [["rate-limit-node"], ["wait-for-business-hours"]]
+    },
+    {
+        "id": "wait-for-business-hours",
+        "type": "function",
+        "z": "customer-llm-flow",
+        "name": "Calculate Wait Time",
+        "func": """// Set delay in milliseconds
+const waitMinutes = msg.waitUntilBusinessHours || 60;
+msg.delay = waitMinutes * 60 * 1000;
+
+node.status({fill:"blue", shape:"ring", text:"Waiting " + waitMinutes + " minutes..."});
+
+return msg;""",
+        "outputs": 1,
+        "noerr": 0,
+        "x": 550,
+        "y": 280,
+        "wires": [["business-hours-delay"]]
+    },
+    {
+        "id": "business-hours-delay",
+        "type": "delay",
+        "z": "customer-llm-flow",
+        "name": "Wait for Business Hours",
+        "pauseType": "delayv",
+        "timeout": "1",
+        "timeoutUnits": "hours",
+        "rate": "1",
+        "nbRateUnits": "1",
+        "rateUnits": "second",
+        "randomFirst": "1",
+        "randomLast": "5",
+        "randomUnits": "seconds",
+        "drop": False,
+        "allowrate": False,
+        "outputs": 1,
+        "x": 780,
+        "y": 280,
+        "wires": [["business-hours-node"]]
     },
     {
         "id": "rate-limit-node",
         "type": "delay",
         "z": "customer-llm-flow",
-        "name": "Rate Limit (10s)",
-        "pauseType": "rate",
+        "name": "Rate Limit (45-60s)",
+        "pauseType": "random",
         "timeout": "5",
         "timeoutUnits": "seconds",
         "rate": "1",
-        "nbRateUnits": "10",
+        "nbRateUnits": "45",
         "rateUnits": "second",
-        "randomFirst": "1",
-        "randomLast": "5",
+        "randomFirst": "45",
+        "randomLast": "60",
         "randomUnits": "seconds",
         "drop": False,
         "allowrate": False,
@@ -212,13 +311,13 @@ const systemPrompt = `🐼 熊貓企業顧問：舊客戶聯繫專用 System Pro
 
 【對話任務範例】
 開場白範例（可隨機選擇不同版本使用）：
-「您好呀～好久不見！之前有聯絡過我們關於政府資助的計劃，不知道最近公司運作順利嗎？」
-「嗨～近況如何？之前我們在資助申請或顧問服務方面有聯絡過，最近我們推出了一個新課程，反應很好喔！」
-「您好 😊 想跟您 catch up 一下～我們最近新增了一項企業培訓課程，幫助企業自行掌握申請政府資助，很多舊客戶反應不錯～想簡單介紹一下給您參考嗎？」
+「陳生，之前您咨詢過用政府資助幫你發展業務，我哋最新推出了BUD智能申請系統～伴您啟航計劃，只係每日一杯咖啡價錢！提前規劃2026年的生意發展，今日或明天你那個時間方便用15分鐘了解下新系統點幫到你？」
+「您好呀～好久不見！之前有聯絡過我們關於政府資助的計劃，我哋最近推出咗BUD智能申請系統，幫你自己搞掂申請，每日只係一杯咖啡嘅價錢！想了解下點樣幫到你嘅業務？」
+「嗨～近況如何？之前我們在資助申請方面有聯絡過，最近我們推出了伴您啟航計劃，用BUD智能系統幫企業自己申請政府資助，費用只係每日一杯咖啡！今日或明天邊個時間方便傾15分鐘？」
 進一步介紹範例：
-「《伴你啟航計劃》是一個教導企業如何親自申請政府資助的課程，費用只需 $9,800／年，比傳統顧問節省至少 80% 成本，而且可以完全掌握自己的申請資料和進度～」
+「《伴你啟航計劃》係一個BUD智能申請系統，教你點樣自己申請政府資助，費用只需 $9,800／年（每日大概一杯咖啡價錢），比傳統顧問節省至少 80% 成本！」
 引導聯繫範例：
-「如果您想了解詳細內容或優惠，我可以幫您安排顧問回電～方便留下您的姓名及電話嗎？」
+「今日或明天你那個時間方便用15分鐘了解下新系統點幫到你？直接回覆我就得！」
 「想了解更多可以瀏覽我們的網站：https://panda-sme.com/landingpage/」
 若客戶暫時沒興趣：
 「沒問題～如果之後想了解政府資助的新消息或課程更新，也可以再找我😊 我們很樂意隨時協助您！」
@@ -244,13 +343,19 @@ const prompt = `請為以下客戶撰寫一則WhatsApp訊息：
 客戶行業：${industry}
 
 訊息要求：
-1. 第一句必須包含客戶姓名，例如："${customer.name}您好呀～" 或 "嗨 ${customer.name}～"
-2. 訊息中必須提及客戶的行業（${industry}）
-3. 參考系統提示中的開場白範例風格
-4. 介紹《伴你啟航計劃》的主要優勢
-5. 必須包含網站連結：https://panda-sme.com/landingpage/
-6. 保持親切自然，3-4句
-7. 只輸出訊息內容，不要有任何其他說明
+1. 第一句必須包含客戶姓名，例如："${customer.name}，之前您咨詢過..." 或 "${customer.name}您好呀～"
+2. 提及客戶之前咨詢過政府資助幫助發展業務
+3. 介紹「BUD智能申請系統」和《伴你啟航計劃》
+4. 強調費用只係「每日一杯咖啡價錢」
+5. 提及可以幫助規劃2026年的生意發展
+6. 結尾詢問「今日或明天邊個時間方便用15分鐘了解下？」
+7. 鼓勵直接回覆訊息
+8. 可選擇性加入網站連結：https://panda-sme.com/landingpage/
+9. 使用廣東話口語風格，親切自然
+10. 只輸出訊息內容，不要有任何其他說明
+
+範例風格：
+「${customer.name}，之前您咨詢過用政府資助幫你發展業務，我哋最新推出了BUD智能申請系統～伴您啟航計劃，只係每日一杯咖啡價錢！提前規劃2026年的生意發展，今日或明天你那個時間方便用15分鐘了解下新系統點幫到你？」
 
 現在撰寫訊息：`;
 
