@@ -8,6 +8,7 @@ const blocklist = require('../utils/blocklist');
 const rateLimiter = require('../utils/rateLimiter');
 const voiceHandler = require('../utils/voiceHandler');
 const visionHandler = require('../utils/visionHandler');
+const contextManager = require('../utils/contextManager');
 
 // Note: workflowManager will be accessed via global.workflowManager at runtime
 
@@ -420,11 +421,8 @@ class TelegramBotService {
       // Get current settings
       const settings = commandHandler.getCurrentSettings();
       
-      // Convert conversation to format expected by LLM
-      let messages = [
-        { role: 'system', content: settings.systemPrompt },
-        ...conversation.map(msg => ({ role: msg.role, content: msg.content }))
-      ];
+      // Use contextManager to prepare messages with history limiting and system prompt reinforcement
+      let messages = contextManager.prepareMessages(settings.systemPrompt, conversation);
       
       // Apply RAG if enabled
       let context = null;

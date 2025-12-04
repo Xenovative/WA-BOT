@@ -4,6 +4,7 @@ const commandHandler = require('../handlers/commandHandler');
 const ragProcessor = require('../kb/ragProcessor');
 const voiceHandler = require('../utils/voiceHandler');
 const visionHandler = require('../utils/visionHandler');
+const contextManager = require('../utils/contextManager');
 const fetch = require('node-fetch');
 
 class InstagramPrivateService {
@@ -612,11 +613,8 @@ class InstagramPrivateService {
                 console.log(`[Instagram] Current settings - Provider: ${settings.provider}, Model: ${settings.model}`);
                 console.log(`[Instagram] System prompt: ${settings.systemPrompt.substring(0, 100)}...`);
                 
-                // Convert conversation to format expected by LLM
-                let messages = [
-                    { role: 'system', content: settings.systemPrompt },
-                    ...conversation.map(msg => ({ role: msg.role, content: msg.content }))
-                ];
+                // Use contextManager to prepare messages with history limiting and system prompt reinforcement
+                let messages = contextManager.prepareMessages(settings.systemPrompt, conversation);
                 
                 console.log(`[Instagram] Prepared ${messages.length} messages for LLM (including system prompt)`);
                 

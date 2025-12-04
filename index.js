@@ -21,6 +21,7 @@ const fileWatcher = require('./kb/fileWatcher');
 const voiceHandler = require('./utils/voiceHandler');
 const visionHandler = require('./utils/visionHandler');
 const { handleTimeDateQuery } = require('./utils/timeUtils');
+const contextManager = require('./utils/contextManager');
 const alertNotifier = require('./utils/alertNotifier');
 
 // Import bots
@@ -2019,11 +2020,8 @@ client.on('message', async (message) => {
           return true;
         });
         
-        // Convert conversation to format expected by LLM
-        let messages = [
-          { role: 'system', content: settings.systemPrompt },
-          ...cleanConversation.map(msg => ({ role: msg.role, content: msg.content }))
-        ];
+        // Use contextManager to prepare messages with history limiting and system prompt reinforcement
+        let messages = contextManager.prepareMessages(settings.systemPrompt, cleanConversation);
         
         // Apply RAG if enabled
         let context = null;
@@ -2190,11 +2188,8 @@ client.on('message', async (message) => {
         return true;
       });
       
-      // Convert conversation to format expected by LLM
-      let messages = [
-        { role: 'system', content: settings.systemPrompt },
-        ...cleanConversation.map(msg => ({ role: msg.role, content: msg.content }))
-      ];
+      // Use contextManager to prepare messages with history limiting and system prompt reinforcement
+      let messages = contextManager.prepareMessages(settings.systemPrompt, cleanConversation);
       
       // Apply RAG if enabled
       let context = null;

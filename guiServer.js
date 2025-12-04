@@ -2729,6 +2729,51 @@ app.post('/api/settings/branding', express.json(), (req, res) => {
   }
 });
 
+// Context/History settings endpoints
+const contextManager = require('./utils/contextManager');
+
+app.get('/api/settings/context', (req, res) => {
+  try {
+    const settings = contextManager.getSettings();
+    res.json({
+      success: true,
+      ...settings,
+      // Also include env defaults for reference
+      envMaxHistory: parseInt(process.env.MAX_CONVERSATION_HISTORY || '20'),
+      envReinforce: process.env.REINFORCE_SYSTEM_PROMPT === 'true'
+    });
+  } catch (error) {
+    console.error('Error getting context settings:', error);
+    res.status(500).json({ error: 'Failed to get context settings' });
+  }
+});
+
+app.post('/api/settings/context', express.json(), (req, res) => {
+  try {
+    const { maxHistory, reinforceSystemPrompt } = req.body;
+    
+    // Update runtime settings
+    contextManager.updateSettings({
+      maxHistory: maxHistory !== undefined ? parseInt(maxHistory) : undefined,
+      reinforceSystemPrompt: reinforceSystemPrompt !== undefined ? reinforceSystemPrompt : undefined
+    });
+    
+    // Optionally persist to .env
+    if (maxHistory !== undefined) {
+      saveEnvVariable('MAX_CONVERSATION_HISTORY', maxHistory.toString());
+    }
+    if (reinforceSystemPrompt !== undefined) {
+      saveEnvVariable('REINFORCE_SYSTEM_PROMPT', reinforceSystemPrompt.toString());
+    }
+    
+    console.log(`Context settings updated: maxHistory=${maxHistory}, reinforce=${reinforceSystemPrompt}`);
+    res.json({ success: true, ...contextManager.getSettings() });
+  } catch (error) {
+    console.error('Error updating context settings:', error);
+    res.status(500).json({ error: 'Failed to update context settings' });
+  }
+});
+
 // Admin mode endpoints
 app.post('/api/admin/login', express.json(), (req, res) => {
   const { password } = req.body;
