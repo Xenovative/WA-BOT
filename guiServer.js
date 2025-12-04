@@ -958,8 +958,8 @@ app.post('/api/workflow/send-message', express.json(), async (req, res) => {
         try {
           // First, send the text message
           if (messageContent) {
-            await whatsapp.client.sendMessage(chatId, messageContent);
-            console.log('Text message sent to', chatId);
+            await whatsapp.client.sendMessage(cleanChatId, messageContent);
+            console.log('Text message sent to', cleanChatId);
           }
           
           // Then send the media if URL is provided
@@ -976,7 +976,7 @@ app.post('/api/workflow/send-message', express.json(), async (req, res) => {
             });
             
             const sendOptions = mediaType === 'document' ? { sendMediaAsDocument: true } : {};
-            const message = await whatsapp.client.sendMessage(chatId, media, sendOptions);
+            const message = await whatsapp.client.sendMessage(cleanChatId, media, sendOptions);
             console.log('Media sent with ID:', message.id?._serialized || 'No ID returned');
           }
           console.log('Message sent with ID:', message.id?._serialized || 'No ID returned');
@@ -987,8 +987,8 @@ app.post('/api/workflow/send-message', express.json(), async (req, res) => {
       } 
       // Otherwise send text message
       else {
-        await whatsapp.client.sendMessage(chatId, messageContent);
-        console.log(`Message sent to ${chatId}: ${messageContent.substring(0, 50)}${messageContent.length > 50 ? '...' : ''}`);
+        await whatsapp.client.sendMessage(cleanChatId, messageContent);
+        console.log(`Message sent to ${cleanChatId}: ${messageContent.substring(0, 50)}${messageContent.length > 50 ? '...' : ''}`);
       }
       
       res.json({ success: true, message: 'Message sent successfully' });
