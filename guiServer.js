@@ -913,6 +913,16 @@ app.post('/api/workflow/send-message', express.json(), async (req, res) => {
       // Get the workflow name or ID for the chat history
       const workflowName = req.body.workflowName || req.body.workflowId || 'workflow';
       
+      // Strip platform prefix from chatId if present to avoid double-prefixing
+      let cleanChatId = chatId;
+      if (chatId.startsWith('whatsapp:')) {
+        cleanChatId = chatId.replace('whatsapp:', '');
+      } else if (chatId.startsWith('telegram:')) {
+        cleanChatId = chatId.replace('telegram:', '');
+      }
+      // Remove + from phone numbers (WhatsApp expects 85290110939@c.us, not +85290110939@c.us)
+      cleanChatId = cleanChatId.replace(/^\+/, '');
+      
       // Add message to chat history before sending
       if (global.chatHandler) {
         const displayContent = messageContent || `[${mediaType.toUpperCase()}] ${caption || mediaUrl}`;
@@ -923,14 +933,6 @@ app.post('/api/workflow/send-message', express.json(), async (req, res) => {
           platform = 'whatsapp';
         } else if (chatId.startsWith('telegram:') || req.body.platform === 'telegram') {
           platform = 'telegram';
-        }
-        
-        // Strip platform prefix from chatId if present to avoid double-prefixing
-        let cleanChatId = chatId;
-        if (chatId.startsWith('whatsapp:')) {
-          cleanChatId = chatId.replace('whatsapp:', '');
-        } else if (chatId.startsWith('telegram:')) {
-          cleanChatId = chatId.replace('telegram:', '');
         }
         
         global.chatHandler.addMessage(cleanChatId, 'assistant', displayContent, platform);
