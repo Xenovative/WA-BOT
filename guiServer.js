@@ -454,13 +454,16 @@ app.delete('/api/workflow/customers', (req, res) => {
 // API endpoint to track sent messages
 app.post('/api/workflow/track-message', express.json(), (req, res) => {
   try {
-    const { customerId, customerName, message, status } = req.body;
+    const { customerId, customerName, message, status, workflowRunId, customerIndex, totalCustomers } = req.body;
     
     if (!customerId) {
       return res.status(400).json({ success: false, error: 'Customer ID is required' });
     }
 
     const dataDir = path.join(__dirname, 'data');
+    if (!fs.existsSync(dataDir)) {
+      fs.mkdirSync(dataDir, { recursive: true });
+    }
     const trackingPath = path.join(dataDir, 'message_tracking.json');
     
     // Load existing tracking data
@@ -469,20 +472,29 @@ app.post('/api/workflow/track-message', express.json(), (req, res) => {
       tracking = JSON.parse(fs.readFileSync(trackingPath, 'utf8'));
     }
     
-    // Add new tracking entry
-    tracking.push({
+    const trackingEntry = {
       customerId,
       customerName: customerName || 'Unknown',
       message: message || '',
       status: status || 'sent',
+      workflowRunId: workflowRunId || null,
+      customerIndex: customerIndex ?? null,
+      totalCustomers: totalCustomers ?? null,
       timestamp: new Date().toISOString(),
       date: new Date().toLocaleString('zh-TW', { timeZone: 'Asia/Hong_Kong' })
-    });
+    };
+    
+    // Add new tracking entry
+    tracking.push(trackingEntry);
     
     // Save tracking data
     fs.writeFileSync(trackingPath, JSON.stringify(tracking, null, 2), 'utf8');
     
-    return res.json({ success: true, message: 'Message tracked successfully' });
+    if (status === 'sent' || status === 'success') {
+      console.log(`[Workflow Tracking] Sent to ${customerName} (index ${customerIndex}/${totalCustomers})`);
+    }
+    
+    return res.json({ success: true, message: 'Message tracked successfully', entry: trackingEntry });
   } catch (error) {
     console.error('Error tracking message:', error);
     return res.status(500).json({ success: false, error: error.message });
@@ -492,14 +504,72 @@ app.post('/api/workflow/track-message', express.json(), (req, res) => {
 // API endpoint to get message tracking history
 app.get('/api/workflow/message-tracking', (req, res) => {
   try {
+    const { workflowRunId } = req.query;
     const trackingPath = path.join(__dirname, 'data', 'message_tracking.json');
     if (fs.existsSync(trackingPath)) {
-      const tracking = JSON.parse(fs.readFileSync(trackingPath, 'utf8'));
+      let tracking = JSON.parse(fs.readFileSync(trackingPath, 'utf8'));
+      // Filter by workflowRunId if provided
+      if (workflowRunId) {
+        tracking = tracking.filter(t => t.workflowRunId === workflowRunId);
+      }
       return res.json({ success: true, tracking });
     }
     return res.json({ success: true, tracking: [] });
   } catch (error) {
     console.error('Error reading tracking data:', error);
+    return res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// API endpoint to get last successful customer (derived from tracking data)
+app.get('/api/workflow/last-successful', (req, res) => {
+  try {
+    const trackingPath = path.join(__dirname, 'data', 'message_tracking.json');
+    
+    if (!fs.existsSync(trackingPath)) {
+      return res.json({ success: true, lastSuccessful: null, message: 'No tracking data found' });
+    }
+    
+    const tracking = JSON.parse(fs.readFileSync(trackingPath, 'utf8'));
+    
+    // Find the last successful send (most recent by timestamp)
+    const successfulSends = tracking
+      .filter(t => t.status === 'sent' || t.status === 'success')
+      .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+    
+    if (successfulSends.length === 0) {
+      return res.json({ success: true, lastSuccessful: null, message: 'No successful sends found' });
+    }
+    
+    const last = successfulSends[0];
+    return res.json({
+      success: true,
+      lastSuccessful: {
+        customerId: last.customerId,
+        customerName: last.customerName,
+        customerIndex: last.customerIndex,
+        totalCustomers: last.totalCustomers,
+        workflowRunId: last.workflowRunId,
+        timestamp: last.timestamp,
+        date: last.date
+      }
+    });
+  } catch (error) {
+    console.error('Error getting last successful:', error);
+    return res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// API endpoint to clear tracking data (for fresh start)
+app.delete('/api/workflow/tracking', (req, res) => {
+  try {
+    const trackingPath = path.join(__dirname, 'data', 'message_tracking.json');
+    if (fs.existsSync(trackingPath)) {
+      fs.unlinkSync(trackingPath);
+    }
+    return res.json({ success: true, message: 'Tracking data cleared' });
+  } catch (error) {
+    console.error('Error clearing tracking:', error);
     return res.status(500).json({ success: false, error: error.message });
   }
 });
