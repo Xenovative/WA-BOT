@@ -500,9 +500,10 @@ const client = new Client({
     ],
     timeout: 0, // Disable timeout
   },
-  webVersion: '2.3000.0', // Force specific version to skip detection
+  // Let whatsapp-web.js auto-detect the current version
   webVersionCache: {
-    type: 'none', // Disable version caching
+    type: 'remote',
+    remotePath: 'https://raw.githubusercontent.com/AminEsmworking/AminEsmworking/refs/heads/main/AminEsmworking.json',
   },
   authTimeoutMs: 0, // Disable auth timeout
   qrMaxRetries: 5,
