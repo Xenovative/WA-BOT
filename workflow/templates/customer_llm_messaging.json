@@ -364,7 +364,7 @@
     "id": "resume-trigger",
     "type": "inject",
     "z": "customer-llm-flow",
-    "name": "Resume Workflow",
+    "name": "Resume (Auto)",
     "repeat": "",
     "crontab": "",
     "once": false,
@@ -378,6 +378,43 @@
     "wires": [
       [
         "fetch-last-state"
+      ]
+    ]
+  },
+  {
+    "id": "manual-resume-trigger",
+    "type": "inject",
+    "z": "customer-llm-flow",
+    "name": "Resume from Index ",
+    "repeat": "",
+    "crontab": "",
+    "once": false,
+    "onceDelay": 0.1,
+    "topic": "",
+    "payload": "0",
+    "payloadType": "num",
+    "inputs": 0,
+    "x": 160,
+    "y": 460,
+    "wires": [
+      [
+        "manual-resume-config"
+      ]
+    ]
+  },
+  {
+    "id": "manual-resume-config",
+    "type": "function",
+    "z": "customer-llm-flow",
+    "name": "Set Manual Index",
+    "func": "// Manual resume - set the index from inject node payload\n// EDIT THE INJECT NODE PAYLOAD TO SET YOUR START INDEX\nconst startIndex = parseInt(msg.payload) || 0;\n\nmsg.resumeFromIndex = startIndex;\n\nnode.warn('Manual resume from index: ' + startIndex);\nnode.status({fill:\"yellow\", shape:\"dot\", text:\"Manual: start from #\" + startIndex});\n\nreturn msg;",
+    "outputs": 1,
+    "noerr": 0,
+    "x": 370,
+    "y": 460,
+    "wires": [
+      [
+        "fetch-customers"
       ]
     ]
   },
@@ -407,7 +444,7 @@
     "type": "function",
     "z": "customer-llm-flow",
     "name": "Set Resume Point",
-    "func": "// Get last successful customer from tracking data\nconst last = msg.payload.lastSuccessful;\n\nif (!last || last.customerIndex === null || last.customerIndex === undefined) {\n    node.warn('No previous successful sends found. Starting fresh.');\n    msg.resumeFromIndex = 0;\n    node.status({fill:\"blue\", shape:\"dot\", text:\"Fresh start\"});\n    return msg;\n}\n\n// Resume from the NEXT customer after the last successful one\nmsg.resumeFromIndex = last.customerIndex + 1;\n\nnode.warn('Last successful: ' + last.customerName + ' (index ' + last.customerIndex + ')');\nnode.warn('Resuming from index ' + msg.resumeFromIndex);\nnode.status({fill:\"blue\", shape:\"dot\", text:\"Resume from #\" + msg.resumeFromIndex + \" (after \" + last.customerName + \")\"});\n\nreturn msg;",
+    "func": "// Get last successful customer from tracking data\nconst last = msg.payload.lastSuccessful;\n\nif (!last || last.customerIndex === null || last.customerIndex === undefined) {\n    node.warn('No previous successful sends found. Use manual resume instead.');\n    node.warn('Click \"Resume from Index\" and edit its payload to set start index.');\n    msg.resumeFromIndex = 0;\n    node.status({fill:\"red\", shape:\"ring\", text:\"No tracking data - use manual\"});\n    return msg;\n}\n\n// Resume from the NEXT customer after the last successful one\nmsg.resumeFromIndex = last.customerIndex + 1;\n\nnode.warn('Last successful: ' + last.customerName + ' (index ' + last.customerIndex + ')');\nnode.warn('Resuming from index ' + msg.resumeFromIndex);\nnode.status({fill:\"green\", shape:\"dot\", text:\"Resume #\" + msg.resumeFromIndex + \" (after \" + last.customerName + \")\"});\n\nreturn msg;",
     "outputs": 1,
     "noerr": 0,
     "x": 550,
