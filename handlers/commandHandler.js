@@ -702,128 +702,6 @@ Show Citations: ${this.showCitations ? 'Yes' : 'No'}`;
   }
   
   /**
-   * Get current settings
-   * @returns {Object} Current settings
-   */
-  getCurrentSettings() {
-    return {
-      provider: this.currentProvider,
-      model: this.currentModel,
-      systemPrompt: this.systemPrompt,
-      parameters: this.parameters,
-      ragEnabled: this.ragEnabled,
-      showCitations: this.showCitations,
-      mcpResourceUri: this.mcpResourceUri,
-      currentProfileName: this.currentProfileName,
-      availableProfiles: Object.keys(this.configProfiles)
-    };
-  }
-
-  /**
-   * Update settings from API request
-   * @param {Object} newSettings - New settings to apply
-   */
-  async updateSettings(newSettings) {
-    console.log('[DEBUG] updateSettings called with:', JSON.stringify(newSettings, null, 2));
-    console.log('[DEBUG] Current provider before update:', this.currentProvider);
-    
-    const oldProvider = this.currentProvider;
-    const oldModel = this.currentModel;
-    
-    try {
-      if (newSettings.provider) {
-        console.log('[DEBUG] Updating provider to:', newSettings.provider);
-        this.currentProvider = newSettings.provider.toLowerCase();
-        // Update model to default for the new provider if not specified
-        if (!newSettings.model) {
-          this.currentModel = this.getModelForProvider(this.currentProvider);
-          console.log('[DEBUG] Set default model for provider:', this.currentModel);
-        }
-      }
-      
-      if (newSettings.model) {
-        console.log('[DEBUG] Updating model to:', newSettings.model);
-        this.currentModel = newSettings.model;
-      }
-      
-      if (newSettings.systemPrompt !== undefined) {
-        console.log('[DEBUG] Updating system prompt');
-        this.systemPrompt = newSettings.systemPrompt;
-      }
-      
-      if (newSettings.ragEnabled !== undefined) {
-        console.log('[DEBUG] Updating RAG enabled:', newSettings.ragEnabled);
-        this.ragEnabled = !!newSettings.ragEnabled;
-      }
-      
-      if (newSettings.showCitations !== undefined) {
-        console.log('[DEBUG] Updating show citations:', newSettings.showCitations);
-        this.showCitations = !!newSettings.showCitations;
-      }
-      
-      if (newSettings.mcpResourceUri !== undefined) {
-        console.log('[DEBUG] Updating MCP resource URI');
-        this.mcpResourceUri = newSettings.mcpResourceUri;
-      }
-      
-      // Save to current profile
-      console.log('[DEBUG] Saving to profile:', this.currentProfileName);
-      this.saveProfile(this.currentProfileName, false);
-      
-      console.log(`[DEBUG] Settings updated - Old: ${oldProvider}:${oldModel}, New: ${this.currentProvider}:${this.currentModel}`);
-      
-      console.log(`[DEBUG] Changes - Provider: ${oldProvider} -> ${this.currentProvider}, Model: ${oldModel} -> ${this.currentModel}`);
-    
-      if (global.updateLLMClient) {
-        console.log('[DEBUG] Calling global.updateLLMClient() with settings:', {
-          provider: this.currentProvider,
-          model: this.currentModel,
-          systemPrompt: this.systemPrompt,
-          parameters: this.parameters
-        });
-        
-        try {
-          const newClient = global.updateLLMClient();
-          console.log('[DEBUG] Successfully updated LLM client. New client:', {
-            provider: this.currentProvider,
-            model: this.currentModel,
-            clientType: newClient?.constructor?.name || 'unknown'
-          });
-          return { success: true };
-        } catch (error) {
-          console.error('[DEBUG] Error updating LLM client:', error);
-          // Try to recover by falling back to default provider
-          this.currentProvider = 'openai';
-          this.currentModel = this.getModelForProvider('openai');
-          console.log('[DEBUG] Fallback to default provider:', this.currentProvider);
-          global.updateLLMClient();
-          return { success: false, error: `Failed to update LLM client: ${error.message}. Fallback to default provider.` };
-        }
-      } else {
-        console.error('[DEBUG] global.updateLLMClient is not defined!');
-        // Try to recover by requiring the module directly
-        try {
-          const { updateLLMClient } = require('../../index');
-          if (updateLLMClient) {
-            global.updateLLMClient = updateLLMClient;
-            global.updateLLMClient();
-            console.log('[DEBUG] Successfully required and called updateLLMClient');
-            return { success: true };
-          }
-        } catch (error) {
-          console.error('[DEBUG] Failed to require updateLLMClient:', error);
-          return { success: false, error: 'LLM client update function not available' };
-        }
-      }
-      
-      return { success: true };
-    } catch (error) {
-      console.error('[DEBUG] Error in updateSettings:', error);
-      return { success: false, error: error.message };
-    }
-  }
-
-  /**
    * Handle profile command to manage configuration profiles
    * @param {Array} args - Command arguments
    * @returns {string} Response message
@@ -895,13 +773,18 @@ Show Citations: ${this.showCitations ? 'Yes' : 'No'}`;
   /**
    * Update settings from API request
    * @param {Object} newSettings - New settings to apply
+   * @returns {Object} Result with success status
    */
   updateSettings(newSettings) {
+    console.log('[CommandHandler] updateSettings called with:', Object.keys(newSettings));
+    
     if (newSettings.provider) {
+      console.log('[CommandHandler] Updating provider:', this.currentProvider, '->', newSettings.provider);
       this.currentProvider = newSettings.provider;
     }
     
     if (newSettings.model) {
+      console.log('[CommandHandler] Updating model:', this.currentModel, '->', newSettings.model);
       this.currentModel = newSettings.model;
     }
     
@@ -912,6 +795,7 @@ Show Citations: ${this.showCitations ? 'Yes' : 'No'}`;
     }
     
     if (newSettings.parameters) {
+      console.log('[CommandHandler] Updating parameters:', newSettings.parameters);
       this.parameters = { ...this.parameters, ...newSettings.parameters };
     }
     
@@ -938,10 +822,25 @@ Show Citations: ${this.showCitations ? 'Yes' : 'No'}`;
     
     // Save current settings as the active profile
     console.log('[CommandHandler] Saving to current profile:', this.currentProfileName);
-    console.log('[CommandHandler] System prompt length:', this.systemPrompt?.length || 0);
     if (this.currentProfileName) {
       this.saveProfile(this.currentProfileName, false);
     }
+    
+    // CRITICAL: Update the runtime LLM client with new settings
+    if (global.updateLLMClient) {
+      console.log('[CommandHandler] Calling global.updateLLMClient() to apply settings at runtime');
+      try {
+        global.updateLLMClient();
+        console.log('[CommandHandler] LLM client updated successfully');
+      } catch (error) {
+        console.error('[CommandHandler] Error updating LLM client:', error);
+        return { success: false, error: error.message };
+      }
+    } else {
+      console.warn('[CommandHandler] global.updateLLMClient not available - settings saved but not applied to runtime');
+    }
+    
+    return { success: true };
   }
   
   /**

@@ -2072,16 +2072,20 @@ async function viewChat(chatId) {
     // Load chat messages
     await loadChatMessages(chatId);
     
-    // Show the modal
-    const chatModal = new bootstrap.Modal(document.getElementById('chatModal'));
+    // Show the modal - use getOrCreateInstance to avoid multiple instances
+    const chatModalEl = document.getElementById('chatModal');
+    const chatModal = bootstrap.Modal.getOrCreateInstance(chatModalEl);
     chatModal.show();
     
-    // Clear current chat when modal is closed
-    document.getElementById('chatModal').addEventListener('hidden.bs.modal', function() {
-      currentOpenChatId = null;
-      // Remove event listeners to prevent memory leaks
-      removeChatModalEventListeners();
-    }, { once: true });
+    // Clear current chat when modal is closed (only add listener once)
+    if (!chatModalEl._hasCloseListener) {
+      chatModalEl._hasCloseListener = true;
+      chatModalEl.addEventListener('hidden.bs.modal', function() {
+        currentOpenChatId = null;
+        // Remove event listeners to prevent memory leaks
+        removeChatModalEventListeners();
+      });
+    }
     
   } catch (error) {
     console.error('Error viewing chat:', error);

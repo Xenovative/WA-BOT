@@ -997,8 +997,15 @@ client.on('ready', async () => {
   console.log('[LidResolver] WhatsApp client set for LID resolution');
   
   // Scan all chats to discover LID-to-phone mappings
+  // Wait for chatHandler to be ready before scanning
   setTimeout(async () => {
     try {
+      // Ensure chatHandler is available before scanning
+      if (!global.chatHandler) {
+        console.log('[LidResolver] Waiting for chatHandler to be ready...');
+        return;
+      }
+      
       console.log('[LidResolver] Scanning chats to discover LID mappings...');
       const chats = await client.getChats();
       let discoveredCount = 0;
@@ -1006,30 +1013,43 @@ client.on('ready', async () => {
       for (const chat of chats) {
         if (chat.isGroup) continue;
         
-        const contact = await chat.getContact();
-        if (contact) {
-          // Check if contact has both LID and phone number
-          const chatId = chat.id._serialized;
-          const contactId = contact.id?._serialized;
-          const phoneNumber = contact.number;
-          
-          if (chatId.endsWith('@lid') && phoneNumber) {
-            const phoneId = `${phoneNumber}@c.us`;
-            lidResolver.addMapping(chatId, phoneId, true);
-            discoveredCount++;
-          } else if (contactId && contactId.endsWith('@lid') && phoneNumber) {
-            const phoneId = `${phoneNumber}@c.us`;
-            lidResolver.addMapping(contactId, phoneId, true);
-            discoveredCount++;
+        try {
+          const contact = await chat.getContact();
+          if (contact) {
+            // Check if contact has both LID and phone number
+            const chatId = chat.id._serialized;
+            const contactId = contact.id?._serialized;
+            const phoneNumber = contact.number;
+            
+            if (chatId.endsWith('@lid') && phoneNumber) {
+              const phoneId = `${phoneNumber}@c.us`;
+              // Don't merge on startup scan - just record the mapping
+              lidResolver.addMapping(chatId, phoneId, false);
+              discoveredCount++;
+            } else if (contactId && contactId.endsWith('@lid') && phoneNumber) {
+              const phoneId = `${phoneNumber}@c.us`;
+              lidResolver.addMapping(contactId, phoneId, false);
+              discoveredCount++;
+            }
           }
+        } catch (contactError) {
+          // Skip contacts that fail to load
         }
       }
       
       console.log(`[LidResolver] Discovered ${discoveredCount} new LID mappings from ${chats.length} chats`);
+      
+      // Now merge any detached histories with the discovered mappings
+      if (discoveredCount > 0 && global.chatHandler) {
+        const mergedCount = global.chatHandler.mergeAllDetachedHistories(lidResolver.lidToPhone);
+        if (mergedCount > 0) {
+          console.log(`[LidResolver] Merged ${mergedCount} detached chat histories`);
+        }
+      }
     } catch (error) {
       console.log('[LidResolver] Error scanning chats for LID mappings:', error.message);
     }
-  }, 5000); // Wait 5 seconds after ready to scan
+  }, 10000); // Wait 10 seconds after ready to ensure everything is initialized
   
   // Initialize all services independently
   initializeServices().catch(console.error);
