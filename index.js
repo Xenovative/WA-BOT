@@ -23,6 +23,7 @@ const visionHandler = require('./utils/visionHandler');
 const { handleTimeDateQuery } = require('./utils/timeUtils');
 const contextManager = require('./utils/contextManager');
 const alertNotifier = require('./utils/alertNotifier');
+const lidResolver = require('./utils/lidResolver');
 
 // Import bots
 const TelegramBotService = require('./services/telegramBot');
@@ -502,7 +503,7 @@ const client = new Client({
   webVersionCache: {
     type: 'local',
   },
-  authTimeoutMs: 0, // Disable auth timeout
+  authTimeoutMs: 60000, // 60 second auth timeout
   qrMaxRetries: 5,
   takeoverOnConflict: true, // Take over existing sessions
   takeoverTimeoutMs: 0, // Disable takeover timeout
@@ -991,6 +992,10 @@ client.on('ready', async () => {
   };
   console.log('WhatsApp client made globally available');
   
+  // Set client on LID resolver for resolving LIDs to phone numbers
+  lidResolver.setClient(client);
+  console.log('[LidResolver] WhatsApp client set for LID resolution');
+  
   // Initialize all services independently
   initializeServices().catch(console.error);
 });
@@ -1072,6 +1077,18 @@ client.on('message', async (message) => {
   if (message.fromMe) {
     console.log('[Message-Event] Skipping message from self');
     return;
+  }
+  
+  // Resolve LID to phone number for consistent chat history
+  // WhatsApp multi-device uses LIDs (Linked IDs) which can cause split histories
+  if (message.from && message.from.endsWith('@lid')) {
+    const originalFrom = message.from;
+    const resolvedFrom = await lidResolver.resolve(message.from, message);
+    if (resolvedFrom !== originalFrom) {
+      console.log(`[LidResolver] Resolved message.from: ${originalFrom} -> ${resolvedFrom}`);
+      message._originalFrom = originalFrom; // Keep original for reference
+      message.from = resolvedFrom; // Use resolved phone number
+    }
   }
   
   // Publish inbound WhatsApp message to MQTT

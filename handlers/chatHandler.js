@@ -871,6 +871,92 @@ class ChatHandler {
       throw error;
     }
   }
+
+  /**
+   * Merge chat histories from LID format to phone number format
+   * This handles the WhatsApp multi-device LID issue where the same contact
+   * can have messages split between @lid and @c.us formats
+   * @param {string} lidChatId - The LID format chat ID (e.g., whatsapp:123456789@lid)
+   * @param {string} phoneChatId - The phone number format chat ID (e.g., whatsapp:85290897701@c.us)
+   * @returns {boolean} True if merge was successful
+   */
+  mergeLidToPhone(lidChatId, phoneChatId) {
+    try {
+      console.log(`[ChatHandler] Merging LID chat ${lidChatId} into phone chat ${phoneChatId}`);
+      
+      // Load both conversations
+      const lidMessages = this.loadChat(lidChatId);
+      const phoneMessages = this.loadChat(phoneChatId);
+      
+      if (lidMessages.length === 0) {
+        console.log(`[ChatHandler] No messages in LID chat ${lidChatId}, nothing to merge`);
+        return false;
+      }
+      
+      console.log(`[ChatHandler] Found ${lidMessages.length} messages in LID chat, ${phoneMessages.length} in phone chat`);
+      
+      // Merge messages, sorted by timestamp
+      const allMessages = [...phoneMessages, ...lidMessages];
+      allMessages.sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
+      
+      // Remove duplicates based on timestamp and content
+      const uniqueMessages = allMessages.filter((msg, index, self) =>
+        index === self.findIndex(m => 
+          m.timestamp === msg.timestamp && 
+          m.content === msg.content && 
+          m.role === msg.role
+        )
+      );
+      
+      console.log(`[ChatHandler] Merged to ${uniqueMessages.length} unique messages`);
+      
+      // Save merged conversation to phone format
+      this.conversations.set(phoneChatId, uniqueMessages);
+      const chatFile = this.getChatFilePath(phoneChatId);
+      fs.writeFileSync(chatFile, JSON.stringify(uniqueMessages, null, 2), 'utf8');
+      
+      // Delete the LID chat file
+      const lidChatFile = this.getChatFilePath(lidChatId);
+      if (fs.existsSync(lidChatFile)) {
+        fs.unlinkSync(lidChatFile);
+        console.log(`[ChatHandler] Deleted LID chat file: ${lidChatFile}`);
+      }
+      
+      // Remove from in-memory map
+      this.conversations.delete(lidChatId);
+      
+      // Update index
+      this.updateChatIndex();
+      
+      console.log(`[ChatHandler] Successfully merged LID chat into phone chat`);
+      return true;
+    } catch (error) {
+      console.error(`[ChatHandler] Error merging LID to phone:`, error);
+      return false;
+    }
+  }
+
+  /**
+   * Find and merge all detached LID/phone chat pairs
+   * @param {Map} lidToPhoneMap - Map of LID to phone number mappings
+   * @returns {number} Number of chats merged
+   */
+  mergeAllDetachedHistories(lidToPhoneMap) {
+    let mergedCount = 0;
+    
+    for (const [lid, phone] of lidToPhoneMap.entries()) {
+      // Construct the platform-prefixed chat IDs
+      const lidChatId = `whatsapp:${lid}`;
+      const phoneChatId = `whatsapp:${phone}`;
+      
+      if (this.mergeLidToPhone(lidChatId, phoneChatId)) {
+        mergedCount++;
+      }
+    }
+    
+    console.log(`[ChatHandler] Merged ${mergedCount} detached chat histories`);
+    return mergedCount;
+  }
 }
 
 // Create and export the chat handler instance

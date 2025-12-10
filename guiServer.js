@@ -993,6 +993,33 @@ app.post('/api/workflow/send-message', express.json(), async (req, res) => {
       // Remove + from phone numbers (WhatsApp expects 85290110939@c.us, not +85290110939@c.us)
       cleanChatId = cleanChatId.replace(/^\+/, '');
       
+      // Ensure WhatsApp chat ID has proper suffix
+      if (!cleanChatId.includes('@') && !cleanChatId.startsWith('telegram')) {
+        // It's a plain phone number, add @c.us suffix
+        cleanChatId = `${cleanChatId}@c.us`;
+      }
+      
+      console.log(`[Send Message] Original chatId: ${chatId}, Clean chatId: ${cleanChatId}`);
+      
+      // For WhatsApp, check if number is registered (skip for groups)
+      if (cleanChatId.endsWith('@c.us') && !cleanChatId.endsWith('@g.us')) {
+        try {
+          const numberToCheck = cleanChatId.replace('@c.us', '');
+          const isRegistered = await whatsapp.client.isRegisteredUser(`${numberToCheck}@c.us`);
+          if (!isRegistered) {
+            console.warn(`[Send Message] Number ${numberToCheck} is NOT registered on WhatsApp`);
+            return res.status(400).json({ 
+              success: false, 
+              error: `Phone number ${numberToCheck} is not registered on WhatsApp` 
+            });
+          }
+          console.log(`[Send Message] Number ${numberToCheck} is registered on WhatsApp`);
+        } catch (checkError) {
+          console.warn(`[Send Message] Could not verify number registration:`, checkError.message);
+          // Continue anyway - the check might fail but message might still work
+        }
+      }
+      
       // Add message to chat history before sending
       if (global.chatHandler) {
         const displayContent = messageContent || `[${mediaType.toUpperCase()}] ${caption || mediaUrl}`;
@@ -1874,6 +1901,58 @@ app.post('/api/chat/send-manual', express.json(), async (req, res) => {
     res.status(500).json({ 
       success: false, 
       error: 'Internal server error: ' + error.message 
+    });
+  }
+});
+
+// LID Resolution and Chat History Merge endpoint
+app.post('/api/chats/merge-lid', express.json(), async (req, res) => {
+  try {
+    const lidResolver = require('./utils/lidResolver');
+    const chatHandler = global.chatHandler || require('./handlers/chatHandler');
+    
+    const { lid, phone } = req.body;
+    
+    if (lid && phone) {
+      // Manual merge of specific LID to phone
+      lidResolver.addMapping(lid, phone, true);
+      res.json({ 
+        success: true, 
+        message: `Merged LID ${lid} to phone ${phone}`,
+        mapping: { lid, phone }
+      });
+    } else {
+      // Auto-merge all known mappings
+      const mergedCount = chatHandler.mergeAllDetachedHistories(lidResolver.lidToPhone);
+      res.json({ 
+        success: true, 
+        message: `Merged ${mergedCount} detached chat histories`,
+        mappings: Object.fromEntries(lidResolver.lidToPhone)
+      });
+    }
+  } catch (error) {
+    console.error('Error merging LID chats:', error);
+    res.status(500).json({ 
+      success: false, 
+      error: 'Failed to merge LID chats: ' + error.message 
+    });
+  }
+});
+
+// Get LID mappings
+app.get('/api/lid-mappings', (req, res) => {
+  try {
+    const lidResolver = require('./utils/lidResolver');
+    res.json({
+      success: true,
+      mappings: Object.fromEntries(lidResolver.lidToPhone),
+      count: lidResolver.lidToPhone.size
+    });
+  } catch (error) {
+    console.error('Error getting LID mappings:', error);
+    res.status(500).json({ 
+      success: false, 
+      error: 'Failed to get LID mappings: ' + error.message 
     });
   }
 });
