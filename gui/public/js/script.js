@@ -1050,14 +1050,7 @@ if (openrouterApiKeyInput) {
   });
 }
 
-// Settings form submission handler
-if (settingsForm) {
-  settingsForm.addEventListener('submit', async function(e) {
-    e.preventDefault();
-    console.log('[DEBUG] Settings form submitted');
-    await saveSettings();
-  });
-}
+// Settings form submission handler - removed duplicate (already set up in initializeEventListeners)
 
 // Server control event listeners
 document.addEventListener('DOMContentLoaded', () => {
