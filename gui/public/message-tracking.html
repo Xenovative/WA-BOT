@@ -325,6 +325,7 @@
                             <th>客戶 ID</th>
                             <th>訊息預覽</th>
                             <th>狀態</th>
+                            <th>錯誤原因</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -335,6 +336,7 @@
                 const statusText = item.status === 'sent' ? '已發送' : '失敗';
                 const preview = item.message.substring(0, 50) + (item.message.length > 50 ? '...' : '');
                 
+                const errorText = item.error ? item.error : '-';
                 html += `
                     <tr>
                         <td>${item.date}</td>
@@ -342,6 +344,7 @@
                         <td style="font-size: 12px; color: #666;">${item.customerId}</td>
                         <td class="message-preview" onclick="showMessage(${index})">${preview}</td>
                         <td><span class="status-badge ${statusClass}">${statusText}</span></td>
+                        <td style="font-size: 12px; color: ${item.error ? '#c62828' : '#999'};">${errorText}</td>
                     </tr>
                 `;
             });
@@ -361,11 +364,13 @@
             const modalBody = document.getElementById('modalBody');
             
             modalTitle.textContent = `訊息詳情 - ${item.customerName}`;
+            const errorSection = item.error ? `<p><strong>錯誤原因：</strong><span style="color: #c62828;">${item.error}</span></p>` : '';
             modalBody.innerHTML = `
                 <p><strong>客戶名稱：</strong>${item.customerName}</p>
                 <p><strong>客戶 ID：</strong>${item.customerId}</p>
                 <p><strong>發送時間：</strong>${item.date}</p>
                 <p><strong>狀態：</strong>${item.status === 'sent' ? '✅ 已發送' : '❌ 失敗'}</p>
+                ${errorSection}
                 <p><strong>訊息內容：</strong></p>
                 <div class="message-full">${item.message}</div>
             `;
@@ -392,11 +397,12 @@
             }
             
             let csv = '\uFEFF'; // UTF-8 BOM for Excel
-            csv += '時間,客戶名稱,客戶ID,訊息內容,狀態\n';
+            csv += '時間,客戶名稱,客戶ID,訊息內容,狀態,錯誤原因\n';
             
             trackingData.forEach(item => {
                 const message = item.message.replace(/"/g, '""'); // Escape quotes
-                csv += `"${item.date}","${item.customerName}","${item.customerId}","${message}","${item.status}"\n`;
+                const error = (item.error || '').replace(/"/g, '""');
+                csv += `"${item.date}","${item.customerName}","${item.customerId}","${message}","${item.status}","${error}"\n`;
             });
             
             const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });

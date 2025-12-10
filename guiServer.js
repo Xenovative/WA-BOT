@@ -454,7 +454,7 @@ app.delete('/api/workflow/customers', (req, res) => {
 // API endpoint to track sent messages
 app.post('/api/workflow/track-message', express.json(), (req, res) => {
   try {
-    const { customerId, customerName, message, status, workflowRunId, customerIndex, totalCustomers } = req.body;
+    const { customerId, customerName, message, status, workflowRunId, customerIndex, totalCustomers, error: errorReason } = req.body;
     
     if (!customerId) {
       return res.status(400).json({ success: false, error: 'Customer ID is required' });
@@ -477,6 +477,7 @@ app.post('/api/workflow/track-message', express.json(), (req, res) => {
       customerName: customerName || 'Unknown',
       message: message || '',
       status: status || 'sent',
+      error: errorReason || null,
       workflowRunId: workflowRunId || null,
       customerIndex: customerIndex ?? null,
       totalCustomers: totalCustomers ?? null,
@@ -492,6 +493,8 @@ app.post('/api/workflow/track-message', express.json(), (req, res) => {
     
     if (status === 'sent' || status === 'success') {
       console.log(`[Workflow Tracking] Sent to ${customerName} (index ${customerIndex}/${totalCustomers})`);
+    } else if (status === 'failed') {
+      console.log(`[Workflow Tracking] FAILED to send to ${customerName}: ${errorReason || 'Unknown error'}`);
     }
     
     return res.json({ success: true, message: 'Message tracked successfully', entry: trackingEntry });
