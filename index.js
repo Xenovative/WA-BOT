@@ -996,6 +996,41 @@ client.on('ready', async () => {
   lidResolver.setClient(client);
   console.log('[LidResolver] WhatsApp client set for LID resolution');
   
+  // Scan all chats to discover LID-to-phone mappings
+  setTimeout(async () => {
+    try {
+      console.log('[LidResolver] Scanning chats to discover LID mappings...');
+      const chats = await client.getChats();
+      let discoveredCount = 0;
+      
+      for (const chat of chats) {
+        if (chat.isGroup) continue;
+        
+        const contact = await chat.getContact();
+        if (contact) {
+          // Check if contact has both LID and phone number
+          const chatId = chat.id._serialized;
+          const contactId = contact.id?._serialized;
+          const phoneNumber = contact.number;
+          
+          if (chatId.endsWith('@lid') && phoneNumber) {
+            const phoneId = `${phoneNumber}@c.us`;
+            lidResolver.addMapping(chatId, phoneId, true);
+            discoveredCount++;
+          } else if (contactId && contactId.endsWith('@lid') && phoneNumber) {
+            const phoneId = `${phoneNumber}@c.us`;
+            lidResolver.addMapping(contactId, phoneId, true);
+            discoveredCount++;
+          }
+        }
+      }
+      
+      console.log(`[LidResolver] Discovered ${discoveredCount} new LID mappings from ${chats.length} chats`);
+    } catch (error) {
+      console.log('[LidResolver] Error scanning chats for LID mappings:', error.message);
+    }
+  }, 5000); // Wait 5 seconds after ready to scan
+  
   // Initialize all services independently
   initializeServices().catch(console.error);
 });
