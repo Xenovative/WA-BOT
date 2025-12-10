@@ -105,6 +105,16 @@ class LidResolver {
     const normalizedLid = lid.includes('@') ? lid : `${lid}@lid`;
     const normalizedPhone = phone.includes('@') ? phone : `${phone}@c.us`;
     
+    // SAFETY CHECK: Never map a LID to the bot's own number!
+    // This would cause the bot to think incoming messages are from itself
+    if (this.client && this.client.info && this.client.info.wid) {
+      const botNumber = this.client.info.wid._serialized;
+      if (normalizedPhone === botNumber) {
+        console.warn(`[LidResolver] BLOCKED: Attempted to map ${normalizedLid} to bot's own number ${botNumber}`);
+        return;
+      }
+    }
+    
     if (!this.lidToPhone.has(normalizedLid)) {
       this.lidToPhone.set(normalizedLid, normalizedPhone);
       this.phoneToLid.set(normalizedPhone, normalizedLid);
@@ -268,15 +278,19 @@ class LidResolver {
   extractPhoneFromMessage(message) {
     if (!message) return null;
 
-    // Check various message properties that might contain phone number
+    // IMPORTANT: Do NOT use message.to or message._data.to as sources!
+    // When a user sends a message TO the bot:
+    //   - message.from = user's LID (what we want to resolve)
+    //   - message.to = bot's number (NOT what we want!)
+    // Using message.to would incorrectly map the user's LID to the bot's number
+    
+    // Check various message properties that might contain the SENDER's phone number
     const possibleSources = [
-      message._data?.from,
-      message._data?.to,
-      message._data?.author,
-      message._data?.notifyName,
-      message.from,
-      message.to,
-      message.author
+      message._data?.from,  // Sender's ID from _data
+      message._data?.author,  // Author in group messages
+      message._data?.participant,  // Participant in group messages
+      message.author  // Author field
+      // NOTE: Intentionally NOT including message.to or message._data.to
     ];
 
     for (const source of possibleSources) {

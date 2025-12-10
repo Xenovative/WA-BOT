@@ -1130,7 +1130,21 @@ client.on('message', async (message) => {
 
   // Skip messages from self
   if (message.fromMe) {
-    console.log('[Message-Event] Skipping message from self');
+    console.log('[Message-Event] Skipping message from self (fromMe flag)');
+    return;
+  }
+  
+  // Additional check: Skip if message.from matches bot's own number
+  // This catches cases where fromMe might not be set correctly
+  const botWid = client.info?.wid?._serialized;
+  if (botWid && message.from === botWid) {
+    console.log('[Message-Event] Skipping message from self (from matches bot wid)');
+    return;
+  }
+  
+  // Also check message.to for outgoing messages that might slip through
+  if (message.id?.fromMe === true) {
+    console.log('[Message-Event] Skipping message from self (id.fromMe flag)');
     return;
   }
   
