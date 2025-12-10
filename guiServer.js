@@ -1023,22 +1023,15 @@ app.post('/api/workflow/send-message', express.json(), async (req, res) => {
         }
       }
       
-      // Add message to chat history before sending
-      if (global.chatHandler) {
-        const displayContent = messageContent || `[${mediaType.toUpperCase()}] ${caption || mediaUrl}`;
-        
-        // Determine platform from chatId format or request body
-        let platform = req.body.platform || 'whatsapp';
-        if (chatId.includes('@c.us') || chatId.includes('@g.us')) {
-          platform = 'whatsapp';
-        } else if (chatId.startsWith('telegram:') || req.body.platform === 'telegram') {
-          platform = 'telegram';
-        }
-        
-        global.chatHandler.addMessage(cleanChatId, 'assistant', displayContent, platform);
-        console.log(`[Workflow: ${workflowName}] Added message to chat history for ${platform}:${cleanChatId}`);
-      } else {
-        console.warn('Chat handler not available, message not saved to history');
+      // Prepare display content for chat history (will be logged only after successful send)
+      const displayContent = messageContent || `[${mediaType.toUpperCase()}] ${caption || mediaUrl}`;
+      
+      // Determine platform from chatId format or request body
+      let platform = req.body.platform || 'whatsapp';
+      if (chatId.includes('@c.us') || chatId.includes('@g.us')) {
+        platform = 'whatsapp';
+      } else if (chatId.startsWith('telegram:') || req.body.platform === 'telegram') {
+        platform = 'telegram';
       }
       
       // Send media if URL is provided
@@ -1091,6 +1084,14 @@ app.post('/api/workflow/send-message', express.json(), async (req, res) => {
       else {
         await whatsapp.client.sendMessage(cleanChatId, messageContent);
         console.log(`Message sent to ${cleanChatId}: ${messageContent.substring(0, 50)}${messageContent.length > 50 ? '...' : ''}`);
+      }
+      
+      // Only add to chat history AFTER successful send
+      if (global.chatHandler) {
+        global.chatHandler.addMessage(cleanChatId, 'assistant', displayContent, platform);
+        console.log(`[Workflow: ${workflowName}] Added message to chat history for ${platform}:${cleanChatId}`);
+      } else {
+        console.warn('Chat handler not available, message not saved to history');
       }
       
       res.json({ success: true, message: 'Message sent successfully' });
