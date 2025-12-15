@@ -51,6 +51,49 @@ class LidResolver {
   }
 
   /**
+   * Remove a bad mapping (e.g., if LID was incorrectly mapped to bot's number)
+   * @param {string} lid - LID to remove mapping for
+   */
+  removeMapping(lid) {
+    const normalizedLid = lid.includes('@') ? lid : `${lid}@lid`;
+    const phone = this.lidToPhone.get(normalizedLid);
+    
+    if (phone) {
+      this.lidToPhone.delete(normalizedLid);
+      this.phoneToLid.delete(phone);
+      console.log(`[LidResolver] Removed mapping: ${normalizedLid} <-> ${phone}`);
+      this.saveMapping();
+    }
+  }
+
+  /**
+   * Validate and clean mappings - remove any that map to the bot's number
+   * Call this after the client is ready
+   */
+  validateMappings() {
+    if (!this.client || !this.client.info || !this.client.info.wid) {
+      console.log(`[LidResolver] Cannot validate mappings - client not ready`);
+      return;
+    }
+    
+    const botNumber = this.client.info.wid._serialized;
+    const badMappings = [];
+    
+    for (const [lid, phone] of this.lidToPhone.entries()) {
+      if (phone === botNumber) {
+        badMappings.push(lid);
+      }
+    }
+    
+    if (badMappings.length > 0) {
+      console.log(`[LidResolver] Found ${badMappings.length} bad mappings to bot's number, removing...`);
+      for (const lid of badMappings) {
+        this.removeMapping(lid);
+      }
+    }
+  }
+
+  /**
    * Save LID mappings to disk
    */
   saveMapping() {
@@ -103,7 +146,7 @@ class LidResolver {
     
     // Normalize formats
     const normalizedLid = lid.includes('@') ? lid : `${lid}@lid`;
-    const normalizedPhone = phone.includes('@') ? phone : `${phone}@c.us`;
+    const normalizedPhone = (phone.includes('@') ? phone : `${phone}@c.us`).replace('@s.whatsapp.net', '@c.us');
     
     // SAFETY CHECK: Never map a LID to the bot's own number!
     // This would cause the bot to think incoming messages are from itself
@@ -115,22 +158,31 @@ class LidResolver {
       }
     }
     
-    if (!this.lidToPhone.has(normalizedLid)) {
-      this.lidToPhone.set(normalizedLid, normalizedPhone);
-      this.phoneToLid.set(normalizedPhone, normalizedLid);
+    const existingPhone = this.lidToPhone.get(normalizedLid);
+    if (existingPhone && existingPhone === normalizedPhone) {
+      return;
+    }
+
+    if (existingPhone && existingPhone !== normalizedPhone) {
+      this.phoneToLid.delete(existingPhone);
+      console.log(`[LidResolver] Updating mapping: ${normalizedLid} <-> ${existingPhone} -> ${normalizedPhone}`);
+    } else {
       console.log(`[LidResolver] Added mapping: ${normalizedLid} <-> ${normalizedPhone}`);
-      this.saveMapping();
-      
-      // Merge existing chat histories if requested
-      if (mergeChatHistory) {
-        try {
-          const chatHandler = require('../handlers/chatHandler');
-          const lidChatId = `whatsapp:${normalizedLid}`;
-          const phoneChatId = `whatsapp:${normalizedPhone}`;
-          chatHandler.mergeLidToPhone(lidChatId, phoneChatId);
-        } catch (error) {
-          console.log(`[LidResolver] Could not merge chat histories: ${error.message}`);
-        }
+    }
+
+    this.lidToPhone.set(normalizedLid, normalizedPhone);
+    this.phoneToLid.set(normalizedPhone, normalizedLid);
+    this.saveMapping();
+    
+    // Merge existing chat histories if requested
+    if (mergeChatHistory) {
+      try {
+        const chatHandler = require('../handlers/chatHandler');
+        const lidChatId = `whatsapp:${normalizedLid}`;
+        const phoneChatId = `whatsapp:${normalizedPhone}`;
+        chatHandler.mergeLidToPhone(lidChatId, phoneChatId);
+      } catch (error) {
+        console.log(`[LidResolver] Could not merge chat histories: ${error.message}`);
       }
     }
   }
@@ -218,17 +270,52 @@ class LidResolver {
    * @returns {Promise<string|null>}
    */
   async resolveFromClient(lid) {
-    if (!this.client) return null;
+    if (!this.client) {
+      console.log(`[LidResolver] No client available for resolution`);
+      return null;
+    }
+
+    console.log(`[LidResolver] Attempting to resolve LID via client: ${lid}`);
+
+    const normalizePhoneId = (pn) => {
+      if (!pn || typeof pn !== 'string') return null;
+      if (pn.endsWith('@c.us')) return pn;
+      if (pn.endsWith('@s.whatsapp.net')) return pn.replace('@s.whatsapp.net', '@c.us');
+      if (pn.includes('@')) return pn;
+      return `${pn}@c.us`;
+    };
 
     try {
       // Method 1: Try getContactById
       const contact = await this.client.getContactById(lid);
+      console.log(`[LidResolver] getContactById result:`, {
+        hasContact: !!contact,
+        number: contact?.number,
+        id: contact?.id?._serialized,
+        name: contact?.name || contact?.pushname
+      });
+      
       if (contact) {
         // Check if contact has a number property
         if (contact.number) {
           const phone = `${contact.number}@c.us`;
           this.addMapping(lid, phone);
           return phone;
+        }
+        
+        // Try getFormattedNumber if available
+        if (typeof contact.getFormattedNumber === 'function') {
+          try {
+            const formattedNumber = await contact.getFormattedNumber();
+            if (formattedNumber) {
+              const phone = `${formattedNumber.replace(/\D/g, '')}@c.us`;
+              console.log(`[LidResolver] Got formatted number: ${formattedNumber} -> ${phone}`);
+              this.addMapping(lid, phone);
+              return phone;
+            }
+          } catch (e) {
+            console.log(`[LidResolver] getFormattedNumber failed: ${e.message}`);
+          }
         }
         
         // Check id._serialized for phone format
@@ -238,12 +325,18 @@ class LidResolver {
         }
       }
     } catch (error) {
-      // Contact lookup failed, try other methods
+      console.log(`[LidResolver] getContactById failed: ${error.message}`);
     }
 
     try {
       // Method 2: Try to get chat and extract info
       const chat = await this.client.getChatById(lid);
+      console.log(`[LidResolver] getChatById result:`, {
+        hasChat: !!chat,
+        id: chat?.id?._serialized,
+        name: chat?.name
+      });
+      
       if (chat && chat.id && chat.id._serialized) {
         if (chat.id._serialized.endsWith('@c.us')) {
           this.addMapping(lid, chat.id._serialized);
@@ -251,22 +344,30 @@ class LidResolver {
         }
       }
     } catch (error) {
-      // Chat lookup failed
+      console.log(`[LidResolver] getChatById failed: ${error.message}`);
     }
 
     try {
       // Method 3: Try getContactLidAndPhone if available (newer versions)
       if (typeof this.client.getContactLidAndPhone === 'function') {
-        const result = await this.client.getContactLidAndPhone(lid);
-        if (result && result.pn) {
-          this.addMapping(lid, result.pn);
-          return result.pn;
+        const result = await this.client.getContactLidAndPhone([lid]);
+        console.log(`[LidResolver] getContactLidAndPhone result:`, result);
+
+        if (Array.isArray(result) && result.length > 0) {
+          const lidKey = String(lid).split('@')[0];
+          const match = result.find(r => String(r?.lid || '').split('@')[0] === lidKey) || result[0];
+          const phoneId = normalizePhoneId(match?.pn);
+          if (phoneId) {
+            this.addMapping(lid, phoneId);
+            return phoneId;
+          }
         }
       }
     } catch (error) {
-      // Method not available or failed
+      console.log(`[LidResolver] getContactLidAndPhone failed: ${error.message}`);
     }
 
+    console.log(`[LidResolver] All client resolution methods failed for ${lid}`);
     return null;
   }
 

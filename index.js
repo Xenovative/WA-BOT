@@ -996,6 +996,9 @@ client.on('ready', async () => {
   lidResolver.setClient(client);
   console.log('[LidResolver] WhatsApp client set for LID resolution');
   
+  // Validate and clean any bad LID mappings (e.g., mappings to bot's own number)
+  lidResolver.validateMappings();
+  
   // Scan all chats to discover LID-to-phone mappings
   // Wait for chatHandler to be ready before scanning
   setTimeout(async () => {
