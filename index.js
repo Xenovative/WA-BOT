@@ -475,8 +475,7 @@ const client = new Client({
       '--disable-gpu',
       '--disable-software-rasterizer',
       '--no-first-run',
-      '--no-zygote',
-      '--single-process',
+      // Removed --no-zygote and --single-process - they can break WebSocket message receiving
       '--disable-extensions',
       '--disable-background-networking',
       '--disable-sync',
@@ -494,7 +493,7 @@ const client = new Client({
       '--disable-ipc-flooding-protection',
       '--password-store=basic',
       '--use-mock-keychain',
-      '--js-flags=--max-old-space-size=256'
+      '--js-flags=--max-old-space-size=512'
     ],
     timeout: 120000,
     protocolTimeout: 120000,
@@ -951,6 +950,30 @@ client.on('change_state', (state) => {
     console.log('⚠️ Connection issue detected, attempting to reconnect...');
     scheduleReconnect();
   }
+});
+
+// DEBUG: Log ALL events to diagnose message receiving issues
+client.on('message_ack', (msg, ack) => {
+  console.log('[DEBUG-EVENT] message_ack:', msg?.from, 'ack:', ack);
+});
+
+client.on('message_revoke_everyone', (msg) => {
+  console.log('[DEBUG-EVENT] message_revoke_everyone:', msg?.from);
+});
+
+client.on('message_reaction', (reaction) => {
+  console.log('[DEBUG-EVENT] message_reaction:', reaction);
+});
+
+// DEBUG: Also listen to raw message_create to see if messages arrive at all
+client.on('message_create', (msg) => {
+  console.log('[DEBUG-EVENT] message_create:', {
+    from: msg.from,
+    to: msg.to,
+    fromMe: msg.fromMe,
+    type: msg.type,
+    body: msg.body?.substring(0, 50)
+  });
 });
 
 // Ready event
