@@ -853,6 +853,9 @@ client.on('loading_screen', (percent, message) => {
 });
 
 // Authentication handling
+// Timeout to force ready state if ready event never fires
+let readyTimeoutId = null;
+
 client.on('authenticated', (session) => {
   console.log('✅ Client is authenticated!');
   console.log(`[Auth] Session loaded from: ${path.resolve(process.cwd(), '.wwebjs_auth/wa-bot-client')}`);
@@ -878,6 +881,34 @@ client.on('authenticated', (session) => {
   reconnectAttempts = 0;
   whatsappConnectionState.reconnectAttempts = 0;
   clearTimeout(reconnectTimeout);
+  
+  // Set a timeout to check if ready event fires - if not, try to force ready state
+  clearTimeout(readyTimeoutId);
+  readyTimeoutId = setTimeout(async () => {
+    if (!whatsappConnectionState.isReady) {
+      console.log('[Auth] Ready event not received after 60s, checking client state...');
+      try {
+        // Try to get client info to verify connection
+        const state = await client.getState();
+        console.log('[Auth] Client state:', state);
+        
+        if (state === 'CONNECTED' && client.info && client.info.wid) {
+          console.log('[Auth] Client appears connected, forcing ready state...');
+          whatsappConnectionState.status = 'authenticated';
+          whatsappConnectionState.isReady = true;
+          whatsappConnectionState.lastStateChange = Date.now();
+          whatsappConnectionState.phoneNumber = client.info.wid.user;
+          whatsappConnectionState.pushname = client.info.pushname;
+          global.whatsappClient = { client: client };
+          console.log('✅ WhatsApp client forced ready!');
+        } else {
+          console.log('[Auth] Client not fully connected, will wait for ready event');
+        }
+      } catch (err) {
+        console.log('[Auth] Error checking client state:', err.message);
+      }
+    }
+  }, 60000); // 60 second timeout
 });
 
 client.on('auth_failure', (msg) => {
@@ -898,6 +929,14 @@ client.on('auth_failure', (msg) => {
     console.log('Will attempt to reconnect...');
     scheduleReconnect();
   }
+});
+
+// Handle loading screen progress
+client.on('loading_screen', (percent, message) => {
+  console.log(`[Loading] ${percent}% - ${message}`);
+  whatsappConnectionState.status = 'loading';
+  whatsappConnectionState.loadingPercent = percent;
+  whatsappConnectionState.loadingMessage = message;
 });
 
 // Handle disconnection events
@@ -979,6 +1018,9 @@ client.on('message_create', (msg) => {
 // Ready event
 client.on('ready', async () => {
   console.log('✅ WhatsApp client is ready!');
+  
+  // Clear the ready timeout since we got the ready event
+  clearTimeout(readyTimeoutId);
   
   // Update connection state with full details
   whatsappConnectionState.status = 'authenticated';
