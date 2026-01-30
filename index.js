@@ -498,9 +498,9 @@ const client = new Client({
     timeout: 120000,
     protocolTimeout: 120000,
   },
-  // Use local version cache
+  // Disable web version cache - fetch fresh every time
   webVersionCache: {
-    type: 'local',
+    type: 'none',
   },
   authTimeoutMs: 60000, // 60 second auth timeout
   qrMaxRetries: 5,
@@ -908,7 +908,7 @@ client.on('authenticated', (session) => {
         console.log('[Auth] Error checking client state:', err.message);
       }
     }
-  }, 60000); // 60 second timeout
+  }, 30000); // 30 second timeout
 });
 
 client.on('auth_failure', (msg) => {
